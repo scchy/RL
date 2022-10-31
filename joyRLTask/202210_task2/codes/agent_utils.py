@@ -35,15 +35,10 @@ class Agent:
         # self.Q[:, [1, -1]] = 0.0
         
     def __softmax(self, actions_v):
-        return np.exp(actions_v + 1e-5 ) / np.exp(actions_v + 1e-5).sum()
+        return np.exp(actions_v + 1e-5 ) / np.sum(np.exp(actions_v + 1e-5), axis=0)
     
     def _softmax_policy(self, s):
-        if np.random.random() < self.explore_rate:
-            return np.random.randint(len(self.Q[s]))
-        if sum(self.Q[s]) != 0:
-            return np.random.choice(np.arange(len(self.Q[s])), size=1, p=self.__softmax(self.Q[s]))[0]
-        return np.random.randint(len(self.Q[s]))
-        # return np.random.choice(np.arange(len(self.Q[s])), size=1, p=self.__softmax(self.Q[s]))[0]
+        return np.random.choice(range(len(self.Q[s])), size=1, p=self.__softmax(self.Q[s]))[0]
 
     def _ThompsonSampling_policy(self, s):
         # s ="{}".format(["Left","Down","Right","Up"][action_index])

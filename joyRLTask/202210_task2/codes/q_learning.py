@@ -39,6 +39,7 @@ class QLearningAgent(Agent):
         tq_bar = tqdm(range(epoches))
         cnt = 0
         for ep in tq_bar:
+            total_reward = 0
             tq_bar.set_description(f'[ epoch {ep} ] |')
             s = self.env.reset()
             done = False
@@ -48,10 +49,11 @@ class QLearningAgent(Agent):
                     self.env.render()
                 a = self.policy(s, policy_method)
                 n_state, reward, done, info = self.env.step(a)
+                total_reward += reward
                 self.update(s, a, reward, n_state)
                 s = n_state
             else:
-                self.log(reward)
+                self.log(total_reward)
 
             tq_bar.set_postfix(reward=f'{reward:.3f}')
             tq_bar.update()
@@ -77,7 +79,7 @@ if __name__ == "__main__":
         ql_.play()
 
         ploter = QTablePlot(ql_)
-        ploter.plot(title=f'walkInThePark-{method} | ')
+        ploter.plot(title=f'theAlley-{method} | ')
 
     print(ql_.Q.shape)
     print(ql_.Q)
