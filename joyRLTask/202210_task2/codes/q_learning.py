@@ -5,11 +5,7 @@
 # =====================================================================================
 from gym.envs.registration import register
 import typing as typ
-import os
-import sys
-import numpy  as np
 from rich.console import Console
-import matplotlib.pyplot as plt
 cs = Console()
 from simple_grid import DrunkenWalkEnv
 from agent_utils import Agent, QTablePlot
@@ -17,23 +13,43 @@ from tqdm import tqdm
 import gym
 
 
-
 class QLearningAgent(Agent):
-    def __init__(self, env, explore_rate=0.1):
+    def __init__(self, env: typ.ClassVar, explore_rate: float=0.1):
         super().__init__(env, explore_rate)
     
-    def update(self, s, a, reward, n_state):
-        gain = reward + self.gamma * max(self.Q[n_state, :])
+    def update(self, s: int, a: int, reward: typ.Union[int, float], n_state: int, ucb_flag: bool=False):
         estimated = self.Q[int(s), int(a)]
+        # if not ucb_flag:
+        gain = reward + self.gamma * max(self.Q[n_state, :])
         td = gain - estimated
         self.Q[int(s), int(a)] += self.lr_alpha * td
+        # else:
+            # self.Q[int(s), int(a)] += 1 / self.ucb_sa_visit_cnt_arr[int(s), int(a)] * (reward - estimated)
 
     def train(self, 
-            epoches=100, 
-            lr_alpha=0.1, 
-            gamma=0.9, 
-            render=False, 
-            policy_method='TS'):
+            epoches: int=100, 
+            lr_alpha: float=0.1, 
+            gamma: float=0.9, 
+            render: bool=False, 
+            policy_method: typ.AnyStr='TS',
+            epoche_len: int=500
+            ):
+        """train an agent
+        Args:
+            epoches (int, optional): 训练游戏次数. Defaults to 100.
+            lr_alpha (float, optional): 学习率. Defaults to 0.1.
+            gamma (float, optional): _description_. Defaults to 0.9.
+            render (bool, optional): 是否print出所有的step. Defaults to False.
+            policy_method (typ.AnyStr, optional): 智能体行动策略 [
+                'random', # 随机
+                'greedy', # 贪心
+                'softmax', # softmax
+                'TS',  # 汤普森采样
+                'ucb'  # 置信上界
+                ] Defaults to 'TS'.
+            epoche_len (int, optional): 一局游戏的长度. Defaults to 500.
+        """
+        self.epoche_len = epoche_len
         self.lr_alpha = lr_alpha
         self.gamma = gamma
         tq_bar = tqdm(range(epoches))
@@ -43,44 +59,56 @@ class QLearningAgent(Agent):
             tq_bar.set_description(f'[ epoch {ep} ] |')
             s = self.env.reset()
             done = False
-            while not done:
+            for t in range(1, int(epoche_len + 1)):
+                if done:
+                    self.log(total_reward)
+                    break
                 cnt += 1
                 if render:
                     self.env.render()
                 a = self.policy(s, policy_method)
                 n_state, reward, done, info = self.env.step(a)
                 total_reward += reward
-                self.update(s, a, reward, n_state)
+                self.update(s, a, reward, n_state, ucb_flag=policy_method == 'ucb')
                 s = n_state
-            else:
-                self.log(total_reward)
+
 
             tq_bar.set_postfix(reward=f'{reward:.3f}')
             tq_bar.update()
 
 
 
-if __name__ == "__main__":
-    # theAlley, walkInThePark
-    # env = DrunkenWalkEnv(map_name="walkInThePark")
-    env = DrunkenWalkEnv(map_name="theAlley")
-    # register(id="FrozenLakeEasy-v0", entry_point="gym.envs.toy_text:FrozenLakeEnv",
-    #         kwargs={"is_slippery": False})
-    # env = gym.make('FrozenLakeEasy-v0')
+def main_train(env, env_name, policy_method_list):
     print(env.nrow, env.ncol)
-    for method in  ['softmax', 'TS']: 
+    final_play_res = []
+    for method in policy_method_list:
         ql_ = QLearningAgent(env, explore_rate=0.01)
         ql_.train(
             epoches=1000, 
             lr_alpha=0.1, 
             gamma=0.9, 
-            render=False, policy_method=method)
+            render=False, 
+            policy_method=method,
+            epoche_len=500)
         ql_.smooth_plot(window_size=50, freq=1, title=f'{method} | ')
-        ql_.play()
+        res = ql_.play(render=False, method=method)
+        final_play_res.append(res)
+
 
         ploter = QTablePlot(ql_)
-        ploter.plot(title=f'theAlley-{method} | ')
+        ploter.plot(title=f'{env_name}-{method} | ')
+    return final_play_res
 
-    print(ql_.Q.shape)
-    print(ql_.Q)
+
+if __name__ == "__main__":
+    # theAlley, walkInThePark
+    env_name = 'theAlley'
+    env = DrunkenWalkEnv(map_name=env_name)
+    gym_env_name = 'FrozenLakeEasy-v0'
+    register(id=gym_env_name, entry_point="gym.envs.toy_text:FrozenLakeEnv",
+            kwargs={"is_slippery": False})
+    gym_env = gym.make(gym_env_name)
+    policy_method_list = ['random', 'greedy' ,'softmax', 'TS', 'ucb']
+    final_play_res = main_train(env, env_name, policy_method_list)
+    cs.print(final_play_res)
 
