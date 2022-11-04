@@ -32,6 +32,17 @@
 * 使用Q learning算法完成`theAlley`，参数：$episodes=1000，\varepsilon=0.05,\gamma=0.9,\alpha=0.1$，epsilon不需要衰减，看看能不能学出一个最优策略？可以用值迭代的算出的Q表对比。
 * 环境给了一个摔倒的惩罚系数`BROKEN_LEG_PENALTY`，默认是-10，改成-5，看看能不能学出一个最优策略？
 * 更改探索策略，换成softmax，ucb，汤普森采样试试看能不能学出一个最优策略
+学习策略如下：
+![](./pic/task_learning_plot.png)
+
+<b><font color=darkred>BROKEN_LEG_PENALTY = -5</font></b>
+|  探索策略   | play5次平均游戏结束步长  | play5次平均游戏奖励 |
+|  ----  | ----  | ----  |
+| random | 42.4 | -5.0 |
+| greedy | 9.8 | 1.0 |
+| softmax | 38.0 | 4.0 |
+| TS | 29.2 | 10.0 |
+| ucb | 501.0 | 0.0 |
 
 ## 3. 提示
 
