@@ -42,7 +42,7 @@ class Agent:
         self.ucb_sa_visit_cnt_arr = np.ones((n_states, n_actions))
         
     def __softmax(self, actions_v: np.ndarray):
-        return np.exp(actions_v + 1e-4 ) / np.sum(np.exp(actions_v + 1e-4), axis=0)
+        return np.exp(actions_v + 1e-3 ) / np.sum(np.exp(actions_v + 1e-3), axis=0)
     
     def _softmax_policy(self, s: int):
         return np.random.choice(range(len(self.Q[s])), size=1, p=self.__softmax(self.Q[s]))[0]
