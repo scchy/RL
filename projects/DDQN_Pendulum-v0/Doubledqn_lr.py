@@ -95,7 +95,8 @@ class DQN:
                 gamma: float,
                 epsilon: float=0.05,
                 traget_update_freq: int=1,
-                device: typ.Any='cpu'
+                device: typ.AnyStr='cpu',
+                dqn_type: typ.AnyStr='DQN'
                 ):
         self.action_dim = action_dim
         # QNet & targetQNet
@@ -114,6 +115,9 @@ class DQN:
         self.traget_update_freq = traget_update_freq
         self.count = 0
         self.device = device
+        
+        # dqn类型
+        self.dqn_type = dqn_type
         
     def policy(self, state):
         if np.random.random() < self.epsilon:
@@ -139,7 +143,13 @@ class DQN:
         n_actions_q = self.target_q(next_states)
         q_values = actions_q.gather(1, action)
         # 下个状态的最大Q值
-        q_targets = reward + self.gamma * n_actions_q.max(1)[0].view(-1, 1) * (1 - done) 
+        if self.dqn_type == 'DoubleDQN': # DQN与Double DQN的区别
+            max_action = self.q(next_states).max(1)[1].view(-1, 1)
+            max_next_q_values = n_actions_q.gather(1, max_action)
+        else: # DQN的情况
+            max_next_q_values = n_actions_q.max(1)[0].view(-1, 1)
+
+        q_targets = reward + self.gamma * max_next_q_values * (1 - done) 
         # MSELoss update
         self.q.update(q_values, q_targets)
         if self.count % self.traget_update_freq == 0:
@@ -163,6 +173,7 @@ class Config:
     batch_size = 128
     render = False
     save_path =  r'D:\TMP\model.ckpt' 
+    dqn_type = 'DoubleDQN'
 
     def __init__(self, env):
         self.state_dim = env.observation_space.shape[0]
@@ -209,7 +220,8 @@ if __name__ == '__main__':
         gamma=cfg.gamma,
         epsilon=cfg.epsilon,
         traget_update_freq=cfg.traget_update_freq,
-        device=cfg.device
+        device=cfg.device,
+        dqn_type=cfg.dqn_type
     )
     tq_bar = tqdm(range(cfg.num_episode))
     rewards_list = []
@@ -235,19 +247,18 @@ if __name__ == '__main__':
                 dqn.update(samples)
             if episode_rewards >= 260:
                 break
-        else:
-            rewards_list.append(episode_rewards)
             
+        rewards_list.append(episode_rewards)
         now_reward = np.mean(rewards_list[-10:])
         if bf_reward < now_reward:
             torch.save(dqn.target_q.state_dict(), cfg.save_path)
 
-        bf_reward = now_reward
+        bf_reward = max(bf_reward, now_reward)
         tq_bar.set_postfix({'lastMeanRewards': f'{now_reward:.2f}'})
     
     env.close()
-    play(dqn, episode_count=1, render=True)
-
+    dqn.target_q.load_state_dict(torch.load(cfg.save_path))
+    play(dqn, episode_count=2, render=True)
 
 
 
