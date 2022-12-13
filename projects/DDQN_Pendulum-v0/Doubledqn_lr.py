@@ -1,8 +1,13 @@
 # python3
-# Create Date:2022-12-11
+# Create Date:2022-12-11 ~ 13
 # Author: Scc_hy
-# Func:  DoubleDQN
+# Func:  DQN + DoubleDQN + 
 # Tip: 
+#     replayBuffer 一个经验回放池
+#     QNet  QNet & TargetQNet
+#     DQN:  dqn + doubleDQN + 
+#     Config: 训练的时候的重要参数
+#     Pendulum_dis_to_con: Pendulum-v0 动作空间变成连续空间
 # =================================================================================
 
 from collections import deque
@@ -151,18 +156,52 @@ class DQN:
 
         q_targets = reward + self.gamma * max_next_q_values * (1 - done) 
         # MSELoss update
-        self.q.update(q_values, q_targets)
+        self.q.update(q_values.float(), q_targets.float())
         if self.count % self.traget_update_freq == 0:
             self.target_q.load_state_dict(
                 self.q.state_dict()
             )
 
 
+def Pendulum_dis_to_con(discrete_action, env, action_dim):  # 离散动作转回连续的函数
+    action_lowbound = env.action_space.low[0]  # 连续动作的最小值
+    action_upbound = env.action_space.high[0]  # 连续动作的最大值
+    action_range = action_upbound - action_lowbound
+    return action_lowbound + (discrete_action / (action_dim - 1)) * action_range
+
+
+def play(env, env_agent, cfg, episode_count=2, action_contiguous=False):
+    """
+    对训练完成的QNet进行策略游戏
+    """
+    for e in range(episode_count):
+        s, _ = env.reset()
+        done = False
+        episode_reward = 0
+        episode_cnt = 0
+        while not done:
+            env.render()
+            a = env_agent.policy(s)
+            if action_contiguous:
+                c_a = Pendulum_dis_to_con(a, env, cfg.action_dim)
+                n_state, reward, done, _, _ = env.step([c_a])
+            else:
+                n_state, reward, done, _, _ = env.step(a)
+            episode_reward += reward
+            episode_cnt += 1
+            s = n_state
+            if (episode_reward >= 3 * cfg.max_episode_rewards) or (episode_cnt >= 3 * cfg.max_episode_steps):
+                break
+
+        print(f'Get reward {episode_reward}. Last {episode_cnt} times')
+
+    env.close()
+
 class Config:
-    num_episode  = 350
+    num_episode  = 300
     state_dim = None
     hidden_layers_dim = [10, 10]
-    action_dim = None
+    action_dim = 20
     learning_rate = 2e-3
     gamma = 0.95
     epsilon = 0.01
@@ -174,43 +213,21 @@ class Config:
     render = False
     save_path =  r'D:\TMP\model.ckpt' 
     dqn_type = 'DoubleDQN'
+    # 回合停止控制
+    max_episode_rewards = 260
+    max_episode_steps = 260
 
     def __init__(self, env):
         self.state_dim = env.observation_space.shape[0]
-        self.action_dim = env.action_space.n
-        print(f'device = {self.device}')
+        try:
+            self.action_dim = env.action_space.n
+        except Exception as e:
+            pass
+        print(f'device = {self.device} | env={str(env)}')
+    
 
 
-
-def play(agent, episode_count=5, render=True):
-    """
-    对训练完成的QNet进行策略游戏
-    """
-    env = gym.make('CartPole-v0', render_mode="human")
-    for e in range(episode_count):
-        s, _ = env.reset()
-        done = False
-        episode_reward = 0
-        episode_cnt = 0
-        while not done:
-            if render:
-                env.render()
-            a = agent.policy(s)
-            n_state, reward, done, _, _ = env.step(a)
-            episode_reward += reward
-            episode_cnt += 1
-            s = n_state
-            if episode_rewards >= 500:
-                break
-        else:
-            print(f'Get reward {episode_reward}. Last {episode_cnt} times')
-
-    env.close()
-
-
-if __name__ == '__main__':
-    env = gym.make('CartPole-v0') #, render_mode="human")
-    cfg = Config(env)
+def train_dqn(env, cfg, action_contiguous=False):
     buffer = replayBuffer(cfg.buffer_size)
     dqn = DQN(
         state_dim=cfg.state_dim,
@@ -226,39 +243,60 @@ if __name__ == '__main__':
     tq_bar = tqdm(range(cfg.num_episode))
     rewards_list = []
     now_reward = 0
-    bf_reward = 0
+    bf_reward = -np.inf
     for i in tq_bar:
         tq_bar.set_description(f'Episode [ {i+1} / {cfg.num_episode} ]')
         s, _ = env.reset()
         done = False
         episode_rewards = 0
+        steps = 0
         while not done:
-            if cfg.render:
-                env.render(render_mode="human")
             a = dqn.policy(s)
             # [Any, float, bool, bool, dict]
-            n_s, r, done, _, _ = env.step(a)
+            if action_contiguous:
+                c_a = Pendulum_dis_to_con(a, env, cfg.action_dim)
+                n_s, r, done, _, _ = env.step([c_a])
+            else:
+                n_s, r, done, _, _ = env.step(a)
             buffer.add(s, a, r, n_s, done)
             s = n_s
             episode_rewards += r
+            steps += 1
             # buffer update
             if len(buffer) > cfg.minimal_size:
                 samples = buffer.sample(cfg.batch_size)
                 dqn.update(samples)
-            if episode_rewards >= 260:
+            if (episode_rewards >= cfg.max_episode_rewards) or (steps >= cfg.max_episode_steps):
                 break
-            
+
         rewards_list.append(episode_rewards)
         now_reward = np.mean(rewards_list[-10:])
         if bf_reward < now_reward:
             torch.save(dqn.target_q.state_dict(), cfg.save_path)
 
         bf_reward = max(bf_reward, now_reward)
-        tq_bar.set_postfix({'lastMeanRewards': f'{now_reward:.2f}'})
-    
+        tq_bar.set_postfix({'lastMeanRewards': f'{now_reward:.2f}', 'BEST': f'{bf_reward:.2f}'})
     env.close()
-    dqn.target_q.load_state_dict(torch.load(cfg.save_path))
-    play(dqn, episode_count=2, render=True)
+    return dqn
+
+
+if __name__ == '__main__':
+    # print('=='*35)
+    # print('Training CartPole-v0')
+    # env = gym.make('CartPole-v0') #, render_mode="human")
+    # cfg = Config(env)
+    # dqn = train_dqn(env, cfg)
+    # dqn.target_q.load_state_dict(torch.load(cfg.save_path))
+    # play(gym.make('CartPole-v0', render_mode="human"), dqn, cfg)
+    
+    print('=='*35)
+    print('Training Pendulum-v1')
+    p_env = gym.make('Pendulum-v1')
+    p_cfg = Config(p_env)
+    p_dqn = train_dqn(p_env, p_cfg, True)
+    p_dqn.target_q.load_state_dict(torch.load(p_cfg.save_path))
+    play(gym.make('Pendulum-v1', render_mode="human"), p_dqn, p_cfg, episode_count=2, action_contiguous=True)
+
 
 
 
