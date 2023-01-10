@@ -193,14 +193,14 @@ class Config:
     state_dim = None
     hidden_layers_dim = [ 128, 128 ]
     action_dim = 20
-    actor_lr = 5e-4
+    actor_lr = 1e-4
     critic_lr = 5e-3
     PPO_kwargs = {
-        'lmbda': 0.95,
+        'lmbda': 0.9,
         'eps': 0.2,
         'ppo_epochs': 10
-    }        
-    gamma = 0.98
+    }
+    gamma = 0.9
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     buffer_size = 20480
     minimal_size = 1024
