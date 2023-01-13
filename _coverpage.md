@@ -5,4 +5,4 @@
 > 💪记录从零开始学习Reinforcement learning 。
 
 
-[开始使用 Let Go](../README.md)
+[开始使用 Let Go](./README.md)
