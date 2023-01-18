@@ -6,5 +6,5 @@
 
 
 * 友情链接
-  * [Github地址](https://github.com/scchy)
-  * [CSDN地址](https://blog.csdn.net/Scc_hy)
+  * [蘑菇书EasyRL](https://datawhalechina.github.io/easy-rl/#/)
+  * [动手强化学习](https://hrl.boyuai.com/)

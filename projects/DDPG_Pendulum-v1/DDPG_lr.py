@@ -262,14 +262,14 @@ if __name__ == '__main__':
     env = gym.make('Pendulum-v1')
     cfg = Config(env)
     ac_agent = train_agent(env, cfg)
-    # ac_agent = PPO(
+    # ac_agent = DDPG(
     #     state_dim=cfg.state_dim,
     #     hidden_layers_dim=cfg.hidden_layers_dim,
     #     action_dim=cfg.action_dim,
     #     actor_lr=cfg.actor_lr,
     #     critic_lr=cfg.critic_lr,
     #     gamma=cfg.gamma,
-    #     PPO_kwargs=cfg.PPO_kwargs,
+    #     DDPG_kwargs=cfg.DDPG_kwargs,
     #     device=cfg.device
     # )
     ac_agent.actor.load_state_dict(torch.load(cfg.save_path))

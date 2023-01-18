@@ -1,10 +1,12 @@
-# 一、PPO简介
+# 基于策略的PPO
+
+## 9.1 PPO简介
 
 TRPO(Trust Range Policy Optimate)算法每一步更新都需要大量的运算，于是便有其改进版本PPO在2017年被提出。PPO 基于 TRPO 的思想，但是其算法实现更加简单。TRPO 使用泰勒展开近似、共轭梯度、线性搜索等方法直接求解。<font color=darkred>PPO 的优化目标与 TRPO 相同，但 PPO 用了一些相对简单的方法来求解。具体来说, PPO 有两种形式，一是PPO-惩罚，二是PPO-截断，我们接下来对这两种形式进行介绍。</font>
 
-# 二、PPO两种形式
+## 9.2 PPO两种形式
 
-## 2.1 PPO-Penalty 
+### 9.2.1 PPO-Penalty 
 
 用拉格朗日乘数法直接将KL散度的限制放入目标函数，变成一个无约束的优化问题。同时还需要更新KL散度的系数。
 $$arg max_{\theta} E_{a- v^{\pi_{\theta_k}}}E_{a-\pi_{\theta_k}}( \cdot|s)[\frac{\pi_\theta(a|s)}{\pi_{\theta_k}(a|s)}A^{\pi_{\theta_k}}(s, a) - \beta D_{KL}[\pi_{\theta_k}(\cdot|s), \pi_{\theta}(\cdot|s)]]$$
@@ -15,7 +17,7 @@ $$arg max_{\theta} E_{a- v^{\pi_{\theta_k}}}E_{a-\pi_{\theta_k}}( \cdot|s)[\frac
 
 相对PPO-Clip来说计算还是比较复杂，我们来看PPO-Clip的做法
 
-## 2.2 PPO-Clip
+### 9.2.2 PPO-Clip
 
  ppo-Clip直接在目标函数中进行限制，保证新的参数和旧的参数的差距不会太大。
 $$arg max_{\theta} E_{a- v^{\pi_{\theta_k}}}E_{a-\pi_{\theta_k}}( \cdot|s)[min(\frac{\pi_\theta(a|s)}{\pi_{\theta_k}(a|s)}A^{\pi_{\theta_k}}(s, a), clip(\frac{\pi_\theta(a|s)}{\pi_{\theta_k}(a|s)}, 1-\epsilon, 1+\epsilon )A^{\pi_{\theta_k}}(s, a))]$$
@@ -24,7 +26,7 @@ $$arg max_{\theta} E_{a- v^{\pi_{\theta_k}}}E_{a-\pi_{\theta_k}}( \cdot|s)[min(\
 可以简单绘制如下
 ![在这里插入图片描述](https://img-blog.csdnimg.cn/91a0453d4f174bac8e27c3e9b2d2ec05.png)
 
-### 绘图脚本
+#### 绘图脚本
 
 ```python
 
@@ -74,7 +76,7 @@ plot_pip_clip(td_delta)
 
 ```
 
-# 三、Pytorch实践
+## 9.3 Pytorch实践
 
 PPO-Clip更加简洁，同时大量的实验也表名PPO-Clip总是比PPO-Penalty 效果好。所以我们就用PPO-Clip去倒立钟摆中实践。
 我们这次用`Pendulum-v1`action 也同样用连续变量。
@@ -114,7 +116,7 @@ class policyNet(nn.Module):
         return mean_, std
 ```
 
-## 3.1 构建智能体（PPO-Clip）
+### 9.3.1 构建智能体（PPO-Clip）
 
 > 完整脚本可以参看笔者的[github:  PPO_lr.py](https://github.com/scchy/RL/blob/main/projects/PPO_Pendulum-v1/PPO_lr.py)
 
@@ -205,9 +207,10 @@ class PPO:
             self.actor_opt.step()
             self.critic_opt.step()
 ```
-## 3.2 智能体训练
-```python
 
+### 9.3.2 智能体训练
+
+```python
 
 class Config:
     num_episode = 1200
@@ -294,7 +297,8 @@ cfg = Config(env)
 ac_agent = train_agent(env, cfg)
 ```
 
-# 四、训练出的智能体观测
+### 9.3.3 训练出的智能体观测
+
 
 最后将训练的最好的网络拿出来进行观察
 ```python
