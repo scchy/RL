@@ -5,6 +5,8 @@
   * [Github地址](https://github.com/scchy)
 
 
-* 友情链接
-  * [蘑菇书EasyRL](https://datawhalechina.github.io/easy-rl/#/)
-  * [动手强化学习](https://hrl.boyuai.com/)
+* 更多学习链接
+  * [《蘑菇书EasyRL》](https://datawhalechina.github.io/easy-rl/#/)
+  * [《动手强化学习》](https://hrl.boyuai.com/)
+  * [《李宏毅深度强化学习》](http://speech.ee.ntu.edu.tw/~tlkagk/courses_MLDS18.html)
+

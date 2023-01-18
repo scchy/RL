@@ -181,28 +181,36 @@ def train_agent(env, cfg):
     env.close()
     return ac_agent
 
-
 class Config:
-    num_episode = 230
+    num_episode = 200
     state_dim = None
-    hidden_layers_dim = [ 64, 64 ]
+    hidden_layers_dim = [ 128, 64 ]
     action_dim = 20
     actor_lr = 3e-5
     critic_lr = 5e-4
     DDPG_kwargs = {
         'tau': 0.05, # soft update parameters
-        'sigma': 0.01, # noise
-        'action_bound': 1.0
+        'sigma': 0.005, # noise
+        'action_bound': 2.0
     }
-    gamma = 0.95
+    gamma = 0.9
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     buffer_size = 10240
     minimal_size = 1024
-    batch_size = 128
+    batch_size = 256
     save_path = r'D:\tmp\DDPG_ac_model.ckpt'
     # 回合停止控制
     max_episode_rewards = 204800
-    max_episode_steps = 260
+    max_episode_steps = 240
+
+    def __init__(self, env):
+        self.state_dim = env.observation_space.shape[0]
+        try:
+            self.action_dim = env.action_space.n
+        except Exception as e:
+            self.action_dim = env.action_space.shape[0]
+        print(f'device={self.device} | env={str(env)}')
+
 
 if __name__ == '__main__':
     print('=='*35)
@@ -220,3 +228,5 @@ if __name__ == '__main__':
 ac_agent.actor.load_state_dict(torch.load(cfg.save_path))
 play(gym.make('Pendulum-v1', render_mode="human"), ac_agent, cfg)
 ```
+
+![在这里插入图片描述](../pic/ddpg_perf_new.gif)
