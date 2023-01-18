@@ -33,33 +33,28 @@
       mergeNavbar: true,
     }
   </script>
-  <!-- Docsify v4 -->
-  <!-- <script src="//cdn.jsdelivr.net/npm/docsify@4"></script> -->
   <script>
-    // 搜索配置(url：https://docsify.js.org/#/zh-cn/plugins?id=%e5%85%a8%e6%96%87%e6%90%9c%e7%b4%a2-search)
     window.$docsify = {
-        search: {
-            maxAge: 43200000,// 过期时间，单位毫秒，默认半天
-            paths: auto,// 注意：仅适用于 paths: 'auto' 模式
-            placeholder: '搜索',
-            // 支持本地化
-            placeholder: {
-                '/zh-cn/': '搜索',
-                '/': '搜索'
-            },
-            noData: '找不到结果',
-            depth: 4,
-            hideOtherSidebarContent: true,
-            namespace: 'RL学习记录',
-            pagination:{
-              previousText:'上一篇',
-              nextText:'下一篇',
-            },
-        }
+      // 搜索配置(url：https://docsify.js.org/#/zh-cn/plugins?id=%e5%85%a8%e6%96%87%e6%90%9c%e7%b4%a2-search)
+      search:{
+        maxAge: 43200000,// 过期时间，单位毫秒，默认半天
+        paths: auto,// 注意：仅适用于 paths: 'auto' 模式
+        placeholder:'搜索',
+        noData:'找不到结果',
+        depth:6,
+        hideOtherSidebarContent: true,
+        namespace: 'RL学习记录'
+      },
+      pagination:{
+        previousText:'上一篇',
+        nextText:'下一篇'
+      }
     }
-</script>
+  </script>
 <!-- docsify的js依赖 -->
 <script src="//cdn.jsdelivr.net/npm/docsify/lib/docsify.min.js"></script>
+<!-- 下一页 -->
+<script src="//cdn.jsdelivr.net/npm/docsify-pagination/dist/docsify-pagination.min.js"></script>
 <!-- emoji表情支持 -->
 <script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/emoji.min.js"></script>
 <!-- 图片放大缩小支持 -->
@@ -68,8 +63,9 @@
 <script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/search.min.js"></script>
 <!--在所有的代码块上添加一个简单的Click to copy按钮来允许用户从你的文档中轻易地复制代码-->
 <script src="//cdn.jsdelivr.net/npm/docsify-copy-code/dist/docsify-copy-code.min.js"></script>
-<!-- <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-python.min.js"></script> -->
-<script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-python.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-python.min.js"></script>
+<!-- <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-python.js"></script> -->
+<script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-bash.min.js"></script>
 <!-- LaTeX display engine -->
 <script src="//cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 <!--  docsify-latex plugin -->

@@ -1,29 +1,25 @@
 # python3
-# Create Date: 2023-01-16
-# Func: DDPG
-# =============================================================
+# Create Date 2023-01-18
+# Func: SAC
+# ========================================================================================
 
 
+import numpy as np
 import torch
-import typing as typ
-from torch import tensor
 from torch import nn
 from torch.nn import functional as F
-import numpy as np
-import gym
-import random
-import copy
+import typing as typ
+from torch.distributions import Normal
+from copy import deepcopy
 from collections import deque
+import random
 from tqdm import tqdm
+import gym
 
 
 
 
 class policyNet(nn.Module):
-    """
-    continuity action:
-    normal distribution (mean, std) 
-    """
     def __init__(self, state_dim: int, hidden_layers_dim: typ.List, action_dim: int, action_bound: float=1.0):
         super(policyNet, self).__init__()
         self.action_bound = action_bound
@@ -33,16 +29,23 @@ class policyNet(nn.Module):
                 'linear': nn.Linear(hidden_layers_dim[idx-1] if idx else state_dim, h),
                 'linear_action': nn.ReLU(inplace=True)
             }))
+        self.fc_mu = nn.Linear(hidden_layers_dim[-1], action_dim)
+        self.fc_std = nn.Linear(hidden_layers_dim[-1], action_dim)
 
 
-        self.fc_out = nn.Linear(hidden_layers_dim[-1], action_dim)
-    
     def forward(self, x):
         for layer in self.features:
             x = layer['linear_action'](layer['linear'](x))
-
-
-        return torch.tanh(self.fc_out(x)) * self.action_bound
+        
+        mean_ = self.fc_mu(x)
+        std = F.softplus(self.fc_std(x)) + 3e-5
+        dist = Normal(mean_, std)
+        normal_sample = dist.rsample()
+        log_prob = dist.log_prob(normal_sample)
+        action = torch.tanh(normal_sample)
+        # 计算tanh_normal分布的对数概率密度
+        log_prob = log_prob - torch.log(1 - torch.tanh(action).pow(2) + 1e-7)
+        return  action * self.action_bound, log_prob
 
 
 
@@ -68,42 +71,70 @@ class valueNet(nn.Module):
 
 
 
-class DDPG:
-    def __init__(self, 
-                state_dim: int, 
-                hidden_layers_dim: typ.List, 
-                action_dim: int,
-                actor_lr: float,
-                critic_lr: float,
-                gamma: float,
-                DDPG_kwargs: typ.Dict,
-                device: torch.device
-                ):
-        self.actor = policyNet(state_dim, hidden_layers_dim, action_dim, action_bound = DDPG_kwargs['action_bound'])
-        self.critic = valueNet(state_dim + action_dim, hidden_layers_dim)
-        self.target_actor = copy.deepcopy(self.actor)
-        self.target_critic = copy.deepcopy(self.critic)
 
-        self.actor.to(device)
-        self.critic.to(device)
-        self.target_actor.to(device)
-        self.target_critic.to(device)
+
+
+class SAC:
+    """
+    一个策略网络
+    两个价值网络
+    两个目标网络
+    """
+    def __init__(
+        self,
+        state_dim: int,
+        hidden_layers_dim: typ.List[int],
+        action_dim: int,
+        actor_lr: float,
+        critic_lr: float,
+        alpha_lr: float,
+        gamma: float,
+        SAC_kwargs: typ.Dict,
+        device: torch.device   
+    ):
+        self.actor = policyNet(state_dim, hidden_layers_dim, action_dim, action_bound=SAC_kwargs.get('action_bound', 1.0)).to(device)
+        self.critic_1 = valueNet(state_dim+action_dim, hidden_layers_dim)
+        self.critic_2 = valueNet(state_dim+action_dim, hidden_layers_dim)
+        # 令目标Q网络的初始参数和Q网络一样
+        self.target_critic_1 = deepcopy(self.critic_1)
+        self.target_critic_2 = deepcopy(self.critic_2)
+        self._critic_to_device(device)
+        
+        # optim
         self.actor_opt = torch.optim.Adam(self.actor.parameters(), lr=actor_lr)
-        self.critic_opt = torch.optim.Adam(self.critic.parameters(), lr=critic_lr)
+        self.critic_1_opt = torch.optim.Adam(self.critic_1.parameters(), lr=critic_lr)
+        self.critic_2_opt = torch.optim.Adam(self.critic_2.parameters(), lr=critic_lr)
+        
+        # 使用alpha的log值,可以使训练结果比较稳定
+        self.log_alpha = torch.tensor(np.log(0.01), dtype=torch.float, requires_grad=True)
+        self.log_alpha_opt = torch.optim.Adam([self.log_alpha], lr=alpha_lr)
         
         self.gamma = gamma
         self.device = device
-        self.count = 0
-        # soft update parameters
-        self.tau = DDPG_kwargs.get('tau', 0.8)
-        self.action_dim = action_dim
-        # Normal sigma
-        self.sigma = DDPG_kwargs.get('sigma', 0.1)
+        self.tau = SAC_kwargs.get('tau', 0.05)
+        self.target_entropy = SAC_kwargs['target_entropy']
+            
+    def _critic_to_device(self, device):
+        self.critic_1 = self.critic_1.to(device)
+        self.critic_2 = self.critic_2.to(device)
+        self.target_critic_1 = self.target_critic_1.to(device)
+        self.target_critic_2 = self.target_critic_2.to(device)
     
     def policy(self, state):
         state = torch.FloatTensor([state]).to(self.device)
-        act = self.actor(state)
-        return act.detach().numpy()[0] + self.sigma * np.random.rand(self.action_dim)
+        action = self.actor(state)[0]
+        return action.detach().numpy()[0]
+
+
+    def calc_target(self, reward, next_state, dones):
+        # 计算目标Q值
+        next_actions, log_prob = self.actor(next_state)
+        # entropy = -log_prob
+        q1_v = self.target_critic_1(next_state, next_actions)
+        q2_v = self.target_critic_2(next_state, next_actions)
+        next_v = torch.min(q1_v, q2_v) - self.log_alpha.exp() * log_prob
+        return reward + self.gamma * next_v * ( 1 - dones )
+
 
     def soft_update(self, net, target_net):
         for param_target, param in zip(target_net.parameters(), net.parameters()):
@@ -111,33 +142,50 @@ class DDPG:
                 param_target.data * (1 - self.tau) + param.data * self.tau
             )
 
+
     def update(self, samples):
-        self.count += 1
         state, action, reward, next_state, done = zip(*samples)
+
+
         state = torch.FloatTensor(state).to(self.device)
         action = torch.tensor(action).to(self.device)
         reward = torch.tensor(reward).view(-1, 1).to(self.device)
-        reward = (reward + 10.0) / 10.0  # 对奖励进行修改,方便训练
+        reward = (reward + 10.0) / 10.0  # 和TRPO一样,对奖励进行修改,方便训练
         next_state = torch.FloatTensor(next_state).to(self.device)
         done = torch.FloatTensor(done).view(-1, 1).to(self.device)
         
-        target_action = self.target_actor(state)
-        next_q_value = self.target_critic(next_state, target_action)
-        q_targets = reward + self.gamma * next_q_value * ( 1.0 - done )
-        critic_loss = torch.mean(F.mse_loss(self.critic(state, action).float(), q_targets.float()))
-        self.critic_opt.zero_grad()
-        critic_loss.backward()
-        self.critic_opt.step()
+        td_target = self.calc_target(reward, next_state, done)
+        # update critic net
+        critic_1_loss = torch.mean(
+            F.mse_loss(self.critic_1(state, action).float(), td_target.float().detach())
+        )
+        critic_2_loss = torch.mean(
+            F.mse_loss(self.critic_2(state, action).float(), td_target.float().detach())
+        )
+        self.critic_1_opt.zero_grad()
+        critic_1_loss.backward()
+        self.critic_1_opt.step()
+        self.critic_2_opt.zero_grad()
+        critic_2_loss.backward()
+        self.critic_2_opt.step()
         
-        # 计算采样的策略梯度，以此更新当前 Actor 网络
-        ac_action = self.actor(state)
-        actor_loss = -torch.mean(self.critic(state, ac_action))
+        # update actor
+        new_act, log_prob = self.actor(state)
+        q1_v = self.target_critic_1(next_state, new_act)
+        q2_v = self.target_critic_2(next_state, new_act)
+        actor_loss = torch.mean(self.log_alpha.exp() * log_prob - torch.min(q1_v, q2_v))
         self.actor_opt.zero_grad()
         actor_loss.backward()
         self.actor_opt.step()
+    
+        # update alpha
+        alpha_loss = torch.mean((-log_prob - self.target_entropy).detach() * self.log_alpha.exp())
+        self.log_alpha_opt.zero_grad()
+        alpha_loss.backward()
+        self.log_alpha_opt.step()
         
-        self.soft_update(self.actor, self.target_actor)
-        self.soft_update(self.critic, self.target_critic)
+        self.soft_update(self.critic_1, self.target_critic_1)
+        self.soft_update(self.critic_2, self.target_critic_2)
 
 
 class replayBuffer:
@@ -153,6 +201,7 @@ class replayBuffer:
 
     def sample(self, batch_size: int):
         return random.sample(self.buffer, batch_size)
+        
 
 
 def play(env, env_agent, cfg, episode_count=2):
@@ -175,15 +224,51 @@ def play(env, env_agent, cfg, episode_count=2):
     env.close()
 
 
+class Config:
+    num_episode = 230
+    state_dim = None
+    hidden_layers_dim = [ 64, 64 ]
+    action_dim = 20
+    actor_lr = 3e-5
+    critic_lr = 5e-4
+    alpha_lr = 5e-4
+    SAC_kwargs = {
+        'tau': 0.05, # soft update parameters
+        'target_entropy': 0.01,
+        'action_bound': 1.0
+    }
+    gamma = 0.95
+    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+    buffer_size = 10240
+    minimal_size = 1024
+    batch_size = 128
+    save_path = r'D:\tmp\SAC_ac_model.ckpt'
+    # 回合停止控制
+    max_episode_rewards = 204800
+    max_episode_steps = 260
+
+
+    def __init__(self, env):
+        self.state_dim = env.observation_space.shape[0]
+        try:
+            self.action_dim = env.action_space.n
+            self.SAC_kwargs['target_entropy'] = -env.action_space.shape[0]
+        except Exception as e:
+            self.action_dim = env.action_space.shape[0]
+            self.SAC_kwargs['target_entropy'] = -env.action_space.shape[0]
+        print(f'device={self.device} | env={str(env)}')
+
+
 def train_agent(env, cfg):
-    ac_agent = DDPG(
+    ac_agent = SAC(
         state_dim=cfg.state_dim,
         hidden_layers_dim=cfg.hidden_layers_dim,
         action_dim=cfg.action_dim,
         actor_lr=cfg.actor_lr,
         critic_lr=cfg.critic_lr,
+        alpha_lr=cfg.alpha_lr,
         gamma=cfg.gamma,
-        DDPG_kwargs=cfg.DDPG_kwargs,
+        SAC_kwargs=cfg.SAC_kwargs,
         device=cfg.device
     )
     tq_bar = tqdm(range(cfg.num_episode))
@@ -223,38 +308,6 @@ def train_agent(env, cfg):
     return ac_agent
 
 
-class Config:
-    num_episode = 230
-    state_dim = None
-    hidden_layers_dim = [ 64, 64 ]
-    action_dim = 20
-    actor_lr = 3e-5
-    critic_lr = 5e-4
-    DDPG_kwargs = {
-        'tau': 0.05, # soft update parameters
-        'sigma': 0.01, # noise
-        'action_bound': 1.0
-    }
-    gamma = 0.9
-    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-    buffer_size = 10240
-    minimal_size = 1024
-    batch_size = 128
-    save_path = r'D:\tmp\DDPG_ac_model.ckpt'
-    # 回合停止控制
-    max_episode_rewards = 204800
-    max_episode_steps = 260
-
-
-    def __init__(self, env):
-        self.state_dim = env.observation_space.shape[0]
-        try:
-            self.action_dim = env.action_space.n
-        except Exception as e:
-            self.action_dim = env.action_space.shape[0]
-        print(f'device={self.device} | env={str(env)}')
-
-
 
 if __name__ == '__main__':
     print('=='*35)
@@ -262,15 +315,17 @@ if __name__ == '__main__':
     env = gym.make('Pendulum-v1')
     cfg = Config(env)
     ac_agent = train_agent(env, cfg)
-    # ac_agent = DDPG(
+    # ac_agent = SAC(
     #     state_dim=cfg.state_dim,
     #     hidden_layers_dim=cfg.hidden_layers_dim,
     #     action_dim=cfg.action_dim,
     #     actor_lr=cfg.actor_lr,
     #     critic_lr=cfg.critic_lr,
+    #     alpha_lr=cfg.alpha_lr,
     #     gamma=cfg.gamma,
-    #     DDPG_kwargs=cfg.DDPG_kwargs,
+    #     SAC_kwargs=cfg.SAC_kwargs,
     #     device=cfg.device
     # )
     ac_agent.actor.load_state_dict(torch.load(cfg.save_path))
     play(gym.make('Pendulum-v1', render_mode="human"), ac_agent, cfg)
+
