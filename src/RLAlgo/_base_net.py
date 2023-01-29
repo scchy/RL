@@ -160,7 +160,7 @@ class PPOPolicyNet(nn.Module):
         
         mean_ = 2.0 * torch.tanh(self.fc_mu(x))
         # np.log(1 + np.exp(2))
-        std = F.softplus(self.fc_std(x))
+        std = F.softplus(self.fc_std(x)) + 1e-5
         return mean_, std
 
 

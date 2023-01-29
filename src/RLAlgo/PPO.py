@@ -94,7 +94,7 @@ class PPO:
         mu, std = self.actor(state)
         action_dist = torch.distributions.Normal(mu, std)
         action = action_dist.sample()
-        return [action.item()]
+        return action.detach().numpy()[0]
         
     def update(self, samples: deque):
         self.count += 1
@@ -103,7 +103,7 @@ class PPO:
         state, action, reward, next_state, done = zip(*samples)
 
         state = torch.FloatTensor(state).to(self.device)
-        action = torch.tensor(action).view(-1, 1).to(self.device)
+        action = torch.FloatTensor(action).to(self.device)
         reward = torch.tensor(reward).view(-1, 1).to(self.device)
         reward = (reward + 10.0) / 10.0  # 和TRPO一样,对奖励进行修改,方便训练
         next_state = torch.FloatTensor(next_state).to(self.device)

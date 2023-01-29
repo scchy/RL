@@ -21,7 +21,7 @@ def ppo_test():
     env = gym.make(env_name)
     cfg = Config(
         env, 
-        num_episode=1000,
+        num_episode=800,
         save_path=r'D:\TMP\ddpg_test_actor.ckpt', 
         actor_hidden_layers_dim=[128, 64],
         critic_hidden_layers_dim=[64, 32],
