@@ -7,11 +7,15 @@ from collections import deque
 import torch
 from torch import nn
 from torch.nn import functional as F
+from torch import optim
 from ._base_net import VANet, QNet
 import copy
 
 
 class DQN:
+    """
+    仅支持离散action
+    """
     def __init__(self, 
                 state_dim: int,
                 hidden_layers_dim: typ.List[int],
@@ -30,7 +34,8 @@ class DQN:
             self.q = QNet(state_dim, hidden_layers_dim, action_dim).to(device)
 
         self.target_q = copy.deepcopy(self.q)
-        self.q.complete(lr=learning_rate)
+        self.cost_func = nn.MSELoss()
+        self.opt = optim.Adam(self.q.parameters(), lr=learning_rate)
         self.target_q.to(device)
 
         self.gamma = gamma
@@ -51,11 +56,11 @@ class DQN:
         self.count += 1
         # sample -> tensor
         states, actions, rewards, next_states, done = zip(*samples)
-        states = torch.FloatTensor(states).to(self.device)
-        actions = torch.Tensor(actions).view(-1, 1).to(self.device)
-        rewards = torch.Tensor(rewards).view(-1, 1).to(self.device)
-        next_states = torch.FloatTensor(next_states).to(self.device)
-        done = torch.Tensor(done).to(self.device)
+        states = torch.FloatTensor(np.array(states)).to(self.device)
+        actions = torch.Tensor(np.array(actions)).view(-1, 1).to(self.device)
+        rewards = torch.Tensor(np.array(rewards)).view(-1, 1).to(self.device)
+        next_states = torch.FloatTensor(np.array(next_states)).to(self.device)
+        done = torch.Tensor(np.array(done)).view(-1, 1).to(self.device)
         
         Q_s = self.q(states)
         Q1_s = self.target_q(next_states)
@@ -67,13 +72,14 @@ class DQN:
             max_Q1sa = Q1_s.gather(1, max_action)
         else:
             max_Q1sa = Q1_s.max(1)[0].view(-1, 1)
-
+        
         Q_target = rewards + self.gamma * max_Q1sa * (1 - done)
         # MSELoss
-        self.q.update(Q_sa.float(), Q_target.float())
+        loss = self.cost_func(Q_sa.float(), Q_target.float())
+        self.opt.zero_grad()
+        loss.backward()
+        self.opt.step()
         if self.count % self.target_update_freq == 0:
             self.target_q.load_state_dict(
                 self.q.state_dict()
             )
-
-

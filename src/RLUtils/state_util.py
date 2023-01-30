@@ -1,6 +1,4 @@
-
-
-
+import gym
 
 
 
@@ -11,3 +9,14 @@ def Pendulum_dis_to_con(discrete_action, env, action_dim):  # 离散动作转回
     return action_lowbound + ( discrete_action / (action_dim - 1) ) * action_range
 
 
+def gym_env_desc(env_name):
+    env = gym.make(env_name)
+    state_shape = env.observation_space.shape
+    try:
+        action_shape = env.action_space.n
+        action_type = '离散'
+    except Exception as e:
+        action_shape = env.action_space.shape
+        action_type = '连续'
+    print(f'[ {env_name} ](state: {state_shape},action: {action_shape}({action_type}))')
+    return 
