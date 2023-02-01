@@ -7,7 +7,7 @@ dir_ = dirname(dirname(__file__))
 print(dir_)
 sys.path.append(dir_)
 from RLAlgo.PPO import PPO
-from RLUtils import train_on_policy, play, Config
+from RLUtils import train_on_policy, play, Config, gym_env_desc
 
 
 
@@ -17,28 +17,36 @@ def ppo_test():
     policyNet: 
     valueNet: 
     """
+    # A:[128, 64] C:[64, 32]
     env_name = 'Pendulum-v1'
+    env_name = 'MountainCarContinuous-v0'
+    gym_env_desc(env_name)
     env = gym.make(env_name)
     cfg = Config(
         env, 
-        num_episode=800,
-        save_path=r'D:\TMP\ddpg_test_actor.ckpt', 
-        actor_hidden_layers_dim=[128, 64],
-        critic_hidden_layers_dim=[64, 32],
+        # 环境参数
+        save_path=r'D:\TMP\ppo_test_actor.ckpt', 
+        seed=42,
+        # 网络参数
+        actor_hidden_layers_dim=[128, 128, 64],
+        critic_hidden_layers_dim=[64, 64, 32],
+        # agent参数
         actor_lr=1e-4,
         critic_lr=5e-3,
-        sample_size=256,
+        gamma=0.95,
+        # 训练参数
+        num_episode=800,
         off_buffer_size=20480,
-        max_episode_rewards=260,
-        max_episode_steps=260,
-        gamma=0.9,
+        max_episode_steps=600,
+        # agent其他参数
         PPO_kwargs={
             'lmbda': 0.9,
-            'eps': 0.2, # clip eps
+            'eps': 0.15, # clip eps
             'k_epochs': 10,
             'sgd_batch_size': 512,
             'minibatch_size': 128,
-            'actor_nums': 3
+            'actor_nums': 3,
+            'actor_bound': 1.2 # tanh (-1, 1)
         }
     )
     agent = PPO(

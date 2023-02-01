@@ -85,6 +85,7 @@ class PPO:
         self.sgd_batch_size = PPO_kwargs.get('sgd_batch_size', 512)
         self.minibatch_size = PPO_kwargs.get('minibatch_size', 128)
         self.actor_nums = PPO_kwargs.get('actor_nums', 3)
+        self.action_bound = PPO_kwargs.get('action_bound', 1.0)
         self.count = 0 
         self.device = device
         self.min_batch_collate_func = partial(mini_batch, mini_batch_size=self.minibatch_size)
@@ -92,7 +93,7 @@ class PPO:
     def policy(self, state):
         state = torch.FloatTensor([state]).to(self.device)
         mu, std = self.actor(state)
-        action_dist = torch.distributions.Normal(mu, std)
+        action_dist = torch.distributions.Normal(self.action_bound * mu, std)
         action = action_dist.sample()
         return action.detach().numpy()[0]
         
@@ -114,7 +115,7 @@ class PPO:
         advantage = compute_advantage(self.gamma, self.lmbda, td_delta.cpu()).to(self.device)
                 
         mu, std = self.actor(state)
-        action_dists = torch.distributions.Normal(mu.detach(), std.detach())
+        action_dists = torch.distributions.Normal(self.action_bound * mu.detach(), std.detach())
         # 动作是正态分布
         old_log_probs = action_dists.log_prob(action)
         d_set = memDataset(state, action, old_log_probs, advantage, td_target)
@@ -130,7 +131,7 @@ class PPO:
         for _ in range(self.k_epochs):
             for state_, action_, old_log_prob, adv, td_v in train_loader:
                 mu, std = self.actor(state_)
-                action_dists = torch.distributions.Normal(mu, std)
+                action_dists = torch.distributions.Normal(self.action_bound * mu, std)
                 log_prob = action_dists.log_prob(action_)
                 
                 # e(log(a/b))

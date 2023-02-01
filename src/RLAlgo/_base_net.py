@@ -158,7 +158,7 @@ class PPOPolicyNet(nn.Module):
         for layer in self.features:
             x = layer['linear_action'](layer['linear'](x))
         
-        mean_ = 2.0 * torch.tanh(self.fc_mu(x))
+        mean_ = torch.tanh(self.fc_mu(x))
         # np.log(1 + np.exp(2))
         std = F.softplus(self.fc_std(x)) + 1e-5
         return mean_, std
