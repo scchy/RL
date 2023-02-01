@@ -1,6 +1,27 @@
 
 import torch
 import typing as typ
+import numpy as np
+import random
+import os
+
+
+def all_seed(seed=6666):
+    np.random.seed(seed)
+    random.seed(seed)
+    # CPU
+    torch.manual_seed(seed)
+    # GPU
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+        torch.cuda.manual_seed(seed)
+    # python全局
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    # cudnn
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.enabled = False
+    print(f'Set env random_seed = {seed}')
 
 
 class Config:  
@@ -22,12 +43,13 @@ class Config:
         epsilon: float = 0.01,
         target_update_freq: int = 3,
         num_episode: int = 100,
-        max_episode_rewards: float = 260,
+        max_episode_rewards: float = 260*100000,
         max_episode_steps:int = 260,
         render: bool = False,
         off_buffer_size: int = 2048,
         off_minimal_size: int = 1024,
         sample_size: int = 128,
+        seed: int = 42,
         **kwargs
     ):
         """
@@ -85,6 +107,7 @@ class Config:
         # 环境相关变量
         self.action_dim = action_dim
         self.state_dim = env.observation_space.shape[0]
+        all_seed(seed)
         try:
             self.action_dim = env.action_space.n
         except Exception as e:
