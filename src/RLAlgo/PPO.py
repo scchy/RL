@@ -71,7 +71,8 @@ class PPO:
                 critic_lr: float,
                 gamma: float,
                 PPO_kwargs: typ.Dict,
-                device: torch.device
+                device: torch.device,
+                reward_func: typ.Optional[typ.Callable]=None
                 ):
         self.actor = policyNet(state_dim, actor_hidden_layers_dim, action_dim).to(device)
         self.critic = valueNet(state_dim, critic_hidden_layers_dim).to(device)
@@ -88,6 +89,7 @@ class PPO:
         self.action_bound = PPO_kwargs.get('action_bound', 1.0)
         self.count = 0 
         self.device = device
+        self.reward_func = reward_func
         self.min_batch_collate_func = partial(mini_batch, mini_batch_size=self.minibatch_size)
     
     def policy(self, state):
@@ -106,7 +108,10 @@ class PPO:
         state = torch.FloatTensor(state).to(self.device)
         action = torch.FloatTensor(action).to(self.device)
         reward = torch.tensor(reward).view(-1, 1).to(self.device)
-        reward = (reward + 10.0) / 10.0  # 和TRPO一样,对奖励进行修改,方便训练
+        if self.reward_func is not None:
+            reward = self.reward_func(reward)
+        else:
+            reward = (reward + 10.0) / 10.0  # 和TRPO一样,对奖励进行修改,方便训练
         next_state = torch.FloatTensor(next_state).to(self.device)
         done = torch.FloatTensor(done).view(-1, 1).to(self.device)
         

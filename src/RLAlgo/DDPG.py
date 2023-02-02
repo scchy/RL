@@ -48,11 +48,19 @@ class DDPG:
         self.action_dim = action_dim
         # Normal sigma
         self.sigma = DDPG_kwargs.get('sigma', 0.1)
+        self.action_low = DDPG_kwargs.get('action_low', -1.0)
+        self.action_high = DDPG_kwargs.get('action_high', 1.0)
+        self.train = False
 
     def policy(self, state):
         state = torch.FloatTensor([state]).to(self.device)
         act = self.actor(state)
-        return act.detach().numpy()[0] + self.sigma * np.random.rand(self.action_dim)
+        if self.train:
+            if self.count == 0: # 用最大的范围去探索
+                return np.array([np.random.randint(self.action_low, self.action_high + 1)])
+            return act.detach().numpy()[0] + self.sigma * np.random.rand(self.action_dim)
+
+        return act.detach().numpy()[0]
 
     def soft_update(self, net, target_net):
         for param_target, param in zip(target_net.parameters(), net.parameters()):
@@ -66,7 +74,6 @@ class DDPG:
         state = torch.FloatTensor(state).to(self.device)
         action = torch.tensor(action).to(self.device)
         reward = torch.tensor(reward).view(-1, 1).to(self.device)
-        reward = (reward + 10.0) / 10.0  # 对奖励进行修改,方便训练
         next_state = torch.FloatTensor(next_state).to(self.device)
         done = torch.FloatTensor(done).view(-1, 1).to(self.device)
         

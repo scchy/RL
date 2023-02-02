@@ -7,7 +7,7 @@ import numpy as np
 
 
 
-def train_off_policy(env, agent ,cfg, action_contiguous=False):
+def train_off_policy(env, agent ,cfg, action_contiguous=False, done_add=False):
     buffer = replayBuffer(cfg.off_buffer_size)
     tq_bar = tqdm(range(cfg.num_episode))
     rewards_list = []
@@ -19,6 +19,7 @@ def train_off_policy(env, agent ,cfg, action_contiguous=False):
         done = False
         episode_rewards = 0
         steps = 0
+        drop_flag = False
         while not done:
             a = agent.policy(s)
             if action_contiguous:
@@ -34,8 +35,15 @@ def train_off_policy(env, agent ,cfg, action_contiguous=False):
             if len(buffer) > cfg.off_minimal_size:
                 samples = buffer.sample(cfg.sample_size)
                 agent.update(samples)
+                # print('Start Update')
             if (episode_rewards >= cfg.max_episode_rewards) or (steps >= cfg.max_episode_steps):
+                drop_flag = True
                 break
+        
+        if done_add and drop_flag:
+            for _ in range(steps):
+                buffer.buffer.pop()
+            # print(f'\ndrop not done experience-{steps}')
         
         rewards_list.append(episode_rewards)
         now_reward = np.mean(rewards_list[-10:])
@@ -47,6 +55,7 @@ def train_off_policy(env, agent ,cfg, action_contiguous=False):
             bf_reward = now_reward
 
         tq_bar.set_postfix({
+            "steps": steps,
             'lastMeanRewards': f'{now_reward:.2f}',
             'BEST': f'{bf_reward:.2f}'
         })
@@ -117,6 +126,6 @@ def train_on_policy(env, agent, cfg):
             torch.save(agent.actor.state_dict(), cfg.save_path)
             bf_reward = now_reward
         
-        tq_bar.set_postfix({'lastMeanRewards': f'{now_reward:.2f}', 'BEST': f'{bf_reward:.2f}'})
+        tq_bar.set_postfix({"steps": steps,'lastMeanRewards': f'{now_reward:.2f}', 'BEST': f'{bf_reward:.2f}'})
     env.close()
     return agent

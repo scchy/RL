@@ -8,7 +8,7 @@ dir_ = dirname(dirname(__file__))
 print(dir_)
 sys.path.append(dir_)
 from RLAlgo.DDPG import DDPG
-from RLUtils import train_off_policy, play, Config
+from RLUtils import train_off_policy, play, Config, gym_env_desc
 
 
 
@@ -18,26 +18,57 @@ def ddpg_test():
     policyNet: 
     valueNet: 
     """
-    env_name = 'Pendulum-v1'
+    # env_name = 'Pendulum-v1'
+    # env = gym.make(env_name)
+    # Pendulum_cfg = Config(
+    #     env, 
+    #     num_episode = 180,
+    #     save_path=r'D:\TMP\ddpg_test_actor.ckpt', 
+    #     actor_hidden_layers_dim=[128, 64],
+    #     critic_hidden_layers_dim=[64, 32],
+    #     actor_lr=3e-5,
+    #     critic_lr=5e-4,
+    #     sample_size=256,
+    #     off_buffer_size=2048,
+    #     off_minimal_size=1024,
+    #     max_episode_rewards=2048,
+    #     max_episode_steps=240,
+    #     gamma=0.9,
+    #     DDPG_kwargs={
+    #         'tau': 0.05, # soft update parameters
+    #         'sigma': 0.005, # noise
+    #         'action_bound': 2.0
+    #     }
+    # )
+    env_name = 'MountainCarContinuous-v0'
+    gym_env_desc(env_name)
     env = gym.make(env_name)
     cfg = Config(
         env, 
-        num_episode = 180,
-        save_path=r'D:\TMP\ddpg_test_actor.ckpt', 
-        actor_hidden_layers_dim=[128, 64],
-        critic_hidden_layers_dim=[64, 32],
-        actor_lr=3e-5,
-        critic_lr=5e-4,
-        sample_size=256,
-        off_buffer_size=2048,
-        off_minimal_size=1024,
-        max_episode_rewards=2048,
-        max_episode_steps=240,
-        gamma=0.9,
+        # 环境参数
+        save_path=r'D:\TMP\ddpg_MountainCarContinuous_test_actor.ckpt', 
+        seed=42,
+        # 网络参数
+        actor_hidden_layers_dim=[512, 256],
+        critic_hidden_layers_dim=[512, 256],
+        # agent参数
+        actor_lr=3e-4,
+        critic_lr=5e-3,
+        gamma=0.99,
+        # 训练参数
+        num_episode=100,
+        sample_size=512,
+        off_buffer_size=2048000,
+        off_minimal_size=2048*5,
+        max_episode_rewards=90,
+        max_episode_steps=1500,
+        # agent 其他参数
         DDPG_kwargs={
-            'tau': 0.05, # soft update parameters
-            'sigma': 0.005, # noise
-            'action_bound': 2.0
+            'tau': 0.005, # soft update parameters
+            'sigma': 0.8, # noise
+            'action_bound': 1.1,
+            'action_low': env.action_space.low[0],
+            'action_high': env.action_space.high[0],
         }
     )
     agent = DDPG(
@@ -51,7 +82,8 @@ def ddpg_test():
         DDPG_kwargs=cfg.DDPG_kwargs,
         device=cfg.device
     )
-    train_off_policy(env, agent, cfg)
+    agent.train = True
+    train_off_policy(env, agent, cfg, done_add=True)
     try:
         agent.target_q.load_state_dict(
             torch.load(cfg.save_path)
@@ -60,7 +92,8 @@ def ddpg_test():
         agent.actor.load_state_dict(
             torch.load(cfg.save_path)
         )
-    play(gym.make(env_name, render_mode='human'), agent, cfg, episode_count=2)
+    agent.train = False
+    play(gym.make(env_name, render_mode='human'), agent, cfg, episode_count=1)
 
 
 if __name__ == '__main__':

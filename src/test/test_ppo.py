@@ -10,6 +10,9 @@ from RLAlgo.PPO import PPO
 from RLUtils import train_on_policy, play, Config, gym_env_desc
 
 
+def r_func(r):
+    # 不希望留在谷底
+    return (r + 10.0 ) / 10.0
 
 
 def ppo_test():
@@ -19,7 +22,7 @@ def ppo_test():
     """
     # A:[128, 64] C:[64, 32]
     env_name = 'Pendulum-v1'
-    env_name = 'MountainCarContinuous-v0'
+    # env_name = 'MountainCarContinuous-v0'
     gym_env_desc(env_name)
     env = gym.make(env_name)
     cfg = Config(
@@ -28,25 +31,25 @@ def ppo_test():
         save_path=r'D:\TMP\ppo_test_actor.ckpt', 
         seed=42,
         # 网络参数
-        actor_hidden_layers_dim=[128, 128, 64],
-        critic_hidden_layers_dim=[64, 64, 32],
+        actor_hidden_layers_dim=[128, 64],
+        critic_hidden_layers_dim=[64, 32],
         # agent参数
         actor_lr=1e-4,
         critic_lr=5e-3,
-        gamma=0.95,
+        gamma=0.9,
         # 训练参数
-        num_episode=800,
-        off_buffer_size=20480,
-        max_episode_steps=600,
+        num_episode=1200,
+        off_buffer_size=204800,
+        max_episode_steps=260,
         # agent其他参数
         PPO_kwargs={
             'lmbda': 0.9,
-            'eps': 0.15, # clip eps
+            'eps': 0.2, # clip eps
             'k_epochs': 10,
             'sgd_batch_size': 512,
             'minibatch_size': 128,
             'actor_nums': 3,
-            'actor_bound': 1.2 # tanh (-1, 1)
+            'actor_bound': 2 # tanh (-1, 1)
         }
     )
     agent = PPO(
@@ -58,7 +61,8 @@ def ppo_test():
         critic_lr=cfg.critic_lr,
         gamma=cfg.gamma,
         PPO_kwargs=cfg.PPO_kwargs,
-        device=cfg.device
+        device=cfg.device,
+        reward_func=r_func
     )
     train_on_policy(env, agent, cfg)
     agent.actor.load_state_dict(
