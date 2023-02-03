@@ -82,8 +82,8 @@ def ddpg_test():
         DDPG_kwargs=cfg.DDPG_kwargs,
         device=cfg.device
     )
-    agent.train = True
-    train_off_policy(env, agent, cfg, done_add=True)
+    # agent.train = True
+    # train_off_policy(env, agent, cfg, done_add=True)
     try:
         agent.target_q.load_state_dict(
             torch.load(cfg.save_path)

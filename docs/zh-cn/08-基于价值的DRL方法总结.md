@@ -14,6 +14,7 @@
 |-|-|-|-|-|-|-|
 |[ CartPole-v1 ](state: (4,),action: 2(离散))| DuelingDQN | [10, 10] | `dict(action_contiguous_=False, seed=42)` | `dict(epsilon=0.01, target_update_freq=3, gamma=0.95, learning_rate=2e-3)` | `dict(num_episode=500, off_buffer_size=2048, off_minimal_size=1024, sample_size=256, max_episode_steps=240)`| 相对简单环境buffer可以相对小一些，训练效果不佳时`num_episode`可以调大  |
 |[ MountainCar-v0 ](state: (2,),action: 3(离散 ))| DuelingDQN | [32, 32] | `dict(action_contiguous_=False, seed=42)` | `dict(epsilon=0.05, target_update_freq=3, gamma=0.95, learning_rate=2e-3)` | `dict(num_episode=200, off_buffer_size=3076, off_minimal_size=1024, sample_size=256, max_episode_steps=500)`| 相对复杂环境: 1.增加网络宽度与深度 2.需要增加探索率`epsilon`; 3.将回合步数调大`max_episode_steps`;需要多次训练尝试，同时也可以适量的增大`off_buffer_size`  |
+|[ Acrobot-v1 ](state: (6,),action: 3(离散 ))| DuelingDQN | [128, 64] | `dict(action_contiguous_=False, seed=42)` | `dict(epsilon=0.05, target_update_freq=3, gamma=0.95, learning_rate=2e-3)` | `dict(num_episode=300, off_buffer_size=20480, off_minimal_size=1024, sample_size=256, max_episode_steps=400)`| 相对复杂环境: 1.增加网络宽度与深度 2.需要增加探索率`epsilon`; 3.将回合步数调大`max_episode_steps`;4. 适量的增大`off_buffer_size`;5. 增加迭代次数  |
 
 
 ## 8.2 实验效果
@@ -21,7 +22,8 @@
 |环境与描述 | 使用方法 | 配置| 效果|
 |-|-|-|-|
 |[ CartPole-v1 ](state: (4,),action: 2(离散))| DuelingDQN | 上述对应配置| ![duelingDQN_CartPole](../pic/duelingDQN_CartPole-v1.gif) |
-|[ MountainCar-v0 ](state: (2,),action: 3(离散 ))| DuelingDQN | 上述对应配置| ![duelingDQN_CartPole](../pic/duelingDQN_MountainCar-v0.gif) |
+|[ MountainCar-v0 ](state: (2,),action: 3(离散 ))| DuelingDQN | 上述对应配置| ![duelingDQN_MountainCar](../pic/duelingDQN_MountainCar-v0.gif) |
+|[ Acrobot-v1 ](state: (6,),action: 3(离散 ))| DuelingDQN | 上述对应配置| ![duelingDQN_Acrobot](../pic/DQN_Acrobot-v1.gif) |
 
 
 ## 8.3 环境实验脚本简述
@@ -108,4 +110,37 @@ cfg = Config(
     dqn_type = 'duelingDQN'
 )
 
+```
+
+
+**Acrobot-v1**
+
+```python
+env_name = 'Acrobot-v1' 
+gym_env_desc(env_name)
+env = gym.make(env_name)
+action_contiguous_ = False # 是否将连续动作离散化
+
+cfg = Config(
+    env, 
+    # 环境参数
+    split_action_flag=True,
+    save_path=r'D:\TMP\Acrobot_dqn_target_q.ckpt',
+    seed=42,
+    # 网络参数
+    hidden_layers_dim=[128, 64],
+    # agent参数
+    learning_rate=2e-3,
+    target_update_freq=3,
+    gamma=0.95,
+    epsilon=0.05,
+    # 训练参数
+    num_episode=300,
+    off_buffer_size=20480,
+    off_minimal_size=1024,
+    sample_size=256,
+    max_episode_steps=400,
+    # agent 其他参数
+    dqn_type = 'duelingDQN'
+)
 ```
