@@ -112,6 +112,57 @@ def Acrobot_dqn_test():
     play(gym.make(env_name, render_mode='human'), dqn, cfg, episode_count=2, action_contiguous=action_contiguous_)
 
 
+
+
+def LunarLander_dqn_test():
+    # num_episode=100 action_contiguous_ = True
+    env_name = 'LunarLander-v2' 
+    #  https://www.lfd.uci.edu/~gohlke/pythonlibs/#pybox2d 下载包
+    # pip install + 路径/xxx.whl
+    gym_env_desc(env_name)
+    env = gym.make(env_name)
+    action_contiguous_ = False # 是否将连续动作离散化
+    
+    cfg = Config(
+        env, 
+        # 环境参数
+        split_action_flag=True,
+        save_path=r'D:\TMP\LunarLander_dqn_target_q.ckpt',
+        seed=42,
+        # 网络参数
+        hidden_layers_dim=[128, 64],
+        # agent参数
+        learning_rate=2e-3,
+        target_update_freq=3,
+        gamma=0.99,
+        epsilon=0.05,
+        # 训练参数
+        num_episode=800,
+        off_buffer_size=20480,
+        off_minimal_size=2048,
+        sample_size=128,
+        max_episode_steps=200,
+        # agent 其他参数
+        dqn_type = 'duelingDQN'
+    )
+    dqn = DQN(
+        state_dim=cfg.state_dim,
+        hidden_layers_dim=cfg.hidden_layers_dim,
+        action_dim=cfg.action_dim,
+        learning_rate=cfg.learning_rate,
+        gamma=cfg.gamma,
+        epsilon=cfg.epsilon,
+        target_update_freq=cfg.target_update_freq,
+        device=cfg.device,
+        dqn_type=cfg.dqn_type
+    )
+    # train_off_policy(env, dqn, cfg, action_contiguous=action_contiguous_)
+    dqn.target_q.load_state_dict(
+        torch.load(cfg.save_path)
+    )
+    play(gym.make(env_name, render_mode='human'), dqn, cfg, episode_count=2, action_contiguous=action_contiguous_)
+
+
 if __name__ == '__main__':
-    Acrobot_dqn_test()
+    LunarLander_dqn_test()
 
