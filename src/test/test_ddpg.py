@@ -96,6 +96,68 @@ def ddpg_test():
     play(gym.make(env_name, render_mode='human'), agent, cfg, episode_count=1)
 
 
+
+def LunarLanderContinuous_ddpg_test():
+    """
+    policyNet: 
+    valueNet: 
+    """
+    env_name = 'LunarLanderContinuous-v2'
+    gym_env_desc(env_name)
+    env = gym.make(env_name)
+    cfg = Config(
+        env, 
+        # 环境参数
+        save_path=r'D:\TMP\ddpg_MountainCarContinuous_test_actor.ckpt', 
+        seed=42,
+        # 网络参数
+        actor_hidden_layers_dim=[128, 64],
+        critic_hidden_layers_dim=[128, 64],
+        # agent参数
+        actor_lr=3e-4,
+        critic_lr=5e-3,
+        gamma=0.99,
+        # 训练参数
+        num_episode=600,
+        sample_size=256,
+        off_buffer_size=20480,
+        off_minimal_size=2048,
+        max_episode_rewards=500,
+        max_episode_steps=160,
+        # agent 其他参数
+        DDPG_kwargs={
+            'tau': 0.005, # soft update parameters
+            'sigma': 0.5, # noise
+            'action_bound': 1.1,
+            'action_low': env.action_space.low[0],
+            'action_high': env.action_space.high[0],
+        }
+    )
+    agent = DDPG(
+        state_dim=cfg.state_dim,
+        actor_hidden_layers_dim=cfg.actor_hidden_layers_dim,
+        critic_hidden_layers_dim=cfg.critic_hidden_layers_dim,
+        action_dim=cfg.action_dim,
+        actor_lr=cfg.actor_lr,
+        critic_lr=cfg.critic_lr,
+        gamma=cfg.gamma,
+        DDPG_kwargs=cfg.DDPG_kwargs,
+        device=cfg.device
+    )
+    agent.train = True
+    # train_off_policy(env, agent, cfg, done_add=False)
+    try:
+        agent.target_q.load_state_dict(
+            torch.load(cfg.save_path)
+        )
+    except Exception as e:
+        agent.actor.load_state_dict(
+            torch.load(cfg.save_path)
+        )
+    agent.train = False
+    play(gym.make(env_name, render_mode='human'), agent, cfg, episode_count=2)
+
+
 if __name__ == '__main__':
-    ddpg_test()
+    LunarLanderContinuous_ddpg_test()
 

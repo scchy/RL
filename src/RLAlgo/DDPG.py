@@ -56,12 +56,11 @@ class DDPG:
         state = torch.FloatTensor([state]).to(self.device)
         act = self.actor(state)
         if self.train:
-            if self.count == 0: # 用最大的范围去探索
-                return np.array([np.random.randint(self.action_low, self.action_high + 1)])
-            return act.detach().numpy()[0] + self.sigma * np.random.rand(self.action_dim)
-
+            # if self.count == 0: # 用最大的范围去探索
+            #     return np.array([np.random.randint(self.action_low, self.action_high + 1)])
+            return act.detach().numpy()[0] + np.random.normal(loc=0, scale=self.sigma, size=self.action_dim)
         return act.detach().numpy()[0]
-
+    
     def soft_update(self, net, target_net):
         for param_target, param in zip(target_net.parameters(), net.parameters()):
             param_target.data.copy_(
