@@ -105,10 +105,11 @@ def LunarLanderContinuous_ddpg_test():
     env_name = 'LunarLanderContinuous-v2'
     gym_env_desc(env_name)
     env = gym.make(env_name)
+    path_ = os.path.dirname(__file__)
     cfg = Config(
         env, 
         # 环境参数
-        save_path=r'D:\TMP\ddpg_MountainCarContinuous_test_actor.ckpt', 
+        save_path=f'{path_}/test_model/ddpg_LunarLanderContinuous-v2_test_actor.ckpt', 
         seed=42,
         # 网络参数
         actor_hidden_layers_dim=[128, 64],
@@ -145,7 +146,7 @@ def LunarLanderContinuous_ddpg_test():
         device=cfg.device
     )
     agent.train = True
-    # train_off_policy(env, agent, cfg, done_add=False)
+    train_off_policy(env, agent, cfg, done_add=False)
     try:
         agent.target_q.load_state_dict(
             torch.load(cfg.save_path)
@@ -155,7 +156,7 @@ def LunarLanderContinuous_ddpg_test():
             torch.load(cfg.save_path)
         )
     agent.train = False
-    play(gym.make(env_name, render_mode='human'), agent, cfg, episode_count=2)
+    # play(gym.make(env_name, render_mode='human'), agent, cfg, episode_count=2)
 
 
 if __name__ == '__main__':
