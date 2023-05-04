@@ -157,11 +157,9 @@ class TD3:
         target_Q = torch.minimum(target_Q1, target_Q2)
         target_Q = reward + (1.0 - done) * self.gamma * target_Q
         # 计算当前Q值
-        with torch.no_grad():
-            current_Q1, current_Q2 = self.critic(state, action)
-
+        current_Q1, current_Q2 = self.critic(state, action)
         # td error
-        q_loss = F.mse_loss(current_Q1.float(), target_Q.float()) + F.mse_loss(current_Q2.float(), target_Q.float())
+        q_loss = F.mse_loss(current_Q1.float(), target_Q.float().detach()) + F.mse_loss(current_Q2.float(), target_Q.float().detach())
         # Optimize the q_critic
         self.critic_opt.zero_grad()
         q_loss.backward()
