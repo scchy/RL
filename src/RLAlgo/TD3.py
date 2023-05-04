@@ -132,7 +132,7 @@ class TD3:
         if self.train:
             action_noise = np.random.normal(loc=0, scale=self.max_action * self.train_noise, size=self.action_dim)
             self.train_noise *= 0.999
-            return (act.detach().numpy()[0] + action_noise).clip(-self.action_low, self.action_high)
+            return (act.detach().numpy()[0] + action_noise).clip(self.action_low, self.action_high)
         
         return act.detach().numpy()[0]
 
