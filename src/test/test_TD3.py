@@ -12,6 +12,14 @@ from RLUtils import train_off_policy, play, Config, gym_env_desc
 
 
 
+def reward_func(r, d):
+    if r <= -100:
+        r = -1
+        d = True
+    else:
+        d = False
+    return r, d
+
 
 def LunarLanderContinuous_ddpg_test():
     """
@@ -21,26 +29,27 @@ def LunarLanderContinuous_ddpg_test():
     env_name = 'BipedalWalkerHardcore-v3'
     gym_env_desc(env_name)
     env = gym.make(env_name)
+    print("gym.__version__ = ", gym.__version__ )
     path_ = os.path.dirname(__file__)
     cfg = Config(
         env, 
         # 环境参数
-        save_path=f'{path_}/test_model/TD3_BipedalWalkerHardcore-v3_test_actor.ckpt', 
+        save_path=os.path.join(path_, "test_models" ,'TD3_BipedalWalkerHardcore-v3_test_actor.ckpt'), 
         seed=42,
         # 网络参数
-        actor_hidden_layers_dim=[128, 128],
-        critic_hidden_layers_dim=[128, 128],
+        actor_hidden_layers_dim=[200, 200],
+        critic_hidden_layers_dim=[200, 200],
         # agent参数
-        actor_lr=3e-4,
-        critic_lr=5e-3,
+        actor_lr=1e-4,
+        critic_lr=3e-4,
         gamma=0.99,
         # 训练参数
-        num_episode=100,
+        num_episode=5000,
         sample_size=256,
-        off_buffer_size=20480,
+        off_buffer_size=int(1e6),
         off_minimal_size=2048,
         max_episode_rewards=500,
-        max_episode_steps=160,
+        max_episode_steps=300,
         # agent 其他参数
         TD3_kwargs={
             'tau': 0.005, # soft update parameters
@@ -48,6 +57,7 @@ def LunarLanderContinuous_ddpg_test():
             'action_bound': 1.0,
             'action_low': env.action_space.low[0],
             'action_high': env.action_space.high[0],
+            'expl_noise': 0.25
         }
     )
     agent = TD3(
@@ -62,7 +72,7 @@ def LunarLanderContinuous_ddpg_test():
         device=cfg.device
     )
     agent.train = True
-    train_off_policy(env, agent, cfg, done_add=False)
+    train_off_policy(env, agent, cfg, done_add=False, reward_func=reward_func)
     try:
         agent.target_q.load_state_dict(
             torch.load(cfg.save_path)
@@ -72,7 +82,7 @@ def LunarLanderContinuous_ddpg_test():
             torch.load(cfg.save_path)
         )
     agent.train = False
-    # play(gym.make(env_name, render_mode='human'), agent, cfg, episode_count=2)
+    play(gym.make(env_name, render_mode='human'), agent, cfg, episode_count=2)
 
 
 if __name__ == '__main__':

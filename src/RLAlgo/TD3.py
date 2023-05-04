@@ -114,6 +114,8 @@ class TD3:
         self.delay_counter = -1
         self.delay_freq = 1
         self.train = False
+        self.expl_noise = TD3_kwargs.get('expl_noise', 0.25)
+        self.train_noise = self.expl_noise
 
     @torch.no_grad()
     def smooth_action(self, state):
@@ -127,6 +129,11 @@ class TD3:
     def policy(self, state):
         state = torch.FloatTensor([state]).to(self.device)
         act = self.actor(state)
+        if self.train:
+            action_noise = np.random.normal(loc=0, scale=self.max_action * self.train_noise, size=self.action_dim)
+            self.train_noise *= 0.999
+            return (act.detach().numpy()[0] + action_noise).clip(-self.action_low, self.action_high)
+        
         return act.detach().numpy()[0]
 
     def soft_update(self, net, target_net):

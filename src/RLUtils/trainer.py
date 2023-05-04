@@ -7,7 +7,7 @@ import numpy as np
 
 
 
-def train_off_policy(env, agent ,cfg, action_contiguous=False, done_add=False):
+def train_off_policy(env, agent ,cfg, action_contiguous=False, done_add=False, reward_func=None):
     buffer = replayBuffer(cfg.off_buffer_size)
     tq_bar = tqdm(range(cfg.num_episode))
     rewards_list = []
@@ -27,7 +27,14 @@ def train_off_policy(env, agent ,cfg, action_contiguous=False, done_add=False):
                 n_s, r, done, _, _ = env.step([c_a])
             else:
                 n_s, r, done, _, _ = env.step(a)
-            buffer.add(s, a, r, n_s, done)
+            
+            mem_done = done
+            if reward_func is not None:
+                try:
+                    r = reward_func(r)
+                except Exception as e:
+                    r, mem_done = reward_func(r, mem_done)
+            buffer.add(s, a, r, n_s, mem_done)
             s = n_s
             episode_rewards += r
             steps += 1
