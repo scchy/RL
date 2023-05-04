@@ -137,6 +137,29 @@ class DDPGPolicyNet(nn.Module):
         return torch.tanh(self.fc_out(x)) * self.action_bound
 
 
+class DT3PolicyNet(nn.Module):
+    """
+    输入state, 输出action
+    """
+    def __init__(self, state_dim: int, hidden_layers_dim: typ.List, action_dim: int, action_bound: float=1.0):
+        super(DT3PolicyNet, self).__init__()
+        self.action_bound = action_bound
+        self.features = nn.ModuleList()
+        for idx, h in enumerate(hidden_layers_dim):
+            self.features.append(nn.ModuleDict({
+                'linear': nn.Linear(hidden_layers_dim[idx-1] if idx else state_dim, h),
+                'linear_action': nn.Tanh()
+            }))
+
+        self.fc_out = nn.Linear(hidden_layers_dim[-1], action_dim)
+    
+    def forward(self, x):
+        for layer in self.features:
+            x = layer['linear_action'](layer['linear'](x))
+
+        return torch.tanh(self.fc_out(x)) * self.action_bound
+
+
 
 class PPOPolicyNet(nn.Module):
     """
@@ -185,8 +208,44 @@ class DDPGValueNet(nn.Module):
         for layer in self.features:
             x = layer['linear_activation'](layer['linear'](x))
         return self.head(x) 
-    
-    
+
+
+class TD3ValueNet(nn.Module):
+    """
+    输入[state, cation], 输出value
+    """
+    def __init__(self, state_action_dim: int, hidden_layers_dim: typ.List):
+        super(TD3ValueNet, self).__init__()
+        self.features_q1 = nn.ModuleList()
+        self.features_q2 = nn.ModuleList()
+        for idx, h in enumerate(hidden_layers_dim):
+            self.features_q1.append(nn.ModuleDict({
+                'linear': nn.Linear(hidden_layers_dim[idx-1] if idx else state_action_dim, h),
+                'linear_activation': nn.ReLU(inplace=True)
+            }))
+            self.features_q2.append(nn.ModuleDict({
+                'linear': nn.Linear(hidden_layers_dim[idx-1] if idx else state_action_dim, h),
+                'linear_activation': nn.ReLU(inplace=True)
+            }))
+            
+        self.head_q1 = nn.Linear(hidden_layers_dim[-1] , 1)
+        self.head_q2 = nn.Linear(hidden_layers_dim[-1] , 1)
+        
+    def forward(self, state, action):
+        x = torch.cat([state, action], dim=1).float() # 拼接状态和动作
+        x1 = x
+        x2 = x
+        for layer1, layer2 in zip(self.features_q1, self.features_q2):
+            x1 = layer1['linear_activation'](layer1['linear'](x1))
+            x2 = layer2['linear_activation'](layer2['linear'](x2))
+        return self.head_q1(x1), self.head_q2(x2)
+
+    def Q1(self, state, action):
+        x = torch.cat([state, action], dim=1).float() # 拼接状态和动作
+        for layer in self.features_q1:
+            x = layer['linear_activation'](layer['linear'](x))
+        return self.head_q1(x) 
+
     
 class PPOValueNet(nn.Module):
     def __init__(self, state_dim, hidden_layers_dim):
