@@ -46,18 +46,26 @@ def BipedalWalkerHardcore_TD3_test():
         # 训练参数
         num_episode=5000,
         sample_size=256,
+        # 环境复杂多变，需要保存多一些buffer
         off_buffer_size=int(1e6),
         off_minimal_size=2048,
         max_episode_rewards=1000,
         max_episode_steps=1000,
         # agent 其他参数
         TD3_kwargs={
-            'tau': 0.005, # soft update parameters
-            'sigma': 0.5, # noise
-            'action_bound': 1.0,
             'action_low': env.action_space.low[0],
             'action_high': env.action_space.high[0],
-            'expl_noise': 0.25
+            # soft update parameters
+            'tau': 0.005, 
+            # trick2: Delayed Policy Update
+            'delay_freq': 1,
+            # trick3: Target Policy Smoothing
+            'policy_noise': 0.2,
+            'policy_noise_clip': 0.5,
+            # exploration noise
+            'expl_noise': 0.25,
+            # 探索的 noise 指数系数率减少 noise = expl_noise * expl_noise_exp_reduce_factor^t
+            'expl_noise_exp_reduce_factor': 0.999
         }
     )
     agent = TD3(

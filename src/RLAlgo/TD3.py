@@ -14,58 +14,6 @@ from ._base_net import TD3ValueNet as valueNet
 from ._base_net import DT3PolicyNet as policyNet
 
 
-class Actor(nn.Module):
-    def __init__(self, state_dim, action_dim, net_width, maxaction):
-        super(Actor, self).__init__()
-
-        self.l1 = nn.Linear(state_dim, net_width)
-        self.l2 = nn.Linear(net_width, net_width)
-        self.l3 = nn.Linear(net_width, action_dim)
-        self.maxaction = maxaction
-
-    def forward(self, state):
-        a = torch.tanh(self.l1(state))
-        a = torch.tanh(self.l2(a))
-        a = torch.tanh(self.l3(a)) * self.maxaction
-        return a
-
-
-
-class Q_Critic(nn.Module):
-    def __init__(self, state_dim, action_dim, net_width):
-        super(Q_Critic, self).__init__()
-
-        # Q1 architecture
-        self.l1 = nn.Linear(state_dim + action_dim, net_width)
-        self.l2 = nn.Linear(net_width, net_width)
-        self.l3 = nn.Linear(net_width, 1)
-
-        # Q2 architecture
-        self.l4 = nn.Linear(state_dim + action_dim, net_width)
-        self.l5 = nn.Linear(net_width, net_width)
-        self.l6 = nn.Linear(net_width, 1)
-
-    def forward(self, state, action):
-        sa = torch.concat([state, action], 1)
-
-        q1 = F.relu(self.l1(sa))
-        q1 = F.relu(self.l2(q1))
-        q1 = self.l3(q1)
-
-        q2 = F.relu(self.l4(sa))
-        q2 = F.relu(self.l5(q2))
-        q2 = self.l6(q2)
-        return q1, q2
-
-    def Q1(self, state, action):
-        sa = torch.concat([state, action], 1)
-
-        q1 = F.relu(self.l1(sa))
-        q1 = F.relu(self.l2(q1))
-        q1 = self.l3(q1)
-        return q1
-
-
 class TD3:
     def __init__(
         self,
@@ -77,13 +25,46 @@ class TD3:
         critic_lr: float,
         gamma: float,
         TD3_kwargs: typ.Dict,
-        device: torch.device
+        device: torch.device=None
     ):
+        """
+        state_dim (int): 环境的sate维度  
+        actor_hidden_layers_dim (typ.List): actor hidden layer 维度  
+        critic_hidden_layers_dim (typ.List): critic hidden layer 维度  
+        action_dim (int): action的维度  
+        actor_lr (float): actor学习率  
+        critic_lr (float): critic学习率  
+        gamma (float): 折扣率  
+        TD3_kwargs (typ.Dict): TD3算法的三个trick的输入  
+            example:  
+                TD3_kwargs={  
+                    'action_low': env.action_space.low[0],  
+                    'action_high': env.action_space.high[0],  
+                - soft update parameters  
+                    'tau': 0.005,   
+                - trick2: Target Policy Smoothing  
+                    'delay_freq': 1,  
+                - trick3: Target Policy Smoothing  
+                    'policy_noise': 0.2,  
+                    'policy_noise_clip': 0.5,  
+                - exploration noise  
+                    'expl_noise': 0.25,  
+                    -  探索的 noise 指数系数率减少 noise = expl_noise * expl_noise_exp_reduce_factor^t  
+                    'expl_noise_exp_reduce_factor': 0.999  
+                }  
+        device (torch.device): 运行的device  
+        """
+        if device is None:
+            device = torch.device('cpu')
+        self.device = device
+        self.action_low = TD3_kwargs.get('action_low', -1.0)
+        self.action_high = TD3_kwargs.get('action_high', 1.0)
+        self.max_action = max(abs(self.action_low), abs(self.action_high))
         self.actor = policyNet(
             state_dim, 
             actor_hidden_layers_dim, 
             action_dim, 
-            action_bound = TD3_kwargs['action_bound']
+            action_bound = self.max_action
         )
         self.critic = valueNet(
             state_dim + action_dim, 
@@ -100,29 +81,31 @@ class TD3:
         self.critic_opt = torch.optim.Adam(self.critic.parameters(), lr=critic_lr)
         
         self.gamma = gamma
-        self.device = device
         self.action_dim = action_dim
-        self.action_low = TD3_kwargs.get('action_low', -1.0)
-        self.action_high = TD3_kwargs.get('action_high', 1.0)
-        self.tau = TD3_kwargs.get('tau', 0.8)
-        # Normal sigma
-        self.max_action = TD3_kwargs['action_bound']
-        self.policy_noise = 0.2 * self.max_action 
-        self.noise_clip = 0.5 * self.max_action 
-
-        self.Q_batchsize = TD3_kwargs.get('Q_batchsize', 256) 
-        self.delay_counter = -1
-        self.delay_freq = 1
-        self.train = False
+        
+        self.tau = TD3_kwargs.get('tau', 0.01)
+        self.policy_noise = TD3_kwargs.get('policy_noise', 0.2) * self.max_action 
+        self.policy_noise_clip = TD3_kwargs.get('policy_noise_clip', 0.5) * self.max_action 
         self.expl_noise = TD3_kwargs.get('expl_noise', 0.25)
+        self.expl_noise_exp_reduce_factor = TD3_kwargs.get('expl_noise_exp_reduce_factor', 1)
+        self.delay_counter = -1
+        # actor延迟更新的频率: 论文建议critic更新2次， actor更新1次， 即延迟1次
+        self.delay_freq = TD3_kwargs.get('delay_freq', 1)
+        
+        # Normal sigma
+        self.train = False
         self.train_noise = self.expl_noise
 
     @torch.no_grad()
     def smooth_action(self, state):
+        """
+        trick3: Target Policy Smoothing
+            在target-actor输出的action中增加noise
+        """
         act_target = self.target_actor(state)
         noise = (torch.randn(act_target.shape).float() *
-                self.policy_noise).clip(-self.noise_clip, self.noise_clip)
-        smoothed_target_a = (act_target + noise).clip(-self.max_action, self.max_action)
+                self.policy_noise).clip(-self.policy_noise_clip, self.policy_noise_clip)
+        smoothed_target_a = (act_target + noise).clip(self.action_low, self.action_high)
         return smoothed_target_a
 
     @torch.no_grad()
@@ -131,7 +114,7 @@ class TD3:
         act = self.actor(state)
         if self.train:
             action_noise = np.random.normal(loc=0, scale=self.max_action * self.train_noise, size=self.action_dim)
-            self.train_noise *= 0.999
+            self.train_noise *= self.expl_noise_exp_reduce_factor
             return (act.detach().numpy()[0] + action_noise).clip(self.action_low, self.action_high)
         
         return act.detach().numpy()[0]
@@ -153,17 +136,18 @@ class TD3:
         
         # 计算目标Q
         smooth_act = self.smooth_action(state)
+        # trick1: **Clipped Double Q-learning**: critic中有两个`Q-net`, 每次产出2个Q值，使用其中小的
         target_Q1, target_Q2 = self.target_critic(next_state, smooth_act)
         target_Q = torch.minimum(target_Q1, target_Q2)
         target_Q = reward + (1.0 - done) * self.gamma * target_Q
         # 计算当前Q值
         current_Q1, current_Q2 = self.critic(state, action)
-        # td error
         q_loss = F.mse_loss(current_Q1.float(), target_Q.float().detach()) + F.mse_loss(current_Q2.float(), target_Q.float().detach())
-        # Optimize the q_critic
         self.critic_opt.zero_grad()
         q_loss.backward()
         self.critic_opt.step()
+        
+        # trick2: **Delayed Policy Update**: actor的更新频率要小于critic(当前的actor参数可以产出更多样本)。
         if self.delay_counter == self.delay_freq:
             # actor 延迟update
             ac_action = self.actor(state)
@@ -181,7 +165,6 @@ class TD3:
         critic_f = os.path.join(file_path, 'TD3_actor.ckpt')
         torch.save(self.actor.state_dict(), act_f)
         torch.save(self.q_critic.state_dict(), critic_f)
-
 
     def load(self, file_path):
         act_f = os.path.join(file_path, 'TD3_actor.ckpt')
