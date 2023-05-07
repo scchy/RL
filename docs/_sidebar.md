@@ -15,5 +15,5 @@
 * [11. 基于策略的离线算法DDPG](zh-cn/11-基于策略的离线算法DDPG.md)
 * [12. 基于策略的离线算法TD3](zh-cn/12-基于策略的离线算法TD3.md)
 * [13. 基于策略的离线算法SAC](zh-cn/13-基于策略的离线算法SAC.md)
-* [<font color=darkred>x 14. 基于策略的方法总结</font>](zh-cn/14-基于策略的方法总结.md)
+* [<font color=darkred>14. 基于策略的方法总结</font>](zh-cn/14-基于策略的方法总结.md)
 

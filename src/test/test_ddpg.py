@@ -109,7 +109,7 @@ def LunarLanderContinuous_ddpg_test():
     cfg = Config(
         env, 
         # 环境参数
-        save_path=f'{path_}/test_model/ddpg_LunarLanderContinuous-v2_test_actor.ckpt', 
+        save_path=os.path.join(path_, "test_models" ,'ddpg_LunarLanderContinuous-v2_test_actor-0.ckpt'), 
         seed=42,
         # 网络参数
         actor_hidden_layers_dim=[128, 64],
@@ -167,11 +167,12 @@ def BipedalWalker_ddpg_test():
     env_name = 'BipedalWalker-v3'
     gym_env_desc(env_name)
     env = gym.make(env_name)
+    path_ = os.path.dirname(__file__)
     cfg = Config(
         env, 
         # 环境参数
         # save_path=r'D:\TMP\ddpg_BipedalWalker-v3_test_actor-v2.ckpt', # 1000次 291
-        save_path=r'D:\TMP\ddpg_BipedalWalker-v3_test_actor-v3.ckpt', # 5000次 两脚交换
+        save_path=os.path.join(path_, "test_models" ,'DDPG_BipedalWalker-v3_test_actor-0.ckpt'), 
         seed=42,
         # 网络参数
         actor_hidden_layers_dim=[128, 64],
@@ -222,69 +223,6 @@ def BipedalWalker_ddpg_test():
 
 
 
-def BipedalWalkerHardcore_ddpg_test():
-    """
-    policyNet: 
-    valueNet: 
-    """
-    env_name = 'BipedalWalkerHardcore-v3'
-    gym_env_desc(env_name)
-    env = gym.make(env_name)
-    cfg = Config(
-        env, 
-        # 环境参数
-        save_path=r'D:\TMP\ddpg_BipedalWalkerHardcore-v3_test_actor-v1.ckpt', # 5000次 两脚交换
-        seed=42,
-        # 网络参数
-        actor_hidden_layers_dim=[128, 128, 64],
-        critic_hidden_layers_dim=[128, 128, 64],
-        # agent参数
-        actor_lr=1.5e-5, # 3e-5,
-        critic_lr=2.5e-4, # 5e-4
-        gamma=0.99,
-        # 训练参数
-        num_episode=1000,
-        sample_size=256,
-        off_buffer_size=20480,
-        off_minimal_size=2048,
-        max_episode_rewards=900,
-        max_episode_steps=400,
-        # agent 其他参数
-        DDPG_kwargs={
-            'tau': 0.05, # soft update parameters
-            'sigma': 0.5, # noise
-            'action_bound': 1.0,
-            'action_low': env.action_space.low[0],
-            'action_high': env.action_space.high[0],
-        }
-    )
-    agent = DDPG(
-        state_dim=cfg.state_dim,
-        actor_hidden_layers_dim=cfg.actor_hidden_layers_dim,
-        critic_hidden_layers_dim=cfg.critic_hidden_layers_dim,
-        action_dim=cfg.action_dim,
-        actor_lr=cfg.actor_lr,
-        critic_lr=cfg.critic_lr,
-        gamma=cfg.gamma,
-        DDPG_kwargs=cfg.DDPG_kwargs,
-        device=cfg.device
-    )
-    agent.train = True
-    train_off_policy(env, agent, cfg, done_add=False)
-    try:
-        agent.target_q.load_state_dict(
-            torch.load(cfg.save_path)
-        )
-    except Exception as e:
-        agent.actor.load_state_dict(
-            torch.load(cfg.save_path)
-        )
-    agent.train = False
-    play(gym.make(env_name, render_mode='human'), agent, cfg, episode_count=2)
-
-
-
 if __name__ == '__main__':
     BipedalWalker_ddpg_test()
-    # BipedalWalkerHardcore_ddpg_test()
 

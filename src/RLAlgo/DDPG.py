@@ -76,7 +76,7 @@ class DDPG:
         next_state = torch.FloatTensor(next_state).to(self.device)
         done = torch.FloatTensor(done).view(-1, 1).to(self.device)
         
-        target_action = self.target_actor(state)
+        target_action = self.target_actor(next_state)
         next_q_value = self.target_critic(next_state, target_action)
         q_targets = reward + self.gamma * next_q_value * ( 1.0 - done )
         critic_loss = torch.mean(F.mse_loss(self.critic(state, action).float(), q_targets.float()))

@@ -135,7 +135,7 @@ class TD3:
         done = torch.FloatTensor(done).view(-1, 1).to(self.device)
         
         # 计算目标Q
-        smooth_act = self.smooth_action(state)
+        smooth_act = self.smooth_action(next_state)
         # trick1: **Clipped Double Q-learning**: critic中有两个`Q-net`, 每次产出2个Q值，使用其中小的
         target_Q1, target_Q2 = self.target_critic(next_state, smooth_act)
         target_Q = torch.minimum(target_Q1, target_Q2)

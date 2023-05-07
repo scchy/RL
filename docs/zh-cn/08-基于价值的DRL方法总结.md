@@ -30,7 +30,7 @@
 
 ## 8.3 环境实验脚本简述
 
-详细看[github test_dqn脚本]()
+详细看[github test_dqn脚本](https://github.com/scchy/RL/blob/main/src/test/test_dqn.py)
 
 **CartPole-v1**
 
