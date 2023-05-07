@@ -21,7 +21,7 @@ def reward_func(r, d):
     return r, d
 
 
-def LunarLanderContinuous_ddpg_test():
+def BipedalWalkerHardcore_TD3_test():
     """
     policyNet: 
     valueNet: 
@@ -34,7 +34,7 @@ def LunarLanderContinuous_ddpg_test():
     cfg = Config(
         env, 
         # 环境参数
-        save_path=os.path.join(path_, "test_models" ,'TD3_BipedalWalkerHardcore-v3_test_actor.ckpt'), 
+        save_path=os.path.join(path_, "test_models" ,'TD3_BipedalWalkerHardcore-v3_test_actor-3.ckpt'), 
         seed=42,
         # 网络参数
         actor_hidden_layers_dim=[200, 200],
@@ -48,8 +48,8 @@ def LunarLanderContinuous_ddpg_test():
         sample_size=256,
         off_buffer_size=int(1e6),
         off_minimal_size=2048,
-        max_episode_rewards=500,
-        max_episode_steps=300,
+        max_episode_rewards=1000,
+        max_episode_steps=1000,
         # agent 其他参数
         TD3_kwargs={
             'tau': 0.005, # soft update parameters
@@ -71,8 +71,12 @@ def LunarLanderContinuous_ddpg_test():
         TD3_kwargs=cfg.TD3_kwargs,
         device=cfg.device
     )
-    agent.train = True
-    train_off_policy(env, agent, cfg, done_add=False, reward_func=reward_func)
+    # 载入再学习
+    # agent.actor.load_state_dict(
+    #     torch.load(os.path.join(path_, "test_models" ,'TD3_BipedalWalkerHardcore-v3_test_actor.ckpt'))
+    # )
+    # agent.train = True
+    # train_off_policy(env, agent, cfg, done_add=False, reward_func=reward_func)
     try:
         agent.target_q.load_state_dict(
             torch.load(cfg.save_path)
@@ -86,5 +90,5 @@ def LunarLanderContinuous_ddpg_test():
 
 
 if __name__ == '__main__':
-    LunarLanderContinuous_ddpg_test()
+    BipedalWalkerHardcore_TD3_test()
 

@@ -29,6 +29,7 @@ def train_off_policy(env, agent ,cfg, action_contiguous=False, done_add=False, r
                 n_s, r, done, _, _ = env.step(a)
             
             mem_done = done
+            ep_r = r
             if reward_func is not None:
                 try:
                     r = reward_func(r)
@@ -36,7 +37,7 @@ def train_off_policy(env, agent ,cfg, action_contiguous=False, done_add=False, r
                     r, mem_done = reward_func(r, mem_done)
             buffer.add(s, a, r, n_s, mem_done)
             s = n_s
-            episode_rewards += r
+            episode_rewards += ep_r
             steps += 1
             # buffer update
             if len(buffer) > cfg.off_minimal_size:
