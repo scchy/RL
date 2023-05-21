@@ -107,6 +107,8 @@ class Config:
         # 环境相关变量
         self.action_dim = action_dim
         self.state_dim = env.observation_space.shape[0]
+        if len(env.observation_space.shape) == 3:
+            self.state_dim = env.observation_space.shape[-1]
         all_seed(seed)
         try:
             self.action_dim = env.action_space.n

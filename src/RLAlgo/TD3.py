@@ -14,6 +14,131 @@ from ._base_net import TD3ValueNet as valueNet
 from ._base_net import DT3PolicyNet as policyNet
 
 
+class TD3CNNValueNet(nn.Module):
+    """
+    输入[state, cation], 输出value
+    """
+    def __init__(self, pic_shape: tuple, action_dim: int, cnn_feature_dim: int):
+        super(TD3CNNValueNet, self).__init__()
+        pic_h, pic_w, pic_channel = pic_shape
+        k_size = 12
+        s_size = 12
+        for _ in range(2):
+            pic_h = (pic_h + 2 - 4) // 2  + 1
+            pic_w = (pic_w + 2 - 4) // 2  + 1
+
+
+        h_size = (pic_h-k_size) // s_size  + 1
+        w_size = (pic_w-k_size) // s_size  + 1
+        self.features_cnn_q1 = nn.Sequential(
+            # (96+2-4) // 2 + 1
+            self.conv_bn_lrelu(pic_channel, cnn_feature_dim), # output -> (batch, cnn_feature_dim, 32, 32)
+            # (48+2-4) // 2 + 1
+            self.conv_bn_lrelu(cnn_feature_dim, cnn_feature_dim * 2), 
+            nn.AvgPool2d(kernel_size=k_size, stride=s_size)
+        )
+        self.features_nn_q1 = nn.Sequential(
+            nn.Linear(action_dim, action_dim),
+            nn.Tanh()
+        )
+        self.head_q1 = nn.Linear(cnn_feature_dim * 2 * h_size * w_size + action_dim , 1)
+        self.features_cnn_q2 = nn.Sequential(
+            # (96+2-4) // 2 + 1
+            self.conv_bn_lrelu(pic_channel, cnn_feature_dim), # output -> (batch, cnn_feature_dim, 32, 32)
+            # (48+2-4) // 2 + 1
+            self.conv_bn_lrelu(cnn_feature_dim, cnn_feature_dim * 2), 
+            nn.AvgPool2d(kernel_size=k_size, stride=s_size)
+        )
+        self.features_nn_q2 = nn.Sequential(
+            nn.Linear(action_dim, action_dim),
+            nn.Tanh()
+        )
+        self.head_q2 = nn.Linear(cnn_feature_dim * 2 * h_size * w_size + action_dim , 1)
+
+    def forward(self, state, action):
+        state_x = torch.Tensor(state).float().permute(0, 3, 1, 2)
+        action_x = torch.Tensor(action).float()
+        
+        q1_cnnf = self.features_cnn_q1(state_x) 
+        q1_cnnf = q1_cnnf.view(state_x.size(0), -1)
+        q1_nnf = self.features_nn_q1(action_x)
+        x_c1 = torch.cat([q1_cnnf, q1_nnf], dim=1)
+        
+        q2_cnnf = self.features_cnn_q2(state_x) 
+        q2_cnnf = q2_cnnf.view(state_x.size(0), -1)
+        q2_nnf = self.features_nn_q2(action_x)
+        x_c2 = torch.cat([q2_cnnf, q2_nnf], dim=1)
+        return self.head_q1(x_c1), self.head_q2(x_c2)
+
+    def Q1(self, state, action):
+        state_x = torch.Tensor(state).float().permute(0, 3, 1, 2)
+        action_x = torch.Tensor(action).float()
+        
+        q1_cnnf = self.features_cnn_q1(state_x) 
+        q1_cnnf = q1_cnnf.view(state_x.size(0), -1)
+        q1_nnf = self.features_nn_q1(action_x)
+        x_c1 = torch.cat([q1_cnnf, q1_nnf], dim=1)
+        return self.head_q1(x_c1)
+
+    def conv_bn_lrelu(self, in_dim, out_dim):
+        return nn.Sequential(
+            nn.Conv2d(in_dim, out_dim, 4, 2, 1),
+            nn.BatchNorm2d(out_dim),
+            nn.LeakyReLU(0.2),
+        )
+        
+
+# 网络权重初始化
+def weights_init(m):
+    classname = m.__class__.__name__
+    if classname.find('Conv') != -1:
+        m.weight.data.normal_(0.0, 0.02)
+    elif classname.find('BatchNorm') != -1:
+        m.weight.data.normal_(1.0, 0.02)
+        m.bias.data.fill_(0)
+
+
+class DT3CNNPolicyNet(nn.Module):
+    """
+    输入state, 输出action
+    """
+    def __init__(self, pic_shape: tuple, action_dim: int, cnn_feature_dim: int, action_bound: float=1.0):
+        super(DT3CNNPolicyNet, self).__init__()
+        pic_h, pic_w, pic_channel = pic_shape
+        self.action_bound = action_bound
+        k_size = 12
+        s_size = 12
+        for _ in range(2):
+            pic_h = (pic_h + 2 - 4) // 2  + 1
+            pic_w = (pic_w + 2 - 4) // 2  + 1
+
+
+        h_size = (pic_h-k_size) // s_size  + 1
+        w_size = (pic_w-k_size) // s_size  + 1
+        self.l1 = nn.Sequential(
+            # (96+2-4) // 2 + 1
+            self.conv_bn_lrelu(pic_channel, cnn_feature_dim), # output -> (batch, cnn_feature_dim, 32, 32)
+            # (48+2-4) // 2 + 1
+            self.conv_bn_lrelu(cnn_feature_dim, cnn_feature_dim*2), 
+            nn.AvgPool2d(kernel_size=k_size, stride=s_size)
+        )
+        self.fc_out = nn.Linear(cnn_feature_dim * 2 * h_size * w_size, action_dim)
+        self.apply(weights_init)
+
+    def forward(self, x):
+        x = x.permute(0, 3, 1, 2)
+        y = self.l1(x)
+        y = y.view(x.size(0), -1)
+        return torch.tanh(self.fc_out(y)) * self.action_bound * self.action_bound
+
+    def conv_bn_lrelu(self, in_dim, out_dim):
+        return nn.Sequential(
+            nn.Conv2d(in_dim, out_dim, 4, 2, 1),
+            nn.BatchNorm2d(out_dim),
+            nn.LeakyReLU(0.2),
+        )
+
+
 class TD3:
     def __init__(
         self,
@@ -60,16 +185,30 @@ class TD3:
         self.action_low = TD3_kwargs.get('action_low', -1.0)
         self.action_high = TD3_kwargs.get('action_high', 1.0)
         self.max_action = max(abs(self.action_low), abs(self.action_high))
-        self.actor = policyNet(
-            state_dim, 
-            actor_hidden_layers_dim, 
-            action_dim, 
-            action_bound = self.max_action
-        )
-        self.critic = valueNet(
-            state_dim + action_dim, 
-            critic_hidden_layers_dim
-        )
+        self.CNN_env_flag = TD3_kwargs.get("CNN_env_flag", 0)
+        if self.CNN_env_flag:
+            self.actor = DT3CNNPolicyNet(
+                pic_shape=TD3_kwargs['pic_shape'],
+                action_dim=action_dim, 
+                cnn_feature_dim=TD3_kwargs.get('cnn_feature_dim', 6),
+                action_bound = self.max_action
+            )
+            self.critic = TD3CNNValueNet(
+                pic_shape=TD3_kwargs['pic_shape'],
+                action_dim=action_dim, 
+                cnn_feature_dim=TD3_kwargs.get('cnn_feature_dim', 6)
+            )
+        else:
+            self.actor = policyNet(
+                state_dim, 
+                actor_hidden_layers_dim, 
+                action_dim, 
+                action_bound = self.max_action
+            )
+            self.critic = valueNet(
+                state_dim + action_dim, 
+                critic_hidden_layers_dim
+            )
         self.target_actor = copy.deepcopy(self.actor)
         self.target_critic = copy.deepcopy(self.critic)
         
@@ -102,7 +241,7 @@ class TD3:
         trick3: Target Policy Smoothing
             在target-actor输出的action中增加noise
         """
-        act_target = self.target_actor(state)
+        act_target = self.target_actor(state).cpu()
         noise = (torch.randn(act_target.shape).float() *
                 self.policy_noise).clip(-self.policy_noise_clip, self.policy_noise_clip)
         smoothed_target_a = (act_target + noise).clip(self.action_low, self.action_high)
@@ -110,14 +249,17 @@ class TD3:
 
     @torch.no_grad()
     def policy(self, state):
-        state = torch.FloatTensor([state]).to(self.device)
+        state = torch.FloatTensor(state[np.newaxis, ...]).to(self.device)
+        if self.CNN_env_flag:
+            state /= 255.0
         act = self.actor(state)
         if self.train:
             action_noise = np.random.normal(loc=0, scale=self.max_action * self.train_noise, size=self.action_dim)
             self.train_noise *= self.expl_noise_exp_reduce_factor
-            return (act.detach().numpy()[0] + action_noise).clip(self.action_low, self.action_high)
+            return (act.detach().cpu().numpy()[0] + action_noise).clip(self.action_low, self.action_high)
         
-        return act.detach().numpy()[0]
+        return act.detach().cpu().numpy()[0]
+
 
     def soft_update(self, net, target_net):
         for param_target, param in zip(target_net.parameters(), net.parameters()):
@@ -128,14 +270,17 @@ class TD3:
     def update(self, samples):
         self.delay_counter += 1
         state, action, reward, next_state, done = zip(*samples)
-        state = torch.FloatTensor(state).to(self.device)
-        action = torch.tensor(action).to(self.device)
-        reward = torch.tensor(reward).view(-1, 1).to(self.device)
-        next_state = torch.FloatTensor(next_state).to(self.device)
-        done = torch.FloatTensor(done).view(-1, 1).to(self.device)
+        state = torch.FloatTensor(np.stack(state)).to(self.device)
+        action = torch.tensor(np.stack(action)).to(self.device)
+        reward = torch.tensor(np.stack(reward)).view(-1, 1).to(self.device)
+        next_state = torch.FloatTensor(np.stack(next_state)).to(self.device)
+        done = torch.FloatTensor(np.stack(done)).view(-1, 1).to(self.device)
+        if self.CNN_env_flag:
+            state /= 255.0
+            next_state /= 255.0
         
         # 计算目标Q
-        smooth_act = self.smooth_action(next_state)
+        smooth_act = self.smooth_action(next_state).to(self.device)
         # trick1: **Clipped Double Q-learning**: critic中有两个`Q-net`, 每次产出2个Q值，使用其中小的
         target_Q1, target_Q2 = self.target_critic(next_state, smooth_act)
         target_Q = torch.minimum(target_Q1, target_Q2)

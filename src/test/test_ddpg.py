@@ -109,27 +109,27 @@ def LunarLanderContinuous_ddpg_test():
     cfg = Config(
         env, 
         # 环境参数
-        save_path=os.path.join(path_, "test_models" ,'ddpg_LunarLanderContinuous-v2_test_actor-0.ckpt'), 
+        save_path=os.path.join(path_, "test_models" ,'ddpg_LunarLanderContinuous-v2_test_actor-1.ckpt'), 
         seed=42,
         # 网络参数
         actor_hidden_layers_dim=[128, 64],
         critic_hidden_layers_dim=[128, 64],
         # agent参数
-        actor_lr=3e-4,
-        critic_lr=5e-3,
+        actor_lr=1e-3,
+        critic_lr=1e-2,
         gamma=0.99,
         # 训练参数
-        num_episode=600,
+        num_episode=800,
         sample_size=256,
-        off_buffer_size=20480,
+        off_buffer_size=160*50, # 环境不是非常复杂
         off_minimal_size=2048,
         max_episode_rewards=500,
         max_episode_steps=160,
         # agent 其他参数
         DDPG_kwargs={
-            'tau': 0.005, # soft update parameters
-            'sigma': 0.5, # noise
-            'action_bound': 1.1,
+            'tau': 0.05, # soft update parameters
+            'sigma': 0.3, # noise
+            'sigma_exp_reduce_factor': 1,
             'action_low': env.action_space.low[0],
             'action_high': env.action_space.high[0],
         }
@@ -145,8 +145,8 @@ def LunarLanderContinuous_ddpg_test():
         DDPG_kwargs=cfg.DDPG_kwargs,
         device=cfg.device
     )
-    agent.train = True
-    train_off_policy(env, agent, cfg, done_add=False)
+    # agent.train = True
+    # train_off_policy(env, agent, cfg, done_add=False)
     try:
         agent.target_q.load_state_dict(
             torch.load(cfg.save_path)
@@ -156,7 +156,7 @@ def LunarLanderContinuous_ddpg_test():
             torch.load(cfg.save_path)
         )
     agent.train = False
-    # play(gym.make(env_name, render_mode='human'), agent, cfg, episode_count=2)
+    play(gym.make(env_name, render_mode='human'), agent, cfg, episode_count=2)
 
 
 def BipedalWalker_ddpg_test():
@@ -223,6 +223,72 @@ def BipedalWalker_ddpg_test():
 
 
 
+def carRacing_ddpg_test():
+    """
+    policyNet: 
+    valueNet: 
+    """
+    env_name = 'CarRacing-v2'
+    gym_env_desc(env_name)
+    env = gym.make(env_name)
+    path_ = os.path.dirname(__file__)
+    cfg = Config(
+        env, 
+        # 环境参数
+        save_path=os.path.join(path_, "test_models" ,'DDPG_CarRacing-v2_test_actor-0.ckpt'), 
+        seed=42,
+        # 网络参数
+        actor_hidden_layers_dim=[128, 64],
+        critic_hidden_layers_dim=[128, 64],
+        # agent参数
+        actor_lr=5e-5, # 3e-5,
+        critic_lr=1e-3, # 5e-4
+        gamma=0.99,
+        # 训练参数
+        num_episode=100,
+        sample_size=128,
+        off_buffer_size=20480,
+        off_minimal_size=2048,
+        max_episode_rewards=900,
+        max_episode_steps=300,
+        # agent 其他参数
+        DDPG_kwargs={
+            'tau': 0.05, # soft update parameters
+            'sigma': 0.5, # noise
+            'sigma_exp_reduce_factor': 0.999,
+            'action_low': env.action_space.low[0],
+            'action_high': env.action_space.high[0],
+        }
+    )
+    # 需要调整网络适应于图片输入
+    agent = DDPG(
+        state_dim=cfg.state_dim,
+        actor_hidden_layers_dim=cfg.actor_hidden_layers_dim,
+        critic_hidden_layers_dim=cfg.critic_hidden_layers_dim,
+        action_dim=cfg.action_dim,
+        actor_lr=cfg.actor_lr,
+        critic_lr=cfg.critic_lr,
+        gamma=cfg.gamma,
+        DDPG_kwargs=cfg.DDPG_kwargs,
+        device=cfg.device
+    )
+    agent.train = True
+    train_off_policy(env, agent, cfg, done_add=False)
+    try:
+        agent.target_q.load_state_dict(
+            torch.load(cfg.save_path)
+        )
+    except Exception as e:
+        agent.actor.load_state_dict(
+            torch.load(cfg.save_path)
+        )
+    agent.train = False
+    play(gym.make(env_name, render_mode='human'), agent, cfg, episode_count=2)
+
+
+
 if __name__ == '__main__':
-    BipedalWalker_ddpg_test()
+    LunarLanderContinuous_ddpg_test()
+    # BipedalWalker_ddpg_test()
+    # carRacing_ddpg_test()
 

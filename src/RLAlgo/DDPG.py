@@ -28,7 +28,10 @@ class DDPG:
                 DDPG_kwargs: typ.Dict,
                 device: torch.device
                 ):
-        self.actor = policyNet(state_dim, actor_hidden_layers_dim, action_dim, action_bound = DDPG_kwargs['action_bound'])
+        self.action_low = DDPG_kwargs.get('action_low', -1.0)
+        self.action_high = DDPG_kwargs.get('action_high', 1.0)
+        self.action_bound = max(abs(self.action_low), abs(self.action_high))
+        self.actor = policyNet(state_dim, actor_hidden_layers_dim, action_dim, action_bound = self.action_bound)
         self.critic = valueNet(state_dim + action_dim, critic_hidden_layers_dim)
         self.target_actor = copy.deepcopy(self.actor)
         self.target_critic = copy.deepcopy(self.critic)
@@ -48,8 +51,7 @@ class DDPG:
         self.action_dim = action_dim
         # Normal sigma
         self.sigma = DDPG_kwargs.get('sigma', 0.1)
-        self.action_low = DDPG_kwargs.get('action_low', -1.0)
-        self.action_high = DDPG_kwargs.get('action_high', 1.0)
+        self.sigma_exp_reduce_factor = DDPG_kwargs.get('sigma_exp_reduce_factor', 1)
         self.train = False
 
     def policy(self, state):
@@ -58,7 +60,9 @@ class DDPG:
         if self.train:
             # if self.count == 0: # 用最大的范围去探索
             #     return np.array([np.random.randint(self.action_low, self.action_high + 1)])
-            return act.detach().numpy()[0] + np.random.normal(loc=0, scale=self.sigma, size=self.action_dim)
+            self.sigma *= self.sigma_exp_reduce_factor
+            noise = np.random.normal(loc=0, scale=self.sigma, size=self.action_dim)
+            return (act.detach().numpy()[0] + noise).clip(self.action_low, self.action_high)
         return act.detach().numpy()[0]
     
     def soft_update(self, net, target_net):
