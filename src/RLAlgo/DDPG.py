@@ -30,7 +30,10 @@ class DDPG:
                 ):
         self.action_low = DDPG_kwargs.get('action_low', -1.0)
         self.action_high = DDPG_kwargs.get('action_high', 1.0)
-        self.action_bound = max(abs(self.action_low), abs(self.action_high))
+        self.action_bound = max(
+            max(abs(self.action_low)) if isinstance(self.action_low, np.ndarray) else self.action_low, 
+            max(abs(self.action_high)) if isinstance(self.action_high, np.ndarray) else self.action_high
+        )
         self.actor = policyNet(state_dim, actor_hidden_layers_dim, action_dim, action_bound = self.action_bound)
         self.critic = valueNet(state_dim + action_dim, critic_hidden_layers_dim)
         self.target_actor = copy.deepcopy(self.actor)
@@ -45,7 +48,7 @@ class DDPG:
         
         self.gamma = gamma
         self.device = device
-        self.count = 0
+        self.step_count = 0
         # soft update parameters
         self.tau = DDPG_kwargs.get('tau', 0.8)
         self.action_dim = action_dim
@@ -53,17 +56,20 @@ class DDPG:
         self.sigma = DDPG_kwargs.get('sigma', 0.1)
         self.sigma_exp_reduce_factor = DDPG_kwargs.get('sigma_exp_reduce_factor', 1)
         self.train = False
+        self.off_minimal_size = DDPG_kwargs.get('off_minimal_size', 100)
 
     def policy(self, state):
         state = torch.FloatTensor([state]).to(self.device)
+        self.step_count += 1
+        if self.train and self.step_count <= self.off_minimal_size:
+            return np.random.uniform(self.action_low, self.action_high)
+        
         act = self.actor(state)
         if self.train:
-            # if self.count == 0: # 用最大的范围去探索
-            #     return np.array([np.random.randint(self.action_low, self.action_high + 1)])
             self.sigma *= self.sigma_exp_reduce_factor
             noise = np.random.normal(loc=0, scale=self.sigma, size=self.action_dim)
-            return (act.detach().numpy()[0] + noise).clip(self.action_low, self.action_high)
-        return act.detach().numpy()[0]
+            return (act.cpu().detach().numpy()[0] + noise).clip(self.action_low, self.action_high)
+        return act.cpu().detach().numpy()[0].clip(self.action_low, self.action_high)
     
     def soft_update(self, net, target_net):
         for param_target, param in zip(target_net.parameters(), net.parameters()):
@@ -72,7 +78,6 @@ class DDPG:
             )
 
     def update(self, samples):
-        self.count += 1
         state, action, reward, next_state, done = zip(*samples)
         state = torch.FloatTensor(state).to(self.device)
         action = torch.tensor(action).to(self.device)

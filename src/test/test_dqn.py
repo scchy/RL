@@ -121,13 +121,12 @@ def LunarLander_dqn_test():
     # pip install + 路径/xxx.whl
     gym_env_desc(env_name)
     env = gym.make(env_name)
-    action_contiguous_ = False # 是否将连续动作离散化
-    
+    path_ = os.path.dirname(__file__)
     cfg = Config(
         env, 
         # 环境参数
         split_action_flag=True,
-        save_path=r'D:\TMP\LunarLander_dqn_target_q.ckpt',
+        save_path=os.path.join(path_, "test_models" ,f'dqn_{env_name}_1.ckpt'), 
         seed=42,
         # 网络参数
         hidden_layers_dim=[128, 64],
@@ -156,11 +155,11 @@ def LunarLander_dqn_test():
         device=cfg.device,
         dqn_type=cfg.dqn_type
     )
-    # train_off_policy(env, dqn, cfg, action_contiguous=action_contiguous_)
+    # train_off_policy(env, dqn, cfg)
     dqn.target_q.load_state_dict(
         torch.load(cfg.save_path)
     )
-    play(gym.make(env_name, render_mode='human'), dqn, cfg, episode_count=2, action_contiguous=action_contiguous_)
+    play(gym.make(env_name, render_mode='human'), dqn, cfg, episode_count=2)
 
 
 if __name__ == '__main__':

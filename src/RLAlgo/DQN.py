@@ -49,8 +49,8 @@ class DQN:
         if np.random.random() < self.epsilon:
             return np.random.randint(self.action_dim)
         
-        action = self.target_q(torch.FloatTensor(state))
-        return np.argmax(action.detach().numpy())
+        action = self.target_q(torch.FloatTensor(state).to(self.device))
+        return np.argmax(action.cpu().detach().numpy())
 
     def update(self, samples: deque):
         self.count += 1

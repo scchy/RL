@@ -63,8 +63,7 @@ class SAC:
     def policy(self, state):
         state = torch.FloatTensor([state]).to(self.device)
         action = self.actor(state)[0]
-        return action.detach().numpy()[0]
-
+        return action.cpu().detach().numpy()[0]
 
     def calc_target(self, reward, next_state, dones):
         # 计算目标Q值

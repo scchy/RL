@@ -15,7 +15,7 @@ def train_off_policy(env, agent ,cfg, action_contiguous=False, done_add=False, r
     bf_reward = -np.inf
     for i in tq_bar:
         tq_bar.set_description(f'Episode [ {i+1} / {cfg.num_episode} ]')
-        s, _ = env.reset()
+        s, _ = env.reset(seed=cfg.seed)
         done = False
         episode_rewards = 0
         steps = 0
@@ -56,10 +56,13 @@ def train_off_policy(env, agent ,cfg, action_contiguous=False, done_add=False, r
         rewards_list.append(episode_rewards)
         now_reward = np.mean(rewards_list[-10:])
         if (bf_reward < now_reward) and (i >= 10):
-            try:
-                torch.save(agent.target_q.state_dict(), cfg.save_path)
-            except Exception as e:
-                torch.save(agent.actor.state_dict(), cfg.save_path)
+            if hasattr(agent, "save_model"):
+                agent.save_model(cfg.save_path)
+            else:
+                try:
+                    torch.save(agent.target_q.state_dict(), cfg.save_path)
+                except Exception as e:
+                    torch.save(agent.actor.state_dict(), cfg.save_path)
             bf_reward = now_reward
 
         tq_bar.set_postfix({
@@ -113,7 +116,7 @@ def train_on_policy(env, agent, cfg):
             buffer_ = replayBuffer(cfg.off_buffer_size)
 
         tq_bar.set_description(f'Episode [ {i+1} / {cfg.num_episode} ](minibatch={mini_b})')    
-        s, _ = env.reset()
+        s, _ = env.reset(seed=cfg.seed)
         done = False
         episode_rewards = 0
         steps = 0
@@ -131,7 +134,13 @@ def train_on_policy(env, agent, cfg):
         rewards_list.append(episode_rewards)
         now_reward = np.mean(rewards_list[-10:])
         if (bf_reward < now_reward) and (i >= 10):
-            torch.save(agent.actor.state_dict(), cfg.save_path)
+            if hasattr(agent, "save_model"):
+                agent.save_model(cfg.save_path)
+            else:
+                try:
+                    torch.save(agent.target_q.state_dict(), cfg.save_path)
+                except Exception as e:
+                    torch.save(agent.actor.state_dict(), cfg.save_path)
             bf_reward = now_reward
         
         tq_bar.set_postfix({"steps": steps,'lastMeanRewards': f'{now_reward:.2f}', 'BEST': f'{bf_reward:.2f}'})

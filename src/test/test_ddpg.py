@@ -109,29 +109,32 @@ def LunarLanderContinuous_ddpg_test():
     cfg = Config(
         env, 
         # 环境参数
-        save_path=os.path.join(path_, "test_models" ,'ddpg_LunarLanderContinuous-v2_test_actor-1.ckpt'), 
+        save_path=os.path.join(path_, "test_models" ,'ddpg_LunarLanderContinuous-v2_test_actor-3.ckpt'), 
         seed=42,
         # 网络参数
-        actor_hidden_layers_dim=[128, 64],
-        critic_hidden_layers_dim=[128, 64],
+        actor_hidden_layers_dim=[128, 128],
+        critic_hidden_layers_dim=[128, 128],
         # agent参数
-        actor_lr=1e-3,
-        critic_lr=1e-2,
+        # actor_lr=5e-4, # 128, 64
+        # critic_lr=1e-3, # 128, 64
+        actor_lr=1e-4,  
+        critic_lr=5e-4,  
         gamma=0.99,
         # 训练参数
-        num_episode=800,
+        num_episode=5000,
         sample_size=256,
-        off_buffer_size=160*50, # 环境不是非常复杂
-        off_minimal_size=2048,
+        off_buffer_size=165*100, # 环境不是非常复杂
+        off_minimal_size=1024,
         max_episode_rewards=500,
-        max_episode_steps=160,
+        max_episode_steps=180,  # 215 step get-299 rewards # 165
         # agent 其他参数
         DDPG_kwargs={
-            'tau': 0.05, # soft update parameters
-            'sigma': 0.3, # noise
+            'tau': 0.001, # soft update parameters
+            'sigma': 0.15, # noise
             'sigma_exp_reduce_factor': 1,
-            'action_low': env.action_space.low[0],
-            'action_high': env.action_space.high[0],
+            'action_low': env.action_space.low,
+            'action_high': env.action_space.high,
+            'off_minimal_size': 1024
         }
     )
     agent = DDPG(

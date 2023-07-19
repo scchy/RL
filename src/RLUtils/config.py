@@ -25,7 +25,7 @@ def all_seed(seed=6666):
 
 
 class Config:  
-    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')    
+    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
     def __init__(
         self, 
@@ -110,6 +110,7 @@ class Config:
         if len(env.observation_space.shape) == 3:
             self.state_dim = env.observation_space.shape[-1]
         all_seed(seed)
+        self.seed = seed
         try:
             self.action_dim = env.action_space.n
         except Exception as e:
