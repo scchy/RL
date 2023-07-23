@@ -6,22 +6,31 @@ from tqdm.auto import tqdm
 import numpy as np
 
 
+def random_action(env):
+    asp = env.action_space
+    return np.random.uniform(low=asp.low, high=asp.high)
 
-def train_off_policy(env, agent ,cfg, action_contiguous=False, done_add=False, reward_func=None):
+
+def train_off_policy(env, agent ,cfg, action_contiguous=False, done_add=False, reward_func=None, train_without_seed=False):
     buffer = replayBuffer(cfg.off_buffer_size)
     tq_bar = tqdm(range(cfg.num_episode))
     rewards_list = []
     now_reward = -np.inf
     bf_reward = -np.inf
     for i in tq_bar:
-        tq_bar.set_description(f'Episode [ {i+1} / {cfg.num_episode} ]')
-        s, _ = env.reset(seed=cfg.seed)
+        rand_seed = np.random.randint(0, 9999)
+        final_seed = rand_seed if train_without_seed else cfg.seed
+        s, _ = env.reset(seed=final_seed)
+        tq_bar.set_description(f'Episode [ {i+1} / {cfg.num_episode}|(seed={final_seed}) ]')
         done = False
         episode_rewards = 0
         steps = 0
         drop_flag = False
         while not done:
-            a = agent.policy(s)
+            if len(buffer) < cfg.off_minimal_size:
+                a = random_action(env)
+            else:
+                a = agent.policy(s)
             if action_contiguous:
                 c_a = Pendulum_dis_to_con(a, env, cfg.action_dim)
                 n_s, r, done, _, _ = env.step([c_a])
@@ -40,7 +49,7 @@ def train_off_policy(env, agent ,cfg, action_contiguous=False, done_add=False, r
             episode_rewards += ep_r
             steps += 1
             # buffer update
-            if len(buffer) > cfg.off_minimal_size:
+            if len(buffer) >= cfg.off_minimal_size:
                 samples = buffer.sample(cfg.sample_size)
                 agent.update(samples)
                 # print('Start Update')
@@ -74,12 +83,13 @@ def train_off_policy(env, agent ,cfg, action_contiguous=False, done_add=False, r
     return agent
 
 
-def play(env, env_agent, cfg, episode_count=2, action_contiguous=False):
+def play(env, env_agent, cfg, episode_count=2, action_contiguous=False, play_without_seed=False):
     """
     对训练完成的QNet进行策略游戏
     """
     for e in range(episode_count):
-        s, _ = env.reset()
+        rand_seed = np.random.randint(0, 9999)
+        s, _ = env.reset(seed=rand_seed if play_without_seed else cfg.seed)
         done = False
         episode_reward = 0
         episode_cnt = 0

@@ -92,20 +92,20 @@ def sac_Reacher_v4_test():
     path_ = os.path.dirname(__file__)
     cfg = Config(
         env, 
-        num_episode = 1000,
+        num_episode=5000,
         save_path=os.path.join(path_, "test_models" ,'SAC_Reacher-v4_test_actor-0.ckpt'), 
         actor_hidden_layers_dim=[200, 200],
         critic_hidden_layers_dim=[200, 200],
         actor_lr=1e-5,
-        critic_lr=1e-4,
+        critic_lr=3e-4,
         sample_size=256,
-        off_buffer_size=20480,
-        off_minimal_size=1024,
+        off_buffer_size=204800,
+        off_minimal_size=2048,
         max_episode_rewards=2048,
-        max_episode_steps=240,
-        gamma=0.9,
+        max_episode_steps=300,
+        gamma=0.98,
         SAC_kwargs={
-            'tau': 0.01, # soft update parameters
+            'tau': 0.03, # soft update parameters
             'target_entropy': -env.action_space.shape[0],
             'action_bound': 1.0
         }
@@ -122,7 +122,7 @@ def sac_Reacher_v4_test():
         SAC_kwargs=cfg.SAC_kwargs,
         device=cfg.device
     )
-    train_off_policy(env, agent, cfg)
+    # train_off_policy(env, agent, cfg, train_without_seed=True)
     try:
         agent.target_q.load_state_dict(
             torch.load(cfg.save_path)
@@ -131,7 +131,7 @@ def sac_Reacher_v4_test():
         agent.actor.load_state_dict(
             torch.load(cfg.save_path)
         )
-    play(gym.make(env_name, render_mode='human'), agent, cfg, episode_count=2)
+    play(gym.make(env_name, render_mode='human'), agent, cfg, episode_count=2, play_without_seed=True)
 
 
 
