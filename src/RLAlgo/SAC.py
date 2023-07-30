@@ -61,7 +61,7 @@ class SAC:
         self.target_critic_2 = self.target_critic_2.to(device)
     
     def policy(self, state):
-        state = torch.FloatTensor([state]).to(self.device)
+        state = torch.FloatTensor(np.array([state])).to(self.device)
         action = self.actor(state)[0]
         return action.cpu().detach().numpy()[0]
 
@@ -85,12 +85,12 @@ class SAC:
     def update(self, samples):
         state, action, reward, next_state, done = zip(*samples)
 
-        state = torch.FloatTensor(state).to(self.device)
-        action = torch.tensor(action).to(self.device)
-        reward = torch.tensor(reward).view(-1, 1).to(self.device)
+        state = torch.FloatTensor(np.stack(state)).to(self.device)
+        action = torch.tensor(np.stack(action)).to(self.device)
+        reward = torch.tensor(np.stack(reward)).view(-1, 1).to(self.device)
         reward = (reward + 10.0) / 10.0  # 和TRPO一样,对奖励进行修改,方便训练
-        next_state = torch.FloatTensor(next_state).to(self.device)
-        done = torch.FloatTensor(done).view(-1, 1).to(self.device)
+        next_state = torch.FloatTensor(np.stack(next_state)).to(self.device)
+        done = torch.FloatTensor(np.stack(done)).view(-1, 1).to(self.device)
         
         td_target = self.calc_target(reward, next_state, done)
         # update critic net

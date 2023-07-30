@@ -123,14 +123,9 @@ def sac_Reacher_v4_test():
         device=cfg.device
     )
     # train_off_policy(env, agent, cfg, train_without_seed=True)
-    try:
-        agent.target_q.load_state_dict(
-            torch.load(cfg.save_path)
-        )
-    except Exception as e:
-        agent.actor.load_state_dict(
-            torch.load(cfg.save_path)
-        )
+    agent.actor.load_state_dict(
+        torch.load(cfg.save_path, map_location='cpu')
+    )
     play(gym.make(env_name, render_mode='human'), agent, cfg, episode_count=2, play_without_seed=True)
 
 
@@ -167,15 +162,15 @@ def sac_Pusher_v4_test():
         action_dim=cfg.action_dim, 
         actor_lr=cfg.actor_lr,
         critic_lr=cfg.critic_lr,
-        alpha_lr=5e-4,
+        alpha_lr=5e-3,
         gamma=cfg.gamma,
         SAC_kwargs=cfg.SAC_kwargs,
         device=cfg.device
     )
-    # Episode [ 390 / 3000|(seed=6282) ]:  13%|████▏                           | 389/3000 [34:20<5:00:19,  6.90s/it, steps=800, lastMeanRewards=-262.66, BEST=-251.57]
-    train_off_policy(env, agent, cfg, train_without_seed=True)
+    # Episode [ 1867 / 3000|(seed=8526) ]:  62%|██████████▌      | 1866/3000 [4:35:15<3:16:03, 10.37s/it, steps=800, lastMeanRewards=-149.66, BEST=-119.49]
+    # train_off_policy(env, agent, cfg, train_without_seed=True)
     agent.actor.load_state_dict(
-        torch.load(cfg.save_path)
+        torch.load(cfg.save_path, map_location='cpu')
     )
     play(gym.make(env_name, render_mode='human'), agent, cfg, episode_count=2, play_without_seed=True)
 
