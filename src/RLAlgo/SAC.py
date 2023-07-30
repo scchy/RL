@@ -85,7 +85,6 @@ class SAC:
     def update(self, samples):
         state, action, reward, next_state, done = zip(*samples)
 
-
         state = torch.FloatTensor(state).to(self.device)
         action = torch.tensor(action).to(self.device)
         reward = torch.tensor(reward).view(-1, 1).to(self.device)
@@ -110,13 +109,13 @@ class SAC:
         
         # update actor
         new_act, log_prob = self.actor(state)
-        q1_v = self.target_critic_1(next_state, new_act)
-        q2_v = self.target_critic_2(next_state, new_act)
+        q1_v = self.target_critic_1(state, new_act)
+        q2_v = self.target_critic_2(state, new_act)
         actor_loss = torch.mean(self.log_alpha.exp() * log_prob - torch.min(q1_v, q2_v))
         self.actor_opt.zero_grad()
         actor_loss.backward()
         self.actor_opt.step()
-    
+
         # update alpha
         alpha_loss = torch.mean((-log_prob - self.target_entropy).detach() * self.log_alpha.exp())
         self.log_alpha_opt.zero_grad()
