@@ -110,7 +110,8 @@ class SACPolicyNet(nn.Module):
         action = torch.tanh(normal_sample)
         # 计算tanh_normal分布的对数概率密度
         log_prob = log_prob - torch.log(1 - torch.tanh(action).pow(2) + 1e-7)
-        log_prob = log_prob.sum(1, keepdim=True)
+        if len(log_prob.shape) >= 2:
+            log_prob = log_prob.sum(1, keepdim=True)
         return  action * self.action_bound, log_prob
 
 

@@ -106,7 +106,7 @@ def sac_Reacher_v4_test():
         gamma=0.98,
         SAC_kwargs={
             'tau': 0.03, # soft update parameters
-            'target_entropy': -env.action_space.shape[0],
+            'target_entropy': -torch.prod(torch.Tensor(env.action_space.shape)).item(),
             'action_bound': 1.0
         }
     )
@@ -134,8 +134,54 @@ def sac_Reacher_v4_test():
     play(gym.make(env_name, render_mode='human'), agent, cfg, episode_count=2, play_without_seed=True)
 
 
+def sac_Pusher_v4_test():
+    env_name = 'Pusher-v4'
+    gym_env_desc(env_name)
+    env = gym.make(env_name)
+    print("gym.__version__ = ", gym.__version__ )
+    path_ = os.path.dirname(__file__)
+    cfg = Config(
+        env, 
+        num_episode=3000,
+        save_path=os.path.join(path_, "test_models" ,'SAC_Pusher-v4_test_actor-1.ckpt'), 
+        actor_hidden_layers_dim=[256, 256],
+        critic_hidden_layers_dim=[256, 256],
+        actor_lr=3e-5,
+        critic_lr=5e-4,
+        sample_size=256,
+        off_buffer_size=204800*4,
+        off_minimal_size=2048 * 10,
+        max_episode_rewards=2048,
+        max_episode_steps=800,
+        gamma=0.98,
+        SAC_kwargs={
+            'tau': 0.005, # soft update parameters
+            'target_entropy': -torch.prod(torch.Tensor(env.action_space.shape)).item(),
+            'action_bound': 2.0
+        }
+    )
+    agent = SAC(
+        state_dim=cfg.state_dim,
+        actor_hidden_layers_dim=cfg.actor_hidden_layers_dim,
+        critic_hidden_layers_dim=cfg.critic_hidden_layers_dim,
+        action_dim=cfg.action_dim, 
+        actor_lr=cfg.actor_lr,
+        critic_lr=cfg.critic_lr,
+        alpha_lr=5e-4,
+        gamma=cfg.gamma,
+        SAC_kwargs=cfg.SAC_kwargs,
+        device=cfg.device
+    )
+    # Episode [ 390 / 3000|(seed=6282) ]:  13%|████▏                           | 389/3000 [34:20<5:00:19,  6.90s/it, steps=800, lastMeanRewards=-262.66, BEST=-251.57]
+    train_off_policy(env, agent, cfg, train_without_seed=True)
+    agent.actor.load_state_dict(
+        torch.load(cfg.save_path)
+    )
+    play(gym.make(env_name, render_mode='human'), agent, cfg, episode_count=2, play_without_seed=True)
+
 
 
 if __name__ == '__main__':
     # sac_test()
-    sac_Reacher_v4_test()
+    # sac_Reacher_v4_test()
+    sac_Pusher_v4_test()
