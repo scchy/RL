@@ -137,8 +137,8 @@ def sac_Pusher_v4_test():
     path_ = os.path.dirname(__file__)
     cfg = Config(
         env, 
-        num_episode=3000,
-        save_path=os.path.join(path_, "test_models" ,'SAC_Pusher-v4_test_actor-1.ckpt'), 
+        num_episode=2500,
+        save_path=os.path.join(path_, "test_models" ,'SAC_Pusher-v4_test_actor-3.ckpt'), 
         actor_hidden_layers_dim=[256, 256],
         critic_hidden_layers_dim=[256, 256],
         actor_lr=3e-5,
@@ -168,10 +168,15 @@ def sac_Pusher_v4_test():
         device=cfg.device
     )
     # Episode [ 1867 / 3000|(seed=8526) ]:  62%|██████████▌      | 1866/3000 [4:35:15<3:16:03, 10.37s/it, steps=800, lastMeanRewards=-149.66, BEST=-119.49]
-    # train_off_policy(env, agent, cfg, train_without_seed=True)
+    # agent.actor.load_state_dict(
+    #     torch.load(os.path.join(path_, "test_models" ,'SAC_Pusher-v4_test_actor-2.ckpt'), map_location='cpu')
+    # )
+    # train_off_policy(env, agent, cfg, train_without_seed=True, wandb_flag=True, 
+    #                  step_lr_flag=True, step_lr_kwargs={'step_size': 1000, 'gamma': 0.9})
     agent.actor.load_state_dict(
         torch.load(cfg.save_path, map_location='cpu')
     )
+    cfg.max_episode_steps = 200
     play(gym.make(env_name, render_mode='human'), agent, cfg, episode_count=2, play_without_seed=True)
 
 

@@ -4,14 +4,36 @@ from .state_util import Pendulum_dis_to_con
 import torch
 from tqdm.auto import tqdm
 import numpy as np
+import wandb
+from torch.optim.lr_scheduler import StepLR
 
 
 def random_action(env):
     asp = env.action_space
-    return np.random.uniform(low=asp.low, high=asp.high)
+    try:
+        return np.random.uniform(low=asp.low, high=asp.high)
+    except Exception as e:
+        return np.random.choice(asp.n)
 
 
-def train_off_policy(env, agent ,cfg, action_contiguous=False, done_add=False, reward_func=None, train_without_seed=False):
+def train_off_policy(env, agent ,cfg, 
+                     action_contiguous=False, done_add=False, reward_func=None, train_without_seed=False,
+                     wandb_flag=False,
+                     step_lr_flag=False,
+                     step_lr_kwargs=None):
+    if wandb_flag:
+        wandb.login()
+        cfg_dict = cfg.__dict__
+        if step_lr_flag:
+            cfg_dict['step_lr_flag'] = step_lr_flag
+            cfg_dict['step_lr_kwargs'] = step_lr_kwargs
+        wandb.init(
+            project="RL-train_off_policy",
+            config=cfg_dict
+        )
+    if step_lr_flag:
+        opt = agent.actor_opt if hasattr(agent, "actor_opt") else agent.opt
+        schedule = StepLR(opt, step_size=step_lr_kwargs['step_size'], gamma=step_lr_kwargs['gamma'])
     buffer = replayBuffer(cfg.off_buffer_size)
     tq_bar = tqdm(range(cfg.num_episode))
     rewards_list = []
@@ -79,7 +101,21 @@ def train_off_policy(env, agent ,cfg, action_contiguous=False, done_add=False, r
             'lastMeanRewards': f'{now_reward:.2f}',
             'BEST': f'{bf_reward:.2f}'
         })
+        if wandb_flag:
+            log_dict = {
+                "steps": steps,
+                'lastMeanRewards': now_reward,
+                'BEST': bf_reward,
+                "episodeRewards": episode_rewards
+            }
+            if step_lr_flag:
+                log_dict['actor_lr'] = opt.param_groups[0]['lr']
+            wandb.log(log_dict)
+        if step_lr_flag:
+            schedule.step()
     env.close()
+    if wandb_flag:
+        wandb.finish()
     return agent
 
 
@@ -113,8 +149,17 @@ def play(env, env_agent, cfg, episode_count=2, action_contiguous=False, play_wit
 
 
 
-def train_on_policy(env, agent, cfg):
-    mini_b = cfg.PPO_kwargs['minibatch_size']
+def train_on_policy(env, agent, cfg, wandb_flag=False):
+    if wandb_flag:
+        wandb.login()
+        wandb.init(
+            project="RL-train_on_policy",
+            config=cfg.__dict__
+        )
+    try:
+        mini_b = cfg.PPO_kwargs.get('minibatch_size', 12)
+    except Exception as e:
+        mini_b = 12
     tq_bar = tqdm(range(cfg.num_episode))
     rewards_list = []
     now_reward = 0
@@ -154,5 +199,15 @@ def train_on_policy(env, agent, cfg):
             bf_reward = now_reward
         
         tq_bar.set_postfix({"steps": steps,'lastMeanRewards': f'{now_reward:.2f}', 'BEST': f'{bf_reward:.2f}'})
+        if wandb_flag:
+            wandb.log({
+                "steps": steps,
+                'lastMeanRewards': now_reward,
+                'BEST': bf_reward,
+                "episodeRewards": episode_rewards
+            })
+        
     env.close()
+    if wandb_flag:
+        wandb.finish()
     return agent
