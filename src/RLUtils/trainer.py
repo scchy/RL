@@ -8,6 +8,14 @@ import wandb
 from torch.optim.lr_scheduler import StepLR
 
 
+def done_fix(done, episode_steps, max_episode_steps):
+    if done and episode_steps != max_episode_steps:
+        dw = True
+    else:
+        dw = False
+    return dw
+
+
 def random_action(env):
     asp = env.action_space
     try:
@@ -59,7 +67,8 @@ def train_off_policy(env, agent ,cfg,
             else:
                 n_s, r, done, _, _ = env.step(a)
             
-            mem_done = done
+            steps += 1
+            mem_done = done_fix(done, steps, cfg.max_episode_steps)
             ep_r = r
             if reward_func is not None:
                 try:
@@ -69,7 +78,6 @@ def train_off_policy(env, agent ,cfg,
             buffer.add(s, a, r, n_s, mem_done)
             s = n_s
             episode_rewards += ep_r
-            steps += 1
             # buffer update
             if len(buffer) >= cfg.off_minimal_size:
                 samples = buffer.sample(cfg.sample_size)
@@ -149,17 +157,25 @@ def play(env, env_agent, cfg, episode_count=2, action_contiguous=False, play_wit
 
 
 
-def train_on_policy(env, agent, cfg, wandb_flag=False):
+def train_on_policy(env, agent, cfg, wandb_flag=False, step_lr_flag=False, step_lr_kwargs=None):
     if wandb_flag:
         wandb.login()
+        cfg_dict = cfg.__dict__
+        if step_lr_flag:
+            cfg_dict['step_lr_flag'] = step_lr_flag
+            cfg_dict['step_lr_kwargs'] = step_lr_kwargs
         wandb.init(
             project="RL-train_on_policy",
-            config=cfg.__dict__
+            config=cfg_dict
         )
     try:
         mini_b = cfg.PPO_kwargs.get('minibatch_size', 12)
     except Exception as e:
         mini_b = 12
+    if step_lr_flag:
+        opt = agent.actor_opt if hasattr(agent, "actor_opt") else agent.opt
+        schedule = StepLR(opt, step_size=step_lr_kwargs['step_size'], gamma=step_lr_kwargs['gamma'])
+
     tq_bar = tqdm(range(cfg.num_episode))
     rewards_list = []
     now_reward = 0
@@ -178,14 +194,17 @@ def train_on_policy(env, agent, cfg, wandb_flag=False):
         while not done:
             a = agent.policy(s)
             n_s, r, done, _, _ = env.step(a)
-            buffer_.add(s, a, r, n_s, done)
+            steps += 1
+            mem_done = done_fix(done, steps, cfg.max_episode_steps)
+            buffer_.add(s, a, r, n_s, mem_done)
             s = n_s
             episode_rewards += r
-            steps += 1
             if (episode_rewards >= cfg.max_episode_rewards) or (steps >= cfg.max_episode_steps):
                 break
 
         update_flag = agent.update(buffer_.buffer)
+        if step_lr_flag:
+            schedule.step()
         rewards_list.append(episode_rewards)
         now_reward = np.mean(rewards_list[-10:])
         if (bf_reward < now_reward) and (i >= 10):
@@ -200,12 +219,16 @@ def train_on_policy(env, agent, cfg, wandb_flag=False):
         
         tq_bar.set_postfix({"steps": steps,'lastMeanRewards': f'{now_reward:.2f}', 'BEST': f'{bf_reward:.2f}'})
         if wandb_flag:
-            wandb.log({
+            log_dict = {
                 "steps": steps,
                 'lastMeanRewards': now_reward,
                 'BEST': bf_reward,
                 "episodeRewards": episode_rewards
-            })
+            }
+            if step_lr_flag:
+                log_dict['actor_lr'] = opt.param_groups[0]['lr']
+            wandb.log(log_dict)
+
         
     env.close()
     if wandb_flag:

@@ -168,34 +168,68 @@ class TD3PolicyNet(nn.Module):
 
 
 
-class PPOPolicyNet(nn.Module):
+class PPOPolicyBetaNet(nn.Module):
     """
     continuity action:
     normal distribution (mean, std) 
+    Chou P W, Maturana D, Scherer S. Improving stochastic policy gradients in continuous control with deep reinforcement learning using the beta distribution[C]//International conference on machine learning. PMLR, 2017: 834-843.
     """
-    def __init__(self, state_dim: int, hidden_layers_dim: typ.List, action_dim: int, state_feature_share: bool=False):
-        super(PPOPolicyNet, self).__init__()
+    def __init__(self, state_dim: int, hidden_layers_dim: typ.List, action_dim: int, 
+                 state_feature_share: bool=False,
+                 dist_type='beta'):
+        super(PPOPolicyBetaNet, self).__init__()
         if state_feature_share:
             state_dim = 128
+
+        self.dist_type = dist_type
         self.features = nn.ModuleList()
         for idx, h in enumerate(hidden_layers_dim):
             self.features.append(nn.ModuleDict({
                 'linear': nn.Linear(hidden_layers_dim[idx-1] if idx else state_dim, h),
                 'linear_action': nn.ReLU(inplace=True)
             }))
-        self.fc_mu = nn.Linear(hidden_layers_dim[-1], action_dim)
-        self.fc_std = nn.Linear(hidden_layers_dim[-1], action_dim)
+        self.alpha_layer = nn.Linear(hidden_layers_dim[-1], action_dim)
+        self.beta_layer = nn.Linear(hidden_layers_dim[-1], action_dim)
+        self.log_std = nn.Parameter(torch.zeros(1, action_dim))
 
     def forward(self, x):
         for layer in self.features:
             x = layer['linear_action'](layer['linear'](x))
         
-        mean_ = torch.tanh(self.fc_mu(x))
-        # np.log(1 + np.exp(2))
-        std = F.softplus(self.fc_std(x)) + 1e-5
-        return mean_, std
+        alpha = F.softplus(self.alpha_layer(x)) + 1.0
+        beta = F.softplus(self.beta_layer(x)) + 1.0
+        return alpha, beta 
+
+    def mean(self, s):
+        alpha, beta = self.forward(s)
+        mean = alpha
+        if self.dist_type == 'beta':
+            mean = alpha / (alpha + beta)  # The mean of the beta distribution
+        return mean
+    
+    def get_dist(self, x, max_action=1.0):
+        alpha, beta = self.forward(x)
+        if self.dist_type == "beta":
+            dist = torch.distributions.Beta(alpha, beta)
+            return dist
+
+        mean = alpha * max_action
+        log_std = self.log_std.expand_as(mean) 
+        std = torch.exp(log_std)  # The reason we train the 'log_std' is to ensure std=exp(log_std)>0
+        dist = torch.distributions.Normal(mean, std)
+        return dist
+
+    def __init(self):
+        for layer in self.features:
+            orthogonal_init(layer['linear'])
+            
+        orthogonal_init(self.alpha_layer, gain=0.01)
+        orthogonal_init(self.beta_layer, gain=0.01)
 
 
+def orthogonal_init(layer, gain=1.0):
+    nn.init.orthogonal_(layer.weight, gain=gain)
+    nn.init.constant_(layer.bias, 0)
 
 class DDPGValueNet(nn.Module):
     """

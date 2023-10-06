@@ -1,7 +1,7 @@
-
+import os
 from os.path import dirname
 import sys
-import gym
+import gymnasium as gym
 import torch
 dir_ = dirname(dirname(__file__))
 print(dir_)
@@ -13,6 +13,67 @@ from RLUtils import train_on_policy, play, Config, gym_env_desc
 def r_func(r):
     # 不希望留在谷底
     return (r + 10.0 ) / 10.0
+
+def r_InvertedPendulum(r):
+    return (r - torch.mean(r) ) / torch.std(r) 
+
+
+def ppo_InvertedPendulum_test():
+    """
+    policyNet: 
+    valueNet: 
+    """
+    # A:[128, 64] C:[64, 32]
+    env_name = 'InvertedPendulum-v4'
+    gym_env_desc(env_name)
+    env = gym.make(env_name)
+    print("gym.__version__ = ", gym.__version__ )
+    path_ = os.path.dirname(__file__)
+    cfg = Config(
+        env, 
+        # 环境参数
+        save_path=os.path.join(path_, "test_models" ,'PPO-InvertedPendulum-v4_test_actor-0.ckpt'),  
+        seed=42,
+        # 网络参数
+        actor_hidden_layers_dim=[128, 128],
+        critic_hidden_layers_dim=[256, 256],
+        # agent参数
+        actor_lr=5e-4,
+        critic_lr=5e-3,
+        gamma=0.99,
+        # 训练参数
+        num_episode=18000,
+        off_buffer_size=204800,
+        max_episode_steps=260,
+        # agent其他参数
+        PPO_kwargs={
+            'lmbda': 0.95,
+            'eps': 0.2, # clip eps
+            'k_epochs': 12,
+            'sgd_batch_size': 512,
+            'minibatch_size': 128,
+            'actor_bound': env.action_space.high[0] # tanh (-1, 1)
+        }
+    )
+    agent = PPO(
+        state_dim=cfg.state_dim,
+        actor_hidden_layers_dim=cfg.actor_hidden_layers_dim,
+        critic_hidden_layers_dim=cfg.critic_hidden_layers_dim,
+        action_dim=cfg.action_dim,
+        actor_lr=cfg.actor_lr,
+        critic_lr=cfg.critic_lr,
+        gamma=cfg.gamma,
+        PPO_kwargs=cfg.PPO_kwargs,
+        device=cfg.device,
+        reward_func=r_InvertedPendulum
+    )
+    train_on_policy(env, agent, cfg, wandb_flag=False, step_lr_flag=True, step_lr_kwargs={'step_size': 3000, 'gamma': 0.9})
+    agent.actor.load_state_dict(
+        torch.load(cfg.save_path)
+    )
+    cfg.max_episode_steps = 300
+    play(gym.make(env_name, render_mode='human'), agent, cfg, episode_count=3)
+
 
 
 def ppo_test():
@@ -72,5 +133,4 @@ def ppo_test():
 
 
 if __name__ == '__main__':
-    ppo_test()
-
+    ppo_InvertedPendulum_test()
