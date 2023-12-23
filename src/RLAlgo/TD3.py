@@ -15,7 +15,8 @@ from PIL import Image
 import cv2
 from ._base_net import TD3ValueNet as valueNet
 from ._base_net import TD3PolicyNet as policyNet
-from ._base_net import stateFeatureExtractor
+from ._base_net import TD3CNNPolicyNet as cnnPolicyNet
+from ._base_net import TD3CNNValueNet  as cnnValueNet
 
 
 def picTrans(pic_np):
@@ -80,25 +81,27 @@ class TD3:
         self.action_low = TD3_kwargs.get('action_low', -1.0)
         self.action_high = TD3_kwargs.get('action_high', 1.0)
         print(self.action_low, self.action_high)
-        self.off_minimal_size = TD3_kwargs['off_minimal_size']
         self.CNN_env_flag = TD3_kwargs['CNN_env_flag']
         self.max_action = max(
             max(abs(self.action_low)) if isinstance(self.action_low, np.ndarray) else self.action_low, 
             max(abs(self.action_high)) if isinstance(self.action_high, np.ndarray) else self.action_high
         )
-        if self.CNN_env_flag:
-            self.feat_extractor = stateFeatureExtractor()
-            self.feat_extractor.to(device)
-            self.target_feat_extractor = copy.deepcopy(self.feat_extractor)
-            self.target_feat_extractor.to(device)
-        self.actor = policyNet(
+        policy = cnnPolicyNet if self.CNN_env_flag else policyNet 
+        value_net = cnnValueNet if self.CNN_env_flag else valueNet 
+        # if self.CNN_env_flag:
+        #     self.feat_extractor = stateFeatureExtractor()
+        #     self.feat_extractor.to(device)
+        #     self.target_feat_extractor = copy.deepcopy(self.feat_extractor)
+        #     self.target_feat_extractor.to(device)
+
+        self.actor = policy(
             state_dim, 
             actor_hidden_layers_dim, 
             action_dim, 
-            action_bound = self.max_action,
+            action_bound = TD3_kwargs['env'] if  "env" in TD3_kwargs else self.max_action,
             state_feature_share=self.CNN_env_flag
         )
-        self.critic = valueNet(
+        self.critic = value_net(
             state_dim,
             action_dim, 
             critic_hidden_layers_dim,
@@ -118,13 +121,13 @@ class TD3:
         self.action_dim = action_dim
         
         self.tau = TD3_kwargs.get('tau', 0.01)
-        self.policy_noise = TD3_kwargs.get('policy_noise', 0.2) * self.max_action 
-        self.policy_noise_clip_low = -TD3_kwargs.get('policy_noise_clip', 0.5) * self.max_action 
-        self.policy_noise_clip_high = TD3_kwargs.get('policy_noise_clip', 0.5) * self.max_action 
-        if isinstance(self.action_low, np.ndarray) and any(np.abs(self.action_low) != np.abs(self.action_high)):
-            self.policy_noise_clip_low = TD3_kwargs.get('policy_noise_clip', 0.5) * self.action_low 
-            self.policy_noise_clip_high = TD3_kwargs.get('policy_noise_clip', 0.5) * self.action_high 
-
+        self.policy_noise = TD3_kwargs.get('policy_noise', 0.2) 
+        self.policy_noise_clip_low = -TD3_kwargs.get('policy_noise_clip', 0.5)
+        self.policy_noise_clip_high = TD3_kwargs.get('policy_noise_clip', 0.5)
+        if isinstance(self.action_low, np.ndarray):
+            self.policy_noise_clip_low = TD3_kwargs.get('policy_noise_clip', 0.5) * self.action_low
+            self.policy_noise_clip_high = TD3_kwargs.get('policy_noise_clip', 0.5) * self.action_high
+            
         self.expl_noise = TD3_kwargs.get('expl_noise', 0.25)
         self.expl_noise_exp_reduce_factor = TD3_kwargs.get('expl_noise_exp_reduce_factor', 1)
         self.delay_counter = -1
@@ -134,9 +137,7 @@ class TD3:
         # Normal sigma
         self.train_noise = self.expl_noise
         self.update_count = 0
-        self.off_minimal_size = TD3_kwargs.get('off_minimal_size', 100)
         self.training = False
-        self.step_count = 0
 
     @torch.no_grad()
     def smooth_action(self, state):
@@ -147,34 +148,48 @@ class TD3:
         pt_action_low = torch.FloatTensor(self.action_low)
         pt_action_high = torch.FloatTensor(self.action_high)
         act_target = self.target_actor(state).cpu()
-        noise = (torch.randn(act_target.shape).float() * self.policy_noise).clip(
-            torch.FloatTensor(self.policy_noise_clip_low), 
-            torch.FloatTensor(self.policy_noise_clip_high))
-        smoothed_target_a = (act_target.clip(pt_action_low, pt_action_high) + noise).clip(pt_action_low, pt_action_high)
+        try:
+            # self.action_low + self.action_high)/2
+            noise = torch.stack([torch.normal(np.zero_like(self.action_low), (self.action_high-self.action_low)) for _ in range(act_target.shape[0])])
+            noise = (noise * self.policy_noise).clip(
+                torch.FloatTensor(self.policy_noise_clip_low), 
+                torch.FloatTensor(self.policy_noise_clip_high)
+            )
+        except Exception as e:
+            noise = (torch.randn(act_target.shape).float() * self.policy_noise).clip(
+                torch.FloatTensor(self.policy_noise_clip_low), 
+                torch.FloatTensor(self.policy_noise_clip_high))
+        smoothed_target_a = (act_target + noise).clip(pt_action_low, pt_action_high)
         return smoothed_target_a
 
     def random_action(self):
         return np.random.uniform(self.action_low, self.action_high)
     
     def train_action(self, act):
-        action_noise = np.random.normal(loc=0, scale=self.max_action * self.train_noise, size=self.action_dim)
+        try:
+            # self.action_low + self.action_high)/2
+            action_noise = torch.normal(np.zero_like(self.action_low), (self.action_high-self.action_low)).numpy()  * self.train_noise
+        except Exception as e:
+            action_noise = np.random.randn(self.action_dim) * self.train_noise
+
         self.train_noise *= self.expl_noise_exp_reduce_factor
-        return (act.detach().cpu().numpy()[0].clip(self.action_low, self.action_high) + action_noise).clip(self.action_low, self.action_high)
+        self.train_noise = np.max([0.01, self.train_noise])
+        # print("action_noise=", np.round(action_noise, 3), "act=", np.round(act, 3))
+        return (act.detach().cpu().numpy()[0] + action_noise).clip(self.action_low, self.action_high)
 
     @torch.no_grad()
     def policy(self, state):
-        state = torch.FloatTensor(state[np.newaxis, ...]).to(self.device)
+        try:
+            state = torch.FloatTensor(state[np.newaxis, ...]).to(self.device)
+        except Exception as e:
+            state = torch.stack(state._frames).float().to(self.device)
+
         # state = picTrans(state).to(self.device)
-        self.step_count += 1
-        if self.train and self.step_count <= self.off_minimal_size:
-            return self.random_action()
-        
-        if self.CNN_env_flag:
-            state /= 255.0
-            state = self.feat_extractor(state)
-            
+        # if self.CNN_env_flag:
+        #     # state /= 255.0
+        #     state = self.feat_extractor(state)
         act = self.actor(state)
-        if self.train:
+        if self.training:
             return self.train_action(act)
         return act.detach().cpu().numpy()[0].clip(self.action_low, self.action_high)
 
@@ -188,11 +203,11 @@ class TD3:
         # next_state = torch.FloatTensor(picTrans(next_state)).to(self.device)
         next_state = torch.FloatTensor(np.stack(next_state)).to(self.device)
         done = torch.FloatTensor(np.stack(done)).view(-1, 1).to(self.device)
-        if self.CNN_env_flag:
-            state /= 255.0
-            state = self.feat_extractor(state)
-            next_state /= 255.0
-            next_state = self.target_feat_extractor(next_state)
+        # if self.CNN_env_flag:
+        #     # state /= 255.0
+        #     state = self.feat_extractor(state)
+        #     # next_state /= 255.0
+        #     next_state = self.target_feat_extractor(next_state)
 
         # 计算目标Q
         smooth_act = self.smooth_action(next_state).to(self.device)
@@ -205,6 +220,11 @@ class TD3:
         q_loss = F.mse_loss(current_Q1.float(), target_Q.float().detach()) + F.mse_loss(current_Q2.float(), target_Q.float().detach())
         self.critic_opt.zero_grad()
         q_loss.backward()
+        for n, p in self.critic.q1_cnn_feature[0].named_parameters():
+            g_sum = p.grad.sum()
+            if g_sum > -0.05 and g_sum < 0.05:
+                print(f"\nq_loss={q_loss}  self.critic.q1_cnn_feature[0] grad.sum={g_sum}")
+            break
         self.critic_opt.step()
         
         # trick2: **Delayed Policy Update**: actor的更新频率要小于critic(当前的actor参数可以产出更多样本)。
@@ -218,7 +238,7 @@ class TD3:
             
             self.soft_update(self.actor, self.target_actor)
             self.soft_update(self.critic, self.target_critic)
-            self.soft_update(self.feat_extractor, self.target_feat_extractor)
+            # self.soft_update(self.feat_extractor, self.target_feat_extractor)
             self.delay_counter = -1
 
     def save_model(self, file_path):
@@ -229,23 +249,25 @@ class TD3:
         critic_f = os.path.join(file_path, 'TD3_critic.ckpt')
         torch.save(self.actor.state_dict(), act_f)
         torch.save(self.critic.state_dict(), critic_f)
-        if self.CNN_env_flag:
-            feat_f = os.path.join(file_path, 'TD3_feat.ckpt')
-            torch.save(self.feat_extractor.state_dict(), feat_f)
+        # if self.CNN_env_flag:
+        #     feat_f = os.path.join(file_path, 'TD3_feat.ckpt')
+        #     torch.save(self.feat_extractor.state_dict(), feat_f)
 
     def load_model(self, file_path):
         act_f = os.path.join(file_path, 'TD3_actor.ckpt')
         critic_f = os.path.join(file_path, 'TD3_critic.ckpt')
         self.actor.load_state_dict(torch.load(act_f))
         self.critic.load_state_dict(torch.load(critic_f))
-        if self.CNN_env_flag:
-            feat_f = os.path.join(file_path, 'TD3_feat.ckpt')
-            self.feat_extractor.load_state_dict(torch.load(feat_f))
+        self.target_actor.load_state_dict(torch.load(act_f))
+        self.target_critic.load_state_dict(torch.load(critic_f))
+        # if self.CNN_env_flag:
+        #     feat_f = os.path.join(file_path, 'TD3_feat.ckpt')
+        #     self.feat_extractor.load_state_dict(torch.load(feat_f))
 
     def train(self):
         self.training = True
-        if self.CNN_env_flag:
-            self.feat_extractor.train()
+        # if self.CNN_env_flag:
+        #     self.feat_extractor.train()
         self.actor.train()
         self.target_actor.train()
         self.critic.train()
@@ -253,8 +275,8 @@ class TD3:
 
     def eval(self):
         self.training = False
-        if self.CNN_env_flag:
-            self.feat_extractor.eval()
+        # if self.CNN_env_flag:
+        #     self.feat_extractor.eval()
         self.actor.eval()
         self.target_actor.eval()
         self.critic.eval()

@@ -28,7 +28,10 @@ def train_off_policy(env, agent ,cfg,
                      action_contiguous=False, done_add=False, reward_func=None, train_without_seed=False,
                      wandb_flag=False,
                      step_lr_flag=False,
-                     step_lr_kwargs=None):
+                     step_lr_kwargs=None,
+                     update_every=1,
+                     test_ep_freq=100
+                     ):
     if wandb_flag:
         wandb.login()
         cfg_dict = cfg.__dict__
@@ -47,7 +50,28 @@ def train_off_policy(env, agent ,cfg,
     rewards_list = []
     now_reward = -np.inf
     bf_reward = -np.inf
+    best_ep_reward = -np.inf
+    policy_idx = 0
+    tt_steps = 0
     for i in tq_bar:
+        if (1 + i) % test_ep_freq == 0:
+            if hasattr(agent, "eval"):
+                agent.eval()
+            ep_reward = play(env, agent, cfg, episode_count=3, play_without_seed=train_without_seed, render=False)
+            if hasattr(agent, "train"):
+                agent.train()
+            
+            if ep_reward > best_ep_reward:
+                best_ep_reward = ep_reward
+                # 模型保存
+                if hasattr(agent, "save_model"):
+                    agent.save_model(cfg.save_path)
+                else:
+                    try:
+                        torch.save(agent.target_q.state_dict(), cfg.save_path)
+                    except Exception as e:
+                        torch.save(agent.actor.state_dict(), cfg.save_path)
+
         rand_seed = np.random.randint(0, 9999)
         final_seed = rand_seed if train_without_seed else cfg.seed
         s, _ = env.reset(seed=final_seed)
@@ -59,8 +83,15 @@ def train_off_policy(env, agent ,cfg,
         while not done:
             if len(buffer) < cfg.off_minimal_size:
                 a = random_action(env)
+                # print('random_action a=', np.round(a, 3))
             else:
                 a = agent.policy(s)
+                if policy_idx == 0:
+                    rewards_list = []
+                    print('Finished collect orginal data')
+                # if a[0] > -0.09:
+                #     print('a=', np.round(a, 3))
+                policy_idx += 1
             if action_contiguous:
                 c_a = Pendulum_dis_to_con(a, env, cfg.action_dim)
                 n_s, r, done, _, _ = env.step([c_a])
@@ -68,6 +99,7 @@ def train_off_policy(env, agent ,cfg,
                 n_s, r, done, _, _ = env.step(a)
             
             steps += 1
+            tt_steps += 1
             mem_done = done_fix(done, steps, cfg.max_episode_steps)
             ep_r = r
             if reward_func is not None:
@@ -75,14 +107,16 @@ def train_off_policy(env, agent ,cfg,
                     r = reward_func(r)
                 except Exception as e:
                     r, mem_done = reward_func(r, mem_done)
+                    
+            # state, action, reward, next_state, done
             buffer.add(s, a, r, n_s, mem_done)
             s = n_s
             episode_rewards += ep_r
             # buffer update
-            if len(buffer) >= cfg.off_minimal_size:
+            if (len(buffer) >= cfg.off_minimal_size) and (tt_steps % update_every == 0):
                 samples = buffer.sample(cfg.sample_size)
                 agent.update(samples)
-                # print('Start Update')
+
             if (episode_rewards >= cfg.max_episode_rewards) or (steps >= cfg.max_episode_steps):
                 drop_flag = True
                 break
@@ -94,27 +128,40 @@ def train_off_policy(env, agent ,cfg,
         
         rewards_list.append(episode_rewards)
         now_reward = np.mean(rewards_list[-10:])
-        if (bf_reward < now_reward) and (i >= 10):
-            if hasattr(agent, "save_model"):
-                agent.save_model(cfg.save_path)
-            else:
-                try:
-                    torch.save(agent.target_q.state_dict(), cfg.save_path)
-                except Exception as e:
-                    torch.save(agent.actor.state_dict(), cfg.save_path)
-            bf_reward = now_reward
+        if (bf_reward < now_reward) and (i >= 10) and (len(buffer) >= cfg.off_minimal_size):
+            if hasattr(agent, "eval"):
+                agent.eval()
+            # best 时也进行测试
+            ep_reward = play(env, agent, cfg, episode_count=3)
+            if hasattr(agent, "train"):
+                agent.train()
+            
+            if ep_reward > best_ep_reward:
+                best_ep_reward = ep_reward
+                # 模型保存
+                if hasattr(agent, "save_model"):
+                    agent.save_model(cfg.save_path)
+                else:
+                    try:
+                        torch.save(agent.target_q.state_dict(), cfg.save_path)
+                    except Exception as e:
+                        torch.save(agent.actor.state_dict(), cfg.save_path)
 
+            bf_reward = now_reward
+            
         tq_bar.set_postfix({
             "steps": steps,
             'lastMeanRewards': f'{now_reward:.2f}',
-            'BEST': f'{bf_reward:.2f}'
+            'BEST': f'{bf_reward:.2f}',
+            "bestTestReward": f'{best_ep_reward:.2f}'
         })
         if wandb_flag:
             log_dict = {
                 "steps": steps,
                 'lastMeanRewards': now_reward,
                 'BEST': bf_reward,
-                "episodeRewards": episode_rewards
+                "episodeRewards": episode_rewards,
+                "bestTestReward": best_ep_reward
             }
             if step_lr_flag:
                 log_dict['actor_lr'] = opt.param_groups[0]['lr']
@@ -127,10 +174,11 @@ def train_off_policy(env, agent ,cfg,
     return agent
 
 
-def play(env, env_agent, cfg, episode_count=2, action_contiguous=False, play_without_seed=False):
+def play(env, env_agent, cfg, episode_count=2, action_contiguous=False, play_without_seed=False, render=True):
     """
     对训练完成的QNet进行策略游戏
     """
+    ep_reward_record = []
     for e in range(episode_count):
         rand_seed = np.random.randint(0, 9999)
         s, _ = env.reset(seed=rand_seed if play_without_seed else cfg.seed)
@@ -138,7 +186,8 @@ def play(env, env_agent, cfg, episode_count=2, action_contiguous=False, play_wit
         episode_reward = 0
         episode_cnt = 0
         while not done:
-            env.render()
+            if render:
+                env.render()
             a = env_agent.policy(s)
             if action_contiguous:
                 c_a = Pendulum_dis_to_con(a, env, cfg.action_dim)
@@ -150,10 +199,13 @@ def play(env, env_agent, cfg, episode_count=2, action_contiguous=False, play_wit
             s = n_state
             if (episode_reward >= 3 * cfg.max_episode_rewards) or (episode_cnt >= 3 * cfg.max_episode_steps):
                 break
+        ep_reward_record.append(episode_reward)
 
         print(f'Get reward {episode_reward}. Last {episode_cnt} times')
-
-    env.close()
+    
+    if render:
+        env.close()
+    return np.mean(ep_reward_record)
 
 
 

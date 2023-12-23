@@ -2,14 +2,23 @@
 import os
 from os.path import dirname
 import sys
-import gym
+import gymnasium as gym
 import torch
-dir_ = dirname(dirname(__file__))
+
+try:
+    dir_ = dirname(dirname(__file__))
+except Exception as e:
+    dir_ = dirname(dirname('__file__'))
+
+if len(dir_) == 0:
+    dir_ = os.getcwd() + '/src'
+
 print(dir_)
 sys.path.append(dir_)
 from RLAlgo.TD3 import TD3
 from RLUtils import train_off_policy, play, Config, gym_env_desc
 import numpy as np
+from RLUtils.env_wrapper import FrameStack, CarV2SkipFrame, GrayScaleObservation, ResizeObservation
 
 
 def reward_func(r, d):
@@ -106,52 +115,63 @@ def CarRacing_TD3_test():
     """
     policyNet: 
     valueNet: 
+    reference: https://hiddenbeginner.github.io/study-notes/contents/tutorials/2023-04-20_CartRacing-v2_DQN.html
     """
     env_name = 'CarRacing-v2'
     gym_env_desc(env_name)
     env = gym.make(env_name)
+    env = FrameStack(
+        ResizeObservation(
+            GrayScaleObservation(CarV2SkipFrame(env, skip=5)), 
+            shape=84
+        ), 
+        num_stack=4
+    )
     print("gym.__version__ = ", gym.__version__ )
     path_ = os.path.dirname(__file__)
     cfg = Config(
         env, 
         # 环境参数
-        save_path=os.path.join(path_, "test_models" ,'TD3_CarRacing-v2_test'), 
+        save_path=os.path.join(path_, "test_models" ,'TD3_CarRacing-v2_test2-3'), 
         seed=42,
         # 网络参数
-        actor_hidden_layers_dim=[200],
-        critic_hidden_layers_dim=[200],
+        actor_hidden_layers_dim=[128], # 256
+        critic_hidden_layers_dim=[128],
         # agent参数
-        actor_lr=1e-4,
-        critic_lr=2e-3,
+        #    train_without_seed=True skip=5  out reward=-10
+        # actor_lr=7.5e-5, # 1e-4,
+        # critic_lr=1.5e-3, #2.5e-3, # 3e-3,
+        #    train_without_seed=True skip=10 out reward=-10 policy+LayerNorm
+        actor_lr=2.5e-4, #5.5e-5,
+        critic_lr=1e-3, #7.5e-4,  
+
         gamma=0.99,
         # 训练参数
-        num_episode=20,
-        # num_episode=500,
-        sample_size=256,
+        num_episode=15000,
+        sample_size=128,
         # 环境复杂多变，需要保存多一些buffer
-        off_buffer_size=2048*2,
-        off_minimal_size=1024,
-        max_episode_rewards=1000,
-        max_episode_steps=150,
-        # max_episode_steps=800,
+        off_buffer_size=1024*100,  
+        off_minimal_size=256,
+        max_episode_rewards=50000,
+        max_episode_steps=1200, # 200
         # agent 其他参数
         TD3_kwargs={
-            'off_minimal_size': 1024,
             'CNN_env_flag': 1,
             'pic_shape': env.observation_space.shape,
+            "env": env,
             'action_low': env.action_space.low,
             'action_high': env.action_space.high,
             # soft update parameters
-            'tau': 0.03, 
+            'tau': 0.05, 
             # trick2: Delayed Policy Update
             'delay_freq': 1,
             # trick3: Target Policy Smoothing
             'policy_noise': 0.2,
             'policy_noise_clip': 0.5,
             # exploration noise
-            'expl_noise': 0.25,
+            'expl_noise': 0.5,
             # 探索的 noise 指数系数率减少 noise = expl_noise * expl_noise_exp_reduce_factor^t
-            'expl_noise_exp_reduce_factor': 0.9999
+            'expl_noise_exp_reduce_factor':  1 - 1e-4
         }
     )
     agent = TD3(
@@ -165,12 +185,26 @@ def CarRacing_TD3_test():
         TD3_kwargs=cfg.TD3_kwargs,
         device=cfg.device
     )
-    # # 载入再学习
-    agent.train()
-    train_off_policy(env, agent, cfg, done_add=False)
+    # 载入再学习
+    # train_1 = os.path.join(path_, "test_models" ,'TD3_CarRacing-v2_test2-2')
+    # agent.load_model(train_1)
+    # agent.train()
+    # train_off_policy(env, agent, cfg, done_add=False, train_without_seed=True, wandb_flag=False, test_ep_freq=100)
     agent.load_model(cfg.save_path)
     agent.eval()
-    play(gym.make(env_name, render_mode='human'), agent, cfg, episode_count=2)
+    # state, _ = env.reset()
+    # state = torch.stack(state._frames).float().to(cfg.device)
+    # act = agent.actor(state)
+    # act.detach().cpu().numpy()[0].clip(agent.action_low, agent.action_high)
+    env = gym.make(env_name, render_mode='human') # 
+    env = FrameStack(
+        ResizeObservation(
+            GrayScaleObservation(CarV2SkipFrame(env, skip=5)), 
+            shape=84
+        ), 
+        num_stack=4
+    )
+    play(env, agent, cfg, episode_count=2)
 
 
 def play1(env, cfg, episode_count=2):
