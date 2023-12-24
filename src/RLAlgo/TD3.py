@@ -12,7 +12,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import transforms
 from PIL import Image  
-import cv2
 from ._base_net import TD3ValueNet as valueNet
 from ._base_net import TD3PolicyNet as policyNet
 from ._base_net import TD3CNNPolicyNet as cnnPolicyNet
@@ -114,6 +113,8 @@ class TD3:
         self.critic.to(device)
         self.target_actor.to(device)
         self.target_critic.to(device)
+        self.actor_lr = actor_lr
+        self.critic_lr = critic_lr
         self.actor_opt = torch.optim.Adam(self.actor.parameters(), lr=actor_lr)
         self.critic_opt = torch.optim.Adam(self.critic.parameters(), lr=critic_lr)
         
@@ -256,10 +257,17 @@ class TD3:
     def load_model(self, file_path):
         act_f = os.path.join(file_path, 'TD3_actor.ckpt')
         critic_f = os.path.join(file_path, 'TD3_critic.ckpt')
-        self.actor.load_state_dict(torch.load(act_f))
-        self.critic.load_state_dict(torch.load(critic_f))
-        self.target_actor.load_state_dict(torch.load(act_f))
-        self.target_critic.load_state_dict(torch.load(critic_f))
+        self.actor.load_state_dict(torch.load(act_f, map_location='cpu'))
+        self.critic.load_state_dict(torch.load(critic_f, map_location='cpu'))
+        self.target_actor = copy.deepcopy(self.actor)
+        self.target_critic = copy.deepcopy(self.critic)
+        self.actor.to(self.device)
+        self.critic.to(self.device)
+        self.target_actor.to(self.device)
+        self.target_critic.to(self.device)
+        self.actor_opt = torch.optim.Adam(self.actor.parameters(), lr=self.actor_lr)
+        self.critic_opt = torch.optim.Adam(self.critic.parameters(), lr=self.critic_lr)
+        
         # if self.CNN_env_flag:
         #     feat_f = os.path.join(file_path, 'TD3_feat.ckpt')
         #     self.feat_extractor.load_state_dict(torch.load(feat_f))
