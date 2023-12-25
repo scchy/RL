@@ -327,11 +327,82 @@ def InvertedPendulum_TD3_test():
     play(play_env, agent, cfg, episode_count=2, render=True)
 
 
+def InvertedDoublePendulum_TD3_test():
+    """
+    policyNet: 
+    valueNet: 
+    """
+    env_name = 'InvertedDoublePendulum-v4'
+    gym_env_desc(env_name)
+    env = gym.make(env_name)
+    print("gym.__version__ = ", gym.__version__ )
+    path_ = os.path.dirname(__file__)
+    cfg = Config(
+        env, 
+        # 环境参数
+        save_path=os.path.join(path_, "test_models" ,'TD3_InvertedDoublePendulum-v4_test1.ckpt'), 
+        seed=42,
+        # 网络参数
+        actor_hidden_layers_dim=[200, 200],
+        critic_hidden_layers_dim=[200, 200],
+        # agent参数
+        actor_lr=1e-4,
+        critic_lr=3e-4,
+        gamma=0.99,
+        # 训练参数
+        num_episode=1000,
+        sample_size=128,
+        # 环境复杂多变，需要保存多一些buffer
+        off_buffer_size=int(1e6),
+        off_minimal_size=512,
+        max_episode_rewards=1000,
+        max_episode_steps=1000,
+        # agent 其他参数
+        TD3_kwargs={
+            'CNN_env_flag': 0,
+            'action_low': env.action_space.low,
+            'action_high': env.action_space.high,
+            # soft update parameters
+            'tau': 0.005, 
+            # trick2: Delayed Policy Update
+            'delay_freq': 1,
+            # trick3: Target Policy Smoothing
+            'policy_noise': 0.2,
+            'policy_noise_clip': 0.5,
+            # exploration noise
+            'expl_noise': 0.5,
+            # 探索的 noise 指数系数率减少 noise = expl_noise * expl_noise_exp_reduce_factor^t
+            'expl_noise_exp_reduce_factor': 1 - 1e-4,
+            'off_minimal_size': 4096
+        }
+    )
+    agent = TD3(
+        state_dim=cfg.state_dim,
+        actor_hidden_layers_dim=cfg.actor_hidden_layers_dim,
+        critic_hidden_layers_dim=cfg.critic_hidden_layers_dim,
+        action_dim=cfg.action_dim,
+        actor_lr=cfg.actor_lr,
+        critic_lr=cfg.critic_lr,
+        gamma=cfg.gamma,
+        TD3_kwargs=cfg.TD3_kwargs,
+        device=cfg.device
+    )
+    agent.train()
+    train_off_policy(env, agent, cfg, done_add=False, train_without_seed=True, wandb_flag=False, test_ep_freq=100)
+    agent.load_model(cfg.save_path)
+    agent.eval()
+    play_env = gym.make(env_name, render_mode='human')
+    play(play_env, agent, cfg, episode_count=2, render=True)
+
+
+
+
 
 if __name__ == '__main__':
     # BipedalWalkerHardcore_TD3_test()
     # test_env()
     # CarRacing_TD3_test()
-    InvertedPendulum_TD3_test()
+    # InvertedPendulum_TD3_test()
+    InvertedDoublePendulum_TD3_test()
     
 
