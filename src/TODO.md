@@ -1,3 +1,3 @@
 # TODO
 
-- [ ] 增加训练log wandb
+- [ x ] 增加训练log wandb

@@ -132,7 +132,7 @@ def train_off_policy(env, agent ,cfg,
             if hasattr(agent, "eval"):
                 agent.eval()
             # best 时也进行测试
-            ep_reward = play(env, agent, cfg, episode_count=3)
+            ep_reward = play(env, agent, cfg, episode_count=3, play_without_seed=train_without_seed, render=False)
             if hasattr(agent, "train"):
                 agent.train()
             

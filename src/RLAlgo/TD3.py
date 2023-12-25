@@ -221,11 +221,12 @@ class TD3:
         q_loss = F.mse_loss(current_Q1.float(), target_Q.float().detach()) + F.mse_loss(current_Q2.float(), target_Q.float().detach())
         self.critic_opt.zero_grad()
         q_loss.backward()
-        for n, p in self.critic.q1_cnn_feature[0].named_parameters():
-            g_sum = p.grad.sum()
-            if g_sum > -0.05 and g_sum < 0.05:
-                print(f"\nq_loss={q_loss}  self.critic.q1_cnn_feature[0] grad.sum={g_sum}")
-            break
+        if self.CNN_env_flag:
+            for n, p in self.critic.q1_cnn_feature[0].named_parameters():
+                g_sum = p.grad.sum()
+                if g_sum > -0.05 and g_sum < 0.05:
+                    print(f"\nq_loss={q_loss}  self.critic.q1_cnn_feature[0] grad.sum={g_sum}")
+                break
         self.critic_opt.step()
         
         # trick2: **Delayed Policy Update**: actor的更新频率要小于critic(当前的actor参数可以产出更多样本)。
