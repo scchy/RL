@@ -7,6 +7,7 @@ import typing as typ
 import numpy as np
 import pandas as pd
 import torch
+import os
 from torch import nn
 from torch.nn import functional as F
 from ._base_net import PPOValueNet as valueNet
@@ -78,6 +79,8 @@ class PPO:
         dist_type = PPO_kwargs.get('dist_type', 'beta')
         self.actor = policyNet(state_dim, actor_hidden_layers_dim, action_dim, dist_type=dist_type).to(device)
         self.critic = valueNet(state_dim, critic_hidden_layers_dim).to(device)
+        self.actor_lr = actor_lr
+        self.critic_lr = critic_lr
         self.actor_opt = torch.optim.Adam(self.actor.parameters(), lr=actor_lr)
         self.critic_opt = torch.optim.Adam(self.critic.parameters(), lr=critic_lr)
         
@@ -118,10 +121,12 @@ class PPO:
         # recompute
         td_target = advantage + old_v
         # trick1: batch_normalize
-        advantage = (advantage - torch.mean(advantage)) / (torch.std(advantage) + + 1e-5)
+        advantage = (advantage - torch.mean(advantage)) / (torch.std(advantage) + 1e-5)
         action_dists = self.actor.get_dist(state, self.action_bound)
         # 动作是正态分布
         old_log_probs = action_dists.log_prob(action)
+        if len(old_log_probs.shape) == 2:
+            old_log_probs = old_log_probs.sum(dim=1)
         d_set = memDataset(state, action, old_log_probs, advantage, td_target)
         train_loader = DataLoader(
             d_set,
@@ -131,14 +136,14 @@ class PPO:
             collate_fn=self.min_batch_collate_func
         )
 
-
         for _ in range(self.k_epochs):
             for state_, action_, old_log_prob, adv, td_v in train_loader:
-                action_dists = self.actor.get_dist(state, self.action_bound)
+                action_dists = self.actor.get_dist(state_, self.action_bound)
                 log_prob = action_dists.log_prob(action_)
-                
+                if len(log_prob.shape) == 2:
+                    log_prob = log_prob.sum(dim=1)
                 # e(log(a/b))
-                ratio = torch.exp(log_prob - old_log_prob)
+                ratio = torch.exp(log_prob - old_log_prob.detach())
                 surr1 = ratio * adv
                 surr2 = torch.clamp(ratio, 1 - self.eps, 1 + self.eps) * adv
 
@@ -156,3 +161,32 @@ class PPO:
                 self.critic_opt.step()
 
         return True
+
+    def save_model(self, file_path):
+        if not os.path.exists(file_path):
+            os.makedirs(file_path)
+
+        act_f = os.path.join(file_path, 'PPO_actor.ckpt')
+        critic_f = os.path.join(file_path, 'PPO_critic.ckpt')
+        torch.save(self.actor.state_dict(), act_f)
+        torch.save(self.critic.state_dict(), critic_f)
+
+    def load_model(self, file_path):
+        act_f = os.path.join(file_path, 'PPO_actor.ckpt')
+        critic_f = os.path.join(file_path, 'PPO_critic.ckpt')
+        self.actor.load_state_dict(torch.load(act_f, map_location='cpu'))
+        self.critic.load_state_dict(torch.load(critic_f, map_location='cpu'))
+        self.actor.to(self.device)
+        self.critic.to(self.device)
+        self.actor_opt = torch.optim.Adam(self.actor.parameters(), lr=self.actor_lr)
+        self.critic_opt = torch.optim.Adam(self.critic.parameters(), lr=self.critic_lr)
+
+    def train(self):
+        self.training = True
+        self.actor.train()
+        self.critic.train()
+
+    def eval(self):
+        self.training = False
+        self.actor.eval()
+        self.critic.eval()

@@ -94,10 +94,11 @@ def train_off_policy(env, agent ,cfg,
                 policy_idx += 1
             if action_contiguous:
                 c_a = Pendulum_dis_to_con(a, env, cfg.action_dim)
-                n_s, r, done, _, _ = env.step([c_a])
+                n_s, r, terminated, truncated, _ = env.step([c_a])
             else:
-                n_s, r, done, _, _ = env.step(a)
+                n_s, r, terminated, truncated, _ = env.step(a)
             
+            done = terminated or truncated
             steps += 1
             tt_steps += 1
             mem_done = done_fix(done, steps, cfg.max_episode_steps)
@@ -191,9 +192,11 @@ def play(env, env_agent, cfg, episode_count=2, action_contiguous=False, play_wit
             a = env_agent.policy(s)
             if action_contiguous:
                 c_a = Pendulum_dis_to_con(a, env, cfg.action_dim)
-                n_state, reward, done, _, _ = env.step([c_a])
+                n_state, reward, terminated, truncated, _ = env.step([c_a])
             else:
-                n_state, reward, done, _, _ = env.step(a)
+                n_state, reward, terminated, truncated, _ = env.step(a)
+            
+            done = terminated or truncated
             episode_reward += reward
             episode_cnt += 1
             s = n_state
@@ -209,7 +212,13 @@ def play(env, env_agent, cfg, episode_count=2, action_contiguous=False, play_wit
 
 
 
-def train_on_policy(env, agent, cfg, wandb_flag=False, step_lr_flag=False, step_lr_kwargs=None):
+def train_on_policy(env, agent, cfg, 
+                    wandb_flag=False, 
+                    train_without_seed=False, 
+                    step_lr_flag=False, 
+                    step_lr_kwargs=None, 
+                    test_ep_freq=100,
+                    online_collect_nums=None):
     if wandb_flag:
         wandb.login()
         cfg_dict = cfg.__dict__
@@ -233,19 +242,44 @@ def train_on_policy(env, agent, cfg, wandb_flag=False, step_lr_flag=False, step_
     now_reward = 0
     bf_reward = -np.inf
     update_flag = False
+    best_ep_reward = -np.inf
     buffer_ = replayBuffer(cfg.off_buffer_size)
+    online_collect_flag = online_collect_nums is not None
+    online_collect_deque_list = []
+    online_collect_count = 0
     for i in tq_bar:
         if update_flag:
             buffer_ = replayBuffer(cfg.off_buffer_size)
+            
+        if (1 + i) % test_ep_freq == 0:
+            if hasattr(agent, "eval"):
+                agent.eval()
+            ep_reward = play(env, agent, cfg, episode_count=3, play_without_seed=train_without_seed, render=False)
+            if hasattr(agent, "train"):
+                agent.train()
+            
+            if ep_reward > best_ep_reward:
+                best_ep_reward = ep_reward
+                # 模型保存
+                if hasattr(agent, "save_model"):
+                    agent.save_model(cfg.save_path)
+                else:
+                    try:
+                        torch.save(agent.target_q.state_dict(), cfg.save_path)
+                    except Exception as e:
+                        torch.save(agent.actor.state_dict(), cfg.save_path)
 
         tq_bar.set_description(f'Episode [ {i+1} / {cfg.num_episode} ](minibatch={mini_b})')    
-        s, _ = env.reset(seed=cfg.seed)
+        rand_seed = np.random.randint(0, 9999)
+        final_seed = rand_seed if train_without_seed else cfg.seed
+        s, _ = env.reset(seed=final_seed)
         done = False
         episode_rewards = 0
         steps = 0
         while not done:
             a = agent.policy(s)
-            n_s, r, done, _, _ = env.step(a)
+            n_s, r, terminated, truncated, _ = env.step(a)
+            done = terminated or truncated
             steps += 1
             mem_done = done_fix(done, steps, cfg.max_episode_steps)
             buffer_.add(s, a, r, n_s, mem_done)
@@ -253,29 +287,58 @@ def train_on_policy(env, agent, cfg, wandb_flag=False, step_lr_flag=False, step_
             episode_rewards += r
             if (episode_rewards >= cfg.max_episode_rewards) or (steps >= cfg.max_episode_steps):
                 break
+        
+        if online_collect_flag and online_collect_count < cfg.off_buffer_size:
+            online_collect_count += len(buffer_)
+            online_collect_deque_list.append(buffer_.buffer)
+            update_flag = True
+        elif(online_collect_flag and online_collect_count >= cfg.off_buffer_size):
+            update_flag = agent.update(online_collect_deque_list)
+            online_collect_count = 0
+            online_collect_deque_list = []
+            print('collect training')
+        else:
+            update_flag = agent.update(buffer_.buffer)
 
-        update_flag = agent.update(buffer_.buffer)
         if step_lr_flag:
             schedule.step()
         rewards_list.append(episode_rewards)
         now_reward = np.mean(rewards_list[-10:])
         if (bf_reward < now_reward) and (i >= 10):
-            if hasattr(agent, "save_model"):
-                agent.save_model(cfg.save_path)
-            else:
-                try:
-                    torch.save(agent.target_q.state_dict(), cfg.save_path)
-                except Exception as e:
-                    torch.save(agent.actor.state_dict(), cfg.save_path)
+            if hasattr(agent, "eval"):
+                agent.eval()
+            # best 时也进行测试
+            ep_reward = play(env, agent, cfg, episode_count=3, play_without_seed=train_without_seed, render=False)
+            if hasattr(agent, "train"):
+                agent.train()
+            
+            if ep_reward > best_ep_reward:
+                best_ep_reward = ep_reward
+                # 模型保存
+                if hasattr(agent, "save_model"):
+                    agent.save_model(cfg.save_path)
+                else:
+                    try:
+                        torch.save(agent.target_q.state_dict(), cfg.save_path)
+                    except Exception as e:
+                        torch.save(agent.actor.state_dict(), cfg.save_path)
+
             bf_reward = now_reward
         
-        tq_bar.set_postfix({"steps": steps,'lastMeanRewards': f'{now_reward:.2f}', 'BEST': f'{bf_reward:.2f}'})
+        tq_bar.set_postfix({
+            "steps": steps,
+            'lastMeanRewards': f'{now_reward:.2f}', 
+            'BEST': f'{bf_reward:.2f}',
+            "bestTestReward": f'{best_ep_reward:.2f}'
+        })
+
         if wandb_flag:
             log_dict = {
                 "steps": steps,
                 'lastMeanRewards': now_reward,
                 'BEST': bf_reward,
-                "episodeRewards": episode_rewards
+                "episodeRewards": episode_rewards,
+                "bestTestReward": best_ep_reward
             }
             if step_lr_flag:
                 log_dict['actor_lr'] = opt.param_groups[0]['lr']
