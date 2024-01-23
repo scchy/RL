@@ -206,6 +206,7 @@ cfg = Config(
 # Episode [ 10061 / 15000|(seed=8409) ]:  67%|██████▋   | 10060/15000 [9:03:17<2:44:32,  2.00s/it, steps=23, lastMeanRewards=140.40, BEST=545.37, bestTestReward=810.89]
 
 def DemonAttack_v5_dqn_new_test():
+    # [ seed=7270 ] Get reward 1500.0. Last 596 times
     env_name = 'ALE/DemonAttack-v5' 
     gym_env_desc(env_name)
     env = gym.make(env_name, obs_type="rgb")
@@ -226,12 +227,12 @@ def DemonAttack_v5_dqn_new_test():
         env, 
         # 环境参数
         split_action_flag=False,
-        save_path=os.path.join(path_, "test_models" ,f'dqn_DemonAttack-v5-new_1'),
+        save_path=os.path.join(path_, "test_models", f'dqn_DemonAttack-v5-new_1'),
         seed=42,
         # 网络参数
         hidden_layers_dim=[200, 200],
         # agent参数
-        learning_rate=2.5e-4,
+        learning_rate=1.0e-4,
         target_update_freq=16,
         gamma=0.99,
         epsilon=0.05,
@@ -240,7 +241,7 @@ def DemonAttack_v5_dqn_new_test():
         off_buffer_size=12000,
         off_minimal_size=1024, 
         sample_size=32,
-        max_episode_steps=260,
+        max_episode_steps=280,
         # agent 其他参数
         dqn_type = 'DoubleDQN-CNN',
         epsilon_start=0.95,
@@ -259,11 +260,11 @@ def DemonAttack_v5_dqn_new_test():
         epsilon_start=cfg.epsilon_start,
         epsilon_decay_steps=cfg.epsilon_decay_steps
     )
-    dqn.train()
-    train_off_policy(env, dqn, cfg, done_add=False, 
-                     train_without_seed=True, 
-                     wandb_flag=False, 
-                     test_ep_freq=50, test_episode_count=5)
+    # dqn.train()
+    # train_off_policy(env, dqn, cfg, done_add=False, 
+    #                  train_without_seed=True, 
+    #                  wandb_flag=False, 
+    #                  test_ep_freq=50, test_episode_count=10)
     dqn.load_model(cfg.save_path)
     dqn.eval()
     env = gym.make(env_name, obs_type="rgb")#, render_mode='human')
@@ -280,5 +281,4 @@ def DemonAttack_v5_dqn_new_test():
     )
     play(env, dqn, cfg, episode_count=1, 
          play_without_seed=True, render=False)
-
 ```
