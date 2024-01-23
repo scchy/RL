@@ -5,3 +5,5 @@
 /src/__pycache__/*.pyc
 /src/test/*.log
 
+/src/RLAlgo/__pycache__
+/src/RLAlgo/__pycache__/*.pyc

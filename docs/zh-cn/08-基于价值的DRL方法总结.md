@@ -16,7 +16,7 @@
 |[ MountainCar-v0 ](state: (2,),action: 3(离散 ))| DuelingDQN | [32, 32] | `dict(action_contiguous_=False, seed=42)` | `dict(epsilon=0.05, target_update_freq=3, gamma=0.95, learning_rate=2e-3)` | `dict(num_episode=200, off_buffer_size=3076, off_minimal_size=1024, sample_size=256, max_episode_steps=500)`| 相对复杂环境: 1.增加网络宽度与深度 2.需要增加探索率`epsilon`; 3.将回合步数调大`max_episode_steps`;需要多次训练尝试，同时也可以适量的增大`off_buffer_size`  |
 |[ Acrobot-v1 ](state: (6,),action: 3(离散 ))| DuelingDQN | [128, 64] | `dict(action_contiguous_=False, seed=42)` | `dict(epsilon=0.05, target_update_freq=3, gamma=0.95, learning_rate=2e-3)` | `dict(num_episode=300, off_buffer_size=20480, off_minimal_size=1024, sample_size=256, max_episode_steps=400)`| 相对复杂环境: 1.增加网络宽度与深度 2.需要增加探索率`epsilon`; 3.将回合步数调大`max_episode_steps`;4. 适量的增大`off_buffer_size`;5. 增加迭代次数  |
 |[ LunarLander-v2 ](state: (8,),action: 4(离散 ))| DuelingDQN | [128, 64] | `dict(action_contiguous_=False, seed=42)` | `dict(epsilon=0.05, target_update_freq=3, gamma=0.99, learning_rate=2e-3)` | `dict(num_episode=800, off_buffer_size=20480, off_minimal_size=2048, sample_size=128, max_episode_steps=200)`| 由于环境需要正确降落, 所以在调参的时候需要调整`max_episode_steps`不能过大也不过小，过大可能会导致智能体悬空，同时需要增加迭代次数`num_episode` ,适当减小每次的`sample_size` |
-|[ ALE/DemonAttack-v5 ](state: (210, 160, 3),action: 6(离散 ))| doubleDQN | CNN+[200, 200]| `dict(action_contiguous_=False, seed=random)` |`dict(epsilon=0.05, target_update_freq=16, gamma=0.95, learning_rate=2.5e-4, epsilon_start=0.95, epsilon_decay_steps=15000)`| `dict(num_episode=1200, off_buffer_size=12000, off_minimal_size=1024, sample_size=32, max_episode_steps=260)`| 主要取决于CNN网络对特征的提取能力, 由于奖励只有打到敌机才有，所以需要适当增加跳帧的数量，强转成"连续奖励"，同时需要增加迭代次数`num_episode` ,适当减小每次的`sample_size` |
+|[ ALE/DemonAttack-v5 ](state: (210, 160, 3),action: 6(离散 ))| doubleDQN | CNN+[200, 200]| `dict(action_contiguous_=False, seed=random)` |`dict(epsilon=0.05, target_update_freq=16, gamma=0.95, learning_rate=1.0e-4, epsilon_start=0.95, epsilon_decay_steps=15000)`| `dict(num_episode=1200, off_buffer_size=12000, off_minimal_size=1024, sample_size=32, max_episode_steps=280)`| 主要取决于CNN网络对特征的提取能力, 由于奖励只有打到敌机才有，所以需要适当增加跳帧的数量，强转成"连续奖励"，同时需要增加迭代次数`num_episode` ,适当减小每次的`sample_size` |
 
 
 ## 8.2 实验效果
@@ -188,7 +188,7 @@ cfg = Config(
 一些技巧(tricks):
 
 1. 环境观察与调整:  
-   1. 跳帧：一个action执行5个step(5桢)
+   1. 跳帧：一个action执行5个step(5桢) 强转成“连续奖励空间”
    2. 图像裁剪->图像转灰度->图像归一化
    3. 对多个输出进行通道叠加`FrameStack`
 2. CNN网络
@@ -197,6 +197,10 @@ cfg = Config(
    3. 增加LayerNorm
 3. DoubleDQN算法调整
    1. 增加epsilon decay
+4. 小结
+   1. 这种环境用onpolicy的算法会更加合适
+   2. 稀疏奖励用DQN难以收敛
+   3. 可以将动作空间缩小：减少作用不大的动作，比如 向左 <= 向左&发射自动；向右 <= 向右&发射自动
 
 ```python
 # Episode [ 10061 / 15000|(seed=8409) ]:  67%|██████▋   | 10060/15000 [9:03:17<2:44:32,  2.00s/it, steps=23, lastMeanRewards=140.40, BEST=545.37, bestTestReward=810.89]
