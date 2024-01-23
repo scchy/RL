@@ -5,7 +5,22 @@ import torch
 from tqdm.auto import tqdm
 import numpy as np
 import wandb
+import copy
 from torch.optim.lr_scheduler import StepLR
+
+
+def save_agent_model(agent, cfg, info=None):
+    if info is None:
+        info = ""
+    if hasattr(agent, "save_model"):
+        agent.save_model(cfg.save_path)
+    else:
+        try:
+            torch.save(agent.target_q.state_dict(), cfg.save_path)
+        except Exception as e:
+            torch.save(agent.actor.state_dict(), cfg.save_path)
+    
+    print(f'Save model -> {cfg.save_path} {info}')
 
 
 def done_fix(done, episode_steps, max_episode_steps):
@@ -25,12 +40,15 @@ def random_action(env):
 
 
 def train_off_policy(env, agent ,cfg, 
-                     action_contiguous=False, done_add=False, reward_func=None, train_without_seed=False,
+                     action_contiguous=False, done_add=False, 
+                     reward_func=None, train_without_seed=False,
                      wandb_flag=False,
                      step_lr_flag=False,
                      step_lr_kwargs=None,
                      update_every=1,
-                     test_ep_freq=100
+                     test_ep_freq=100,
+                     test_episode_count=3,
+                     done_fix_flag=False
                      ):
     if wandb_flag:
         wandb.login()
@@ -55,22 +73,11 @@ def train_off_policy(env, agent ,cfg,
     tt_steps = 0
     for i in tq_bar:
         if (1 + i) % test_ep_freq == 0:
-            if hasattr(agent, "eval"):
-                agent.eval()
-            ep_reward = play(env, agent, cfg, episode_count=3, play_without_seed=train_without_seed, render=False)
-            if hasattr(agent, "train"):
-                agent.train()
-            
+            ep_reward = play(env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False)
             if ep_reward > best_ep_reward:
                 best_ep_reward = ep_reward
                 # 模型保存
-                if hasattr(agent, "save_model"):
-                    agent.save_model(cfg.save_path)
-                else:
-                    try:
-                        torch.save(agent.target_q.state_dict(), cfg.save_path)
-                    except Exception as e:
-                        torch.save(agent.actor.state_dict(), cfg.save_path)
+                save_agent_model(agent, cfg, info='[ test_ep_freq-SAVE ]')
 
         rand_seed = np.random.randint(0, 9999)
         final_seed = rand_seed if train_without_seed else cfg.seed
@@ -83,14 +90,12 @@ def train_off_policy(env, agent ,cfg,
         while not done:
             if len(buffer) < cfg.off_minimal_size:
                 a = random_action(env)
-                # print('random_action a=', np.round(a, 3))
             else:
                 a = agent.policy(s)
                 if policy_idx == 0:
                     rewards_list = []
                     print('Finished collect orginal data')
-                # if a[0] > -0.09:
-                #     print('a=', np.round(a, 3))
+
                 policy_idx += 1
             if action_contiguous:
                 c_a = Pendulum_dis_to_con(a, env, cfg.action_dim)
@@ -101,7 +106,8 @@ def train_off_policy(env, agent ,cfg,
             done = terminated or truncated
             steps += 1
             tt_steps += 1
-            mem_done = done_fix(done, steps, cfg.max_episode_steps)
+
+            mem_done = done_fix(done, steps, cfg.max_episode_steps) if done_fix_flag else done
             ep_r = r
             if reward_func is not None:
                 try:
@@ -127,26 +133,17 @@ def train_off_policy(env, agent ,cfg,
                 buffer.buffer.pop()
             # print(f'\ndrop not done experience-{steps}')
         
-        rewards_list.append(episode_rewards)
-        now_reward = np.mean(rewards_list[-10:])
+        if (len(buffer) >= cfg.off_minimal_size) and (i >= 10):
+            rewards_list.append(episode_rewards)
+            now_reward = np.mean(rewards_list[-10:])
         if (bf_reward < now_reward) and (i >= 10) and (len(buffer) >= cfg.off_minimal_size):
-            if hasattr(agent, "eval"):
-                agent.eval()
             # best 时也进行测试
-            ep_reward = play(env, agent, cfg, episode_count=3, play_without_seed=train_without_seed, render=False)
-            if hasattr(agent, "train"):
-                agent.train()
-            
+            ep_reward = play(env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False)
+
             if ep_reward > best_ep_reward:
                 best_ep_reward = ep_reward
                 # 模型保存
-                if hasattr(agent, "save_model"):
-                    agent.save_model(cfg.save_path)
-                else:
-                    try:
-                        torch.save(agent.target_q.state_dict(), cfg.save_path)
-                    except Exception as e:
-                        torch.save(agent.actor.state_dict(), cfg.save_path)
+                save_agent_model(agent, cfg, info='[ now_reward-SAVE ]')
 
             bf_reward = now_reward
             
@@ -175,14 +172,20 @@ def train_off_policy(env, agent ,cfg,
     return agent
 
 
-def play(env, env_agent, cfg, episode_count=2, action_contiguous=False, play_without_seed=False, render=True):
+@torch.no_grad()
+def play(env_in, env_agent, cfg, episode_count=2, action_contiguous=False, play_without_seed=False, render=True):
     """
-    对训练完成的QNet进行策略游戏
+    对训练完成的Agent进行游戏
     """
+    env = copy.deepcopy(env_in)
+    try:
+        env_agent.eval()
+    except Exception as e:
+        pass
     ep_reward_record = []
     for e in range(episode_count):
-        rand_seed = np.random.randint(0, 9999)
-        s, _ = env.reset(seed=rand_seed if play_without_seed else cfg.seed)
+        final_seed = np.random.randint(0, 9999) if play_without_seed else cfg.seed
+        s, _ = env.reset(seed=final_seed)
         done = False
         episode_reward = 0
         episode_cnt = 0
@@ -200,15 +203,23 @@ def play(env, env_agent, cfg, episode_count=2, action_contiguous=False, play_wit
             episode_reward += reward
             episode_cnt += 1
             s = n_state
+            if done:
+                break
             if (episode_reward >= 3 * cfg.max_episode_rewards) or (episode_cnt >= 3 * cfg.max_episode_steps):
                 break
         ep_reward_record.append(episode_reward)
 
-        print(f'Get reward {episode_reward}. Last {episode_cnt} times')
+        print(f'[ seed={final_seed} ] Get reward {episode_reward}. Last {episode_cnt} times')
     
     if render:
         env.close()
-    return np.mean(ep_reward_record)
+
+    try:
+        env_agent.train()
+    except Exception as e:
+        pass
+
+    return np.percentile(ep_reward_record, 50)
 
 
 
@@ -218,7 +229,11 @@ def train_on_policy(env, agent, cfg,
                     step_lr_flag=False, 
                     step_lr_kwargs=None, 
                     test_ep_freq=100,
-                    online_collect_nums=None):
+                    online_collect_nums=None,
+                    test_episode_count=3,
+                    *args,
+                    **kwargs
+                    ):
     if wandb_flag:
         wandb.login()
         cfg_dict = cfg.__dict__
@@ -252,22 +267,12 @@ def train_on_policy(env, agent, cfg,
             buffer_ = replayBuffer(cfg.off_buffer_size)
             
         if (1 + i) % test_ep_freq == 0:
-            if hasattr(agent, "eval"):
-                agent.eval()
-            ep_reward = play(env, agent, cfg, episode_count=3, play_without_seed=train_without_seed, render=False)
-            if hasattr(agent, "train"):
-                agent.train()
+            ep_reward = play(env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False)
             
             if ep_reward > best_ep_reward:
                 best_ep_reward = ep_reward
                 # 模型保存
-                if hasattr(agent, "save_model"):
-                    agent.save_model(cfg.save_path)
-                else:
-                    try:
-                        torch.save(agent.target_q.state_dict(), cfg.save_path)
-                    except Exception as e:
-                        torch.save(agent.actor.state_dict(), cfg.save_path)
+                save_agent_model(agent, cfg)
 
         tq_bar.set_description(f'Episode [ {i+1} / {cfg.num_episode} ](minibatch={mini_b})')    
         rand_seed = np.random.randint(0, 9999)
@@ -305,23 +310,13 @@ def train_on_policy(env, agent, cfg,
         rewards_list.append(episode_rewards)
         now_reward = np.mean(rewards_list[-10:])
         if (bf_reward < now_reward) and (i >= 10):
-            if hasattr(agent, "eval"):
-                agent.eval()
             # best 时也进行测试
-            ep_reward = play(env, agent, cfg, episode_count=3, play_without_seed=train_without_seed, render=False)
-            if hasattr(agent, "train"):
-                agent.train()
-            
+            ep_reward = play(env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False)
+
             if ep_reward > best_ep_reward:
                 best_ep_reward = ep_reward
                 # 模型保存
-                if hasattr(agent, "save_model"):
-                    agent.save_model(cfg.save_path)
-                else:
-                    try:
-                        torch.save(agent.target_q.state_dict(), cfg.save_path)
-                    except Exception as e:
-                        torch.save(agent.actor.state_dict(), cfg.save_path)
+                save_agent_model(agent, cfg)
 
             bf_reward = now_reward
         

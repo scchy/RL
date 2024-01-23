@@ -194,8 +194,8 @@ def HalfCheetah_v4_ppo_test():
     # train_on_policy(env, agent, cfg, wandb_flag=False, train_without_seed=False, test_ep_freq=500)
     agent.load_model(cfg.save_path)
     agent.eval()
-    env_ = gym.make(env_name) #, render_mode='human')
-    play(env_, agent, cfg, episode_count=2, render=False)
+    env_ = gym.make(env_name, render_mode='human')
+    play(env_, agent, cfg, episode_count=2, render=True)
 
 
 # Hopper-v4
@@ -275,5 +275,5 @@ def Hopper_v4_ppo2_test():
 
 if __name__ == '__main__':
     # ppo_InvertedPendulum_test()
-    # HalfCheetah_v4_ppo_test()
-    Hopper_v4_ppo2_test()
+    HalfCheetah_v4_ppo_test()
+    # Hopper_v4_ppo2_test()

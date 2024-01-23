@@ -16,6 +16,7 @@
 |[ MountainCar-v0 ](state: (2,),action: 3(离散 ))| DuelingDQN | [32, 32] | `dict(action_contiguous_=False, seed=42)` | `dict(epsilon=0.05, target_update_freq=3, gamma=0.95, learning_rate=2e-3)` | `dict(num_episode=200, off_buffer_size=3076, off_minimal_size=1024, sample_size=256, max_episode_steps=500)`| 相对复杂环境: 1.增加网络宽度与深度 2.需要增加探索率`epsilon`; 3.将回合步数调大`max_episode_steps`;需要多次训练尝试，同时也可以适量的增大`off_buffer_size`  |
 |[ Acrobot-v1 ](state: (6,),action: 3(离散 ))| DuelingDQN | [128, 64] | `dict(action_contiguous_=False, seed=42)` | `dict(epsilon=0.05, target_update_freq=3, gamma=0.95, learning_rate=2e-3)` | `dict(num_episode=300, off_buffer_size=20480, off_minimal_size=1024, sample_size=256, max_episode_steps=400)`| 相对复杂环境: 1.增加网络宽度与深度 2.需要增加探索率`epsilon`; 3.将回合步数调大`max_episode_steps`;4. 适量的增大`off_buffer_size`;5. 增加迭代次数  |
 |[ LunarLander-v2 ](state: (8,),action: 4(离散 ))| DuelingDQN | [128, 64] | `dict(action_contiguous_=False, seed=42)` | `dict(epsilon=0.05, target_update_freq=3, gamma=0.99, learning_rate=2e-3)` | `dict(num_episode=800, off_buffer_size=20480, off_minimal_size=2048, sample_size=128, max_episode_steps=200)`| 由于环境需要正确降落, 所以在调参的时候需要调整`max_episode_steps`不能过大也不过小，过大可能会导致智能体悬空，同时需要增加迭代次数`num_episode` ,适当减小每次的`sample_size` |
+|[ ALE/DemonAttack-v5 ](state: (210, 160, 3),action: 6(离散 ))| doubleDQN | CNN+[200, 200]| `dict(action_contiguous_=False, seed=random)` |`dict(epsilon=0.05, target_update_freq=16, gamma=0.95, learning_rate=2.5e-4, epsilon_start=0.95, epsilon_decay_steps=15000)`| `dict(num_episode=1200, off_buffer_size=12000, off_minimal_size=1024, sample_size=32, max_episode_steps=260)`| 主要取决于CNN网络对特征的提取能力, 由于奖励只有打到敌机才有，所以需要适当增加跳帧的数量，强转成"连续奖励"，同时需要增加迭代次数`num_episode` ,适当减小每次的`sample_size` |
 
 
 ## 8.2 实验效果
@@ -26,7 +27,7 @@
 |[ MountainCar-v0 ](state: (2,),action: 3(离散 ))| DuelingDQN | 上述对应配置| ![duelingDQN_MountainCar](../pic/duelingDQN_MountainCar-v0.gif) |
 |[ Acrobot-v1 ](state: (6,),action: 3(离散 ))| DuelingDQN | 上述对应配置| ![duelingDQN_Acrobot](../pic/DQN_Acrobot-v1.gif) |
 |[ LunarLander-v2 ](state: (8,),action: 4(离散 ))| DuelingDQN | 上述对应配置| ![duelingDQN_LunarLander](../pic/duelingDQN_LunarLander-v2.gif) |
-
+|[ ALE/DemonAttack-v5 ](state: (210, 160, 3),action: 6(离散 ))| doubleDQN | 上述对应配置| ![doubleDQN-DemonAc](../pic/) |
 
 ## 8.3 环境实验脚本简述
 
@@ -178,4 +179,102 @@ cfg = Config(
     # agent 其他参数
     dqn_type = 'duelingDQN'
 )
+```
+
+
+**ALE/DemonAttack-v5**
+详细看[github test_dqn.py : DemonAttack_v5_dqn_new_test()](https://github.com/scchy/RL/blob/main/src/test/test_dqn.py)
+
+一些技巧(tricks):
+
+1. 环境观察与调整:  
+   1. 跳帧：一个action执行5个step(5桢)
+   2. 图像裁剪->图像转灰度->图像归一化
+   3. 对多个输出进行通道叠加`FrameStack`
+2. CNN网络
+   1. 解决梯度消失问题(`Vanishing gradient problem`)
+   2. 池化技巧：MaxPool2d + AvgPool2d
+   3. 增加LayerNorm
+3. DoubleDQN算法调整
+   1. 增加epsilon decay
+
+```python
+# Episode [ 10061 / 15000|(seed=8409) ]:  67%|██████▋   | 10060/15000 [9:03:17<2:44:32,  2.00s/it, steps=23, lastMeanRewards=140.40, BEST=545.37, bestTestReward=810.89]
+
+def DemonAttack_v5_dqn_new_test():
+    env_name = 'ALE/DemonAttack-v5' 
+    gym_env_desc(env_name)
+    env = gym.make(env_name, obs_type="rgb")
+    print("gym.__version__ = ", gym.__version__ )
+    env = FrameStack(
+        ResizeObservation(
+            GrayScaleObservation(baseSkipFrame(
+                env, 
+                skip=5, 
+                cut_slices=[[15, 188], [0, 160]],
+                start_skip=14)), 
+            shape=84
+        ), 
+        num_stack=4
+    )
+    path_ = os.path.dirname(__file__)
+    cfg = Config(
+        env, 
+        # 环境参数
+        split_action_flag=False,
+        save_path=os.path.join(path_, "test_models" ,f'dqn_DemonAttack-v5-new_1'),
+        seed=42,
+        # 网络参数
+        hidden_layers_dim=[200, 200],
+        # agent参数
+        learning_rate=2.5e-4,
+        target_update_freq=16,
+        gamma=0.99,
+        epsilon=0.05,
+        # 训练参数
+        num_episode=1200,
+        off_buffer_size=12000,
+        off_minimal_size=1024, 
+        sample_size=32,
+        max_episode_steps=260,
+        # agent 其他参数
+        dqn_type = 'DoubleDQN-CNN',
+        epsilon_start=0.95,
+        epsilon_decay_steps=15000
+    )
+    dqn = DQN(
+        state_dim=cfg.state_dim,
+        hidden_layers_dim=cfg.hidden_layers_dim,
+        action_dim=cfg.action_dim,
+        learning_rate=cfg.learning_rate,
+        gamma=cfg.gamma,
+        epsilon=cfg.epsilon,
+        target_update_freq=cfg.target_update_freq,
+        device=cfg.device,
+        dqn_type=cfg.dqn_type,
+        epsilon_start=cfg.epsilon_start,
+        epsilon_decay_steps=cfg.epsilon_decay_steps
+    )
+    dqn.train()
+    train_off_policy(env, dqn, cfg, done_add=False, 
+                     train_without_seed=True, 
+                     wandb_flag=False, 
+                     test_ep_freq=50, test_episode_count=5)
+    dqn.load_model(cfg.save_path)
+    dqn.eval()
+    env = gym.make(env_name, obs_type="rgb")#, render_mode='human')
+    env = FrameStack(
+        ResizeObservation(
+            GrayScaleObservation(baseSkipFrame(
+                env, 
+                skip=5, 
+                cut_slices=[[15, 188], [0, 160]],
+                start_skip=14)), 
+            shape=84
+        ), 
+        num_stack=4
+    )
+    play(env, dqn, cfg, episode_count=1, 
+         play_without_seed=True, render=False)
+
 ```

@@ -15,6 +15,72 @@ from torch.distributions import Normal
 import gymnasium as gym
 
 
+class CNNQNet(nn.Module):
+    """
+    输入[state, cation], 输出value
+    """
+    def __init__(self, state_dim: int, hidden_layers_dim: typ.List, action_dim: int):
+        super(CNNQNet, self).__init__()
+        self.state_dim = state_dim 
+        self.action_dim = action_dim
+        self.cnn_feature = nn.Sequential(
+            nn.Conv2d(in_channels=4, out_channels=16, kernel_size=4, stride=2),
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2, 0),
+            nn.Conv2d(in_channels=16, out_channels=32, kernel_size=4, stride=2),
+            nn.ReLU(),
+            nn.AvgPool2d(2, 2, 0),
+            nn.Flatten()
+        )
+        # self.cnn_feature = nn.Sequential(
+        #     nn.Conv2d(in_channels=4, out_channels=16, kernel_size=8, stride=4),
+        #     nn.ReLU(),
+        #     nn.MaxPool2d(2, 2, 0),
+        #     nn.Conv2d(in_channels=16, out_channels=32, kernel_size=4, stride=2),
+        #     nn.ReLU(),
+        #     nn.AvgPool2d(2, 1, 0),
+        #     nn.Conv2d(in_channels=32, out_channels=64, kernel_size=2, stride=1),
+        #     nn.ReLU(),
+        #     nn.Flatten(),
+        # )
+
+        self.features = nn.ModuleList()
+        cnn_out_dim = self._get_cnn_out_dim()
+        print(f'state_dim => {state_dim}')
+        print(f'cnn_out_dim => {cnn_out_dim}')
+        self.ln = nn.LayerNorm(cnn_out_dim)
+        for idx, h in enumerate(hidden_layers_dim):
+            self.features.append(nn.ModuleDict({
+                'linear': nn.Linear(hidden_layers_dim[idx-1] if idx else cnn_out_dim, h),
+                'linear_activation': nn.ReLU()
+            }))
+
+        self.head = nn.Linear(hidden_layers_dim[-1], action_dim)
+
+    @torch.no_grad
+    def _get_cnn_out_dim(self):
+        pic = torch.randn((1, 4, self.# The above code is declaring a variable named "state_dim" in
+        # Python. However, the code is incomplete and does not assign a
+        # value to the variable.
+        state_dim, self.state_dim))
+        return self.cnn_feature(pic).shape[1]
+    
+    def forward(self, state):
+        if len(state.shape) == 3:
+            state = state.unsqueeze(0)
+        try:
+            x = self.cnn_feature(state)
+        except Exception as e:
+            state = state.permute(0, 3, 1, 2)
+            x = self.cnn_feature(state)
+
+        x = self.ln(x)
+        for layer1 in self.features:
+            x = layer1['linear_activation'](layer1['linear'](x))
+
+        return self.head(x)
+
+
 class VANet(nn.Module):
     # 可以让智能体开始关注不同动作优势值的差异
     # Dueling DQN 能够更加频繁、准确地学习状态价值函数
