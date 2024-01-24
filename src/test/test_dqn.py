@@ -182,7 +182,9 @@ def DemonAttack_v5_dqn_new_test():
                 env, 
                 skip=5, 
                 cut_slices=[[15, 188], [0, 160]],
-                start_skip=14)), 
+                start_skip=14,
+                neg_action_kwargs={0: -0.1, 1: -0.01, 2: -0.01, 3: -0.01}
+                )), 
             shape=84
         ), 
         num_stack=4
@@ -232,24 +234,28 @@ def DemonAttack_v5_dqn_new_test():
     #                  test_ep_freq=50, test_episode_count=10)
     dqn.load_model(cfg.save_path)
     dqn.eval()
-    env = gym.make(env_name, obs_type="rgb")#, render_mode='human')
+    env = gym.make(env_name, obs_type="rgb", render_mode='human')
     env = FrameStack(
         ResizeObservation(
             GrayScaleObservation(baseSkipFrame(
                 env, 
                 skip=5, 
                 cut_slices=[[15, 188], [0, 160]],
-                start_skip=14)), 
+                start_skip=14
+                )), 
             shape=84
         ), 
         num_stack=4
     )
     play(env, dqn, cfg, episode_count=1, 
-         play_without_seed=True, render=False)
+         play_without_seed=True, render=True)
+
 
 
 if __name__ == '__main__':
     # LunarLander_dqn_test()
     # DemonAttack_v5_dqn_test()
     DemonAttack_v5_dqn_new_test()
+
+
 

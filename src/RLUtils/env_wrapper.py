@@ -11,7 +11,7 @@ from torchvision import transforms
 from gymnasium.spaces import Box
 from gymnasium.wrappers import FrameStack, LazyFrames
 from collections import deque
-from typing import List
+from typing import List, Dict
 
 
 class baseSkipFrame(gym.Wrapper):
@@ -20,7 +20,8 @@ class baseSkipFrame(gym.Wrapper):
             env, 
             skip: int, 
             cut_slices: List[List[int]]=None,
-            start_skip: int=None
+            start_skip: int=None,
+            neg_action_kwargs: Dict=None
         ):
         """_summary_
 
@@ -29,11 +30,13 @@ class baseSkipFrame(gym.Wrapper):
             skip (int): skip frames
             cut_slices (List[List[int]], optional): pic observation cut. Defaults to None.
             start_skip (int, optional): skip several frames to start. Defaults to None.
+            neg_action_kwargs (Dict): {action: neg_reward} 对某些动作予以负分
         """
         super().__init__(env)
         self._skip = skip
         self.pic_cut_slices = cut_slices
         self.start_skip = start_skip
+        self.neg_action_kwargs = neg_action_kwargs
     
     def _cut_slice(self, obs):
         slice_list = []
@@ -44,11 +47,19 @@ class baseSkipFrame(gym.Wrapper):
         return obs
 
     def step(self, action):
+        neg_r = 0.0
+        if self.neg_action_kwargs is not None:
+            try:
+                a_ = action[0]
+            except Exception as e:
+                a_ = int(action)
+            neg_r = self.neg_action_kwargs.get(a_, 0.0)
         tt_reward_list = []
         done = False
         total_reward = 0
         for i in range(self._skip):
             obs, reward, terminated, truncated, info = self.env.step(action)
+            reward += neg_r
             done_f = terminated or truncated
             total_reward += reward
             tt_reward_list.append(reward)
