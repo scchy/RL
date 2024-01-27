@@ -2,7 +2,7 @@
 import os
 from os.path import dirname
 import sys
-import gym
+import gymnasium as gym
 import torch
 dir_ = dirname(dirname(__file__))
 print(dir_)
