@@ -2,7 +2,7 @@
 import os
 from os.path import dirname
 import sys
-import gym
+import gymnasium as gym
 import torch
 
 try:
@@ -183,7 +183,7 @@ def DemonAttack_v5_dqn_new_test():
                 skip=5, 
                 cut_slices=[[15, 188], [0, 160]],
                 start_skip=14,
-                neg_action_kwargs={0: -0.1, 1: -0.01, 2: -0.01, 3: -0.01}
+                # neg_action_kwargs={0: -0.1, 1: -0.01, 2: -0.01, 3: -0.01}
                 )), 
             shape=84
         ), 
@@ -199,20 +199,20 @@ def DemonAttack_v5_dqn_new_test():
         # 网络参数
         hidden_layers_dim=[200, 200],
         # agent参数
-        learning_rate=1.0e-4,
+        learning_rate=1.5e-4,
         target_update_freq=16,
         gamma=0.99,
         epsilon=0.05,
         # 训练参数
-        num_episode=1200,
-        off_buffer_size=12000,
+        num_episode=1500,
+        off_buffer_size=10000,
         off_minimal_size=1024, 
         sample_size=32,
         max_episode_steps=280,
         # agent 其他参数
         dqn_type = 'DoubleDQN-CNN',
         epsilon_start=0.95,
-        epsilon_decay_steps=15000
+        epsilon_decay_steps=20000
     )
     dqn = DQN(
         state_dim=cfg.state_dim,
@@ -231,7 +231,7 @@ def DemonAttack_v5_dqn_new_test():
     # train_off_policy(env, dqn, cfg, done_add=False, 
     #                  train_without_seed=True, 
     #                  wandb_flag=False, 
-    #                  test_ep_freq=50, test_episode_count=10)
+    #                  test_ep_freq=50, test_episode_count=5)
     dqn.load_model(cfg.save_path)
     dqn.eval()
     env = gym.make(env_name, obs_type="rgb", render_mode='human')
@@ -254,7 +254,6 @@ def DemonAttack_v5_dqn_new_test():
 
 if __name__ == '__main__':
     # LunarLander_dqn_test()
-    # DemonAttack_v5_dqn_test()
     DemonAttack_v5_dqn_new_test()
 
 

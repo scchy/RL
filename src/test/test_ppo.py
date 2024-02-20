@@ -209,7 +209,17 @@ def Hopper_v4_ppo2_test():
     print("gym.__version__ = ", gym.__version__ )
     path_ = os.path.dirname(__file__)
     # step1: 不限制unhealthy 但是对healthy_reward进行加权 step不能太多（噪声样本会变多） [v4_test2: max_episode_steps=160] dao zhi xuehuiqingdao
-    env = gym.make(env_name, healthy_reward=1.5, terminate_when_unhealthy=False) # daoxia 
+    env = gym.make(env_name,
+                   reset_noise_scale=1e-2,
+                   healthy_reward=1,
+                   ctrl_cost_weight=0.05,
+                   forward_reward_weight=2.0,
+                   exclude_current_positions_from_observation=True,
+                   healthy_state_range=(-130, 130),      # default (-100, 100)
+                   healthy_z_range=(0.2, float('inf')),  # default (0.7, float("inf"))
+                   healthy_angle_range=(-0.45, 0.45),      # default (-0.2, 0.2)
+                   terminate_when_unhealthy=True
+                   )  
     # env = gym.make(env_name, healthy_reward=2.0, forward_reward_weight=1.0, 
     #                healthy_state_range=(-150, 150),      # default (-100, 100)
     #                healthy_z_range=(0.5, float('inf')),  # default (0.7, float("inf"))
@@ -228,26 +238,22 @@ def Hopper_v4_ppo2_test():
         save_path=os.path.join(path_, "test_models" ,'PPO_Hopper-v4_test2'), 
         seed=42,
         # 网络参数
-        actor_hidden_layers_dim=[256, 256], # [200, 200],
+        actor_hidden_layers_dim=[256, 256],
         critic_hidden_layers_dim=[256, 256],
         # agent参数
-        # step1
-        actor_lr=2e-4, # 5e-4,
-        critic_lr=7.5e-4,  # 1e-3
-        # step2
-        # actor_lr=1e-4, # 2.5e-4,
-        # critic_lr=3.5e-4, # 5e-4, 
+        actor_lr=1.5e-5,
+        critic_lr=3e-4,
         gamma=0.98,
         # 训练参数
-        num_episode=1000,
-        off_buffer_size=10240,
+        num_episode=5000,
+        off_buffer_size=512,
         max_episode_steps=500,
         PPO_kwargs={
             'lmbda': 0.9,
-            'eps': 0.2,
+            'eps': 0.15,
             'k_epochs': 8, 
             'sgd_batch_size': 256,
-            'minibatch_size': 64, 
+            'minibatch_size': 32, 
             'actor_nums': 3,
             'actor_bound': 1
         }
@@ -264,18 +270,89 @@ def Hopper_v4_ppo2_test():
         device=cfg.device,
         reward_func=None
     )
-    # # agent.load_model(os.path.join(path_, "test_models" ,'PPO_Hopper-v4_test2'))
     agent.train()
     train_on_policy(env, agent, cfg, wandb_flag=False, train_without_seed=True, test_ep_freq=1000, 
                     online_collect_nums=cfg.off_buffer_size,
                     test_episode_count=5)
     agent.load_model(cfg.save_path)
     agent.eval()
-    env_ = gym.make(env_name) #, render_mode='human')
-    play(env_, agent, cfg, episode_count=2, render=False) # render=True)  #  
+    env_ = gym.make(env_name,
+                   reset_noise_scale=1e-2,
+                   healthy_reward=1,
+                   ctrl_cost_weight=0.05,
+                   forward_reward_weight=2.0,
+                   exclude_current_positions_from_observation=True,
+                   healthy_state_range=(-130, 130),      # default (-100, 100)
+                   healthy_z_range=(0.2, float('inf')),  # default (0.7, float("inf"))
+                   healthy_angle_range=(-0.45, 0.45),      # default (-0.2, 0.2)
+                   terminate_when_unhealthy=True,
+                   render_mode='human')
+    play(env_, agent, cfg, episode_count=2, render=True) # render=True)  #  
+
+
+def Humanoid_v4_ppo2_test():
+    """
+    policyNet: 
+    valueNet: 
+    """
+    env_name = 'Humanoid-v4'
+    gym_env_desc(env_name)
+    print("gym.__version__ = ", gym.__version__ )
+    path_ = os.path.dirname(__file__)
+    env = gym.make(env_name)  
+    cfg = Config(
+        env, 
+        # 环境参数
+        save_path=os.path.join(path_, "test_models" ,'PPO_Humanoid-v4_test'), 
+        seed=42,
+        # 网络参数
+        actor_hidden_layers_dim=[512, 512],
+        critic_hidden_layers_dim=[512, 512],
+        # agent参数
+        actor_lr=1e-4,
+        critic_lr=5e-4,
+        gamma=0.98,
+        # 训练参数
+        num_episode=5000,
+        off_buffer_size=512,
+        max_episode_steps=500,
+        PPO_kwargs={
+            'lmbda': 0.9,
+            'eps': 0.15,
+            'k_epochs': 8, 
+            'sgd_batch_size': 256,
+            'minibatch_size': 32, 
+            'actor_nums': 3,
+            'actor_bound': 0.4
+        }
+    )
+    agent = PPO2(
+        state_dim=cfg.state_dim,
+        actor_hidden_layers_dim=cfg.actor_hidden_layers_dim,
+        critic_hidden_layers_dim=cfg.critic_hidden_layers_dim,
+        action_dim=cfg.action_dim,
+        actor_lr=cfg.actor_lr,
+        critic_lr=cfg.critic_lr,
+        gamma=cfg.gamma,
+        PPO_kwargs=cfg.PPO_kwargs,
+        device=cfg.device,
+        reward_func=None
+    )
+    agent.train()
+    train_on_policy(env, agent, cfg, wandb_flag=False, train_without_seed=True, test_ep_freq=1000, 
+                    online_collect_nums=cfg.off_buffer_size,
+                    test_episode_count=5)
+    agent.load_model(cfg.save_path)
+    agent.eval()
+    env_ = gym.make(env_name, render_mode='human')
+    play(env_, agent, cfg, episode_count=2, render=True) # render=True)  #  
+
+
+
 
 
 if __name__ == '__main__':
     # ppo_InvertedPendulum_test()
     # HalfCheetah_v4_ppo_test()
     Hopper_v4_ppo2_test()
+    # Humanoid_v4_ppo2_test()
