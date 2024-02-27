@@ -260,9 +260,9 @@ def Hopper_v4_ppo2_test():
     agent.eval()
     env_ = gym.make(env_name, 
                     exclude_current_positions_from_observation=True,
-                    render_mode='human'
+                    # render_mode='human'
                     ) # , render_mode='human'
-    play(env_, agent, cfg, episode_count=2, render=True)
+    play(env_, agent, cfg, episode_count=3, play_without_seed=True, render=False)
 
 
 def rd_hopper():
