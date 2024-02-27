@@ -27,7 +27,7 @@
 |[ MountainCar-v0 ](state: (2,),action: 3(离散 ))| DuelingDQN | 上述对应配置| ![duelingDQN_MountainCar](../pic/duelingDQN_MountainCar-v0.gif) |
 |[ Acrobot-v1 ](state: (6,),action: 3(离散 ))| DuelingDQN | 上述对应配置| ![duelingDQN_Acrobot](../pic/DQN_Acrobot-v1.gif) |
 |[ LunarLander-v2 ](state: (8,),action: 4(离散 ))| DuelingDQN | 上述对应配置| ![duelingDQN_LunarLander](../pic/duelingDQN_LunarLander-v2.gif) |
-|[ ALE/DemonAttack-v5 ](state: (210, 160, 3),action: 6(离散 ))| doubleDQN | 上述对应配置| ![doubleDQN-DemonAc](../pic/) |
+|[ ALE/DemonAttack-v5 ](state: (210, 160, 3),action: 6(离散 ))| doubleDQN | 上述对应配置| ![doubleDQN-DemonAc](../pic/DQN_DemonAttack-v5.gif) |
 
 ## 8.3 环境实验脚本简述
 
