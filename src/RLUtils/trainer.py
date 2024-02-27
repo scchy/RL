@@ -34,7 +34,7 @@ def done_fix(done, episode_steps, max_episode_steps):
 def random_action(env):
     asp = env.action_space
     try:
-        return np.random.uniform(low=asp.low, high=asp.high)
+        return asp.sample()
     except Exception as e:
         return np.random.choice(asp.n)
 
@@ -231,6 +231,7 @@ def train_on_policy(env, agent, cfg,
                     test_ep_freq=100,
                     online_collect_nums=None,
                     test_episode_count=3,
+                    done_fix_flag=False,
                     *args,
                     **kwargs
                     ):
@@ -262,11 +263,12 @@ def train_on_policy(env, agent, cfg,
     online_collect_flag = online_collect_nums is not None
     online_collect_deque_list = []
     online_collect_count = 0
+    policy_idx = 0
     for i in tq_bar:
         if update_flag:
             buffer_ = replayBuffer(cfg.off_buffer_size)
             
-        if (1 + i) % test_ep_freq == 0:
+        if (1 + i) % test_ep_freq == 0 and policy_idx > 0:
             ep_reward = play(env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False)
             
             if ep_reward > best_ep_reward:
@@ -282,26 +284,36 @@ def train_on_policy(env, agent, cfg,
         episode_rewards = 0
         steps = 0
         while not done:
-            a = agent.policy(s)
+            if sum([len(i) for i in online_collect_deque_list]) < cfg.off_minimal_size and policy_idx == 0:
+                a = random_action(env)
+            else:
+                a = agent.policy(s)
+                if policy_idx == 0:
+                    rewards_list = []
+                    print('Finished collect orginal data')
+                    policy_idx += 1
+
             n_s, r, terminated, truncated, _ = env.step(a)
             done = terminated or truncated
             steps += 1
-            mem_done = done_fix(done, steps, cfg.max_episode_steps)
+            mem_done = done 
+            if done_fix_flag:
+                mem_done = done_fix(done, steps, cfg.max_episode_steps)
             buffer_.add(s, a, r, n_s, mem_done)
             s = n_s
             episode_rewards += r
             if (episode_rewards >= cfg.max_episode_rewards) or (steps >= cfg.max_episode_steps):
                 break
         
-        if online_collect_flag and online_collect_count < cfg.off_buffer_size:
+        if online_collect_flag and online_collect_count < online_collect_nums:
             online_collect_count += len(buffer_)
             online_collect_deque_list.append(buffer_.buffer)
             update_flag = True
-        elif(online_collect_flag and online_collect_count >= cfg.off_buffer_size):
+        elif(online_collect_flag and online_collect_count >= online_collect_nums):
             update_flag = agent.update(online_collect_deque_list)
             online_collect_count = 0
             online_collect_deque_list = []
-            print('collect training')
+            # print('collect training')
         else:
             update_flag = agent.update(buffer_.buffer)
 
@@ -309,7 +321,7 @@ def train_on_policy(env, agent, cfg,
             schedule.step()
         rewards_list.append(episode_rewards)
         now_reward = np.mean(rewards_list[-10:])
-        if (bf_reward < now_reward) and (i >= 10):
+        if (bf_reward < now_reward) and (i >= 10) and policy_idx > 0:
             # best 时也进行测试
             ep_reward = play(env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False)
 
@@ -344,3 +356,36 @@ def train_on_policy(env, agent, cfg,
     if wandb_flag:
         wandb.finish()
     return agent
+
+
+
+@torch.no_grad()
+def random_play(env_in, episode_count=3, render=True, play_without_seed=False):
+
+    env = copy.deepcopy(env_in)
+    ep_reward_record = []
+    for e in range(episode_count):
+        final_seed = np.random.randint(0, 9999) if play_without_seed else 42
+        s, _ = env.reset(seed=final_seed)
+        done = False
+        episode_reward = 0
+        episode_cnt = 0
+        while not done:
+            if render:
+                env.render()
+            a = env_in.action_space.sample()
+            n_state, reward, terminated, truncated, _ = env.step(a)
+            done = terminated or truncated
+            episode_reward += reward
+            episode_cnt += 1
+            s = n_state
+            if done:
+                break
+
+        ep_reward_record.append(episode_reward)
+        print(f'[ seed={final_seed} ] Get reward {episode_reward}. Last {episode_cnt} times')
+    
+    if render:
+        env.close()
+    return np.percentile(ep_reward_record, 50)
+

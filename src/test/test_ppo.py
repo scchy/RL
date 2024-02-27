@@ -15,7 +15,7 @@ print(dir_)
 sys.path.append(dir_)
 from RLAlgo.PPO import PPO
 from RLAlgo.PPO2 import PPO2
-from RLUtils import train_on_policy, play, Config, gym_env_desc
+from RLUtils import train_on_policy, random_play, play, Config, gym_env_desc
 
 
 def r_func(r):
@@ -207,55 +207,37 @@ def Hopper_v4_ppo2_test():
     env_name = 'Hopper-v4'
     gym_env_desc(env_name)
     print("gym.__version__ = ", gym.__version__ )
-    path_ = os.path.dirname(__file__)
-    # step1: 不限制unhealthy 但是对healthy_reward进行加权 step不能太多（噪声样本会变多） [v4_test2: max_episode_steps=160] dao zhi xuehuiqingdao
-    env = gym.make(env_name,
-                   reset_noise_scale=1e-2,
-                   healthy_reward=1,
-                   ctrl_cost_weight=0.05,
-                   forward_reward_weight=2.0,
-                   exclude_current_positions_from_observation=True,
-                   healthy_state_range=(-130, 130),      # default (-100, 100)
-                   healthy_z_range=(0.2, float('inf')),  # default (0.7, float("inf"))
-                   healthy_angle_range=(-0.45, 0.45),      # default (-0.2, 0.2)
-                   terminate_when_unhealthy=True
-                   )  
-    # env = gym.make(env_name, healthy_reward=2.0, forward_reward_weight=1.0, 
-    #                healthy_state_range=(-150, 150),      # default (-100, 100)
-    #                healthy_z_range=(0.5, float('inf')),  # default (0.7, float("inf"))
-    #                healthy_angle_range=(-0.45, 0.45),      # default (-0.2, 0.2)
-    #                terminate_when_unhealthy=False)
-    # step2: 限制unhealthy  对forward_reward_weight进行加权 [v4_test3: max_episode_steps=560] 
-    # env = gym.make(env_name, healthy_reward=2.0, forward_reward_weight=1.0, 
-    #                healthy_state_range=(-150, 150),      # default (-100, 100)
-    #                healthy_z_range=(0.2, float('inf')),  # default (0.7, float("inf"))
-    #                healthy_angle_range=(-0.45, 0.45),      # default (-0.2, 0.2)
-    #                terminate_when_unhealthy=True)
-
+    path_ = os.path.dirname(__file__) 
+    env = gym.make(
+        env_name, 
+        exclude_current_positions_from_observation=True,
+        # healthy_reward=0
+    )
     cfg = Config(
         env, 
         # 环境参数
         save_path=os.path.join(path_, "test_models" ,'PPO_Hopper-v4_test2'), 
         seed=42,
         # 网络参数
-        actor_hidden_layers_dim=[256, 256],
-        critic_hidden_layers_dim=[256, 256],
+        actor_hidden_layers_dim=[256, 256, 256],
+        critic_hidden_layers_dim=[256, 256, 256],
         # agent参数
-        actor_lr=1.5e-5,
-        critic_lr=3e-4,
-        gamma=0.98,
+        actor_lr=1.5e-4,
+        critic_lr=5.5e-4,
+        gamma=0.99,
         # 训练参数
-        num_episode=5000,
+        num_episode=12500,
         off_buffer_size=512,
+        off_minimal_size=510,
         max_episode_steps=500,
         PPO_kwargs={
             'lmbda': 0.9,
-            'eps': 0.15,
-            'k_epochs': 8, 
-            'sgd_batch_size': 256,
-            'minibatch_size': 32, 
-            'actor_nums': 3,
-            'actor_bound': 1
+            'eps': 0.25,
+            'k_epochs': 4, 
+            'sgd_batch_size': 128,
+            'minibatch_size': 12, 
+            'actor_bound': 1,
+            'dist_type': 'beta'
         }
     )
     agent = PPO2(
@@ -270,24 +252,30 @@ def Hopper_v4_ppo2_test():
         device=cfg.device,
         reward_func=None
     )
-    agent.train()
-    train_on_policy(env, agent, cfg, wandb_flag=False, train_without_seed=True, test_ep_freq=1000, 
-                    online_collect_nums=cfg.off_buffer_size,
-                    test_episode_count=5)
+    # agent.train()
+    # train_on_policy(env, agent, cfg, wandb_flag=False, train_without_seed=True, test_ep_freq=1000, 
+    #                 online_collect_nums=cfg.off_buffer_size,
+    #                 test_episode_count=5)
     agent.load_model(cfg.save_path)
     agent.eval()
-    env_ = gym.make(env_name,
-                   reset_noise_scale=1e-2,
-                   healthy_reward=1,
-                   ctrl_cost_weight=0.05,
-                   forward_reward_weight=2.0,
-                   exclude_current_positions_from_observation=True,
-                   healthy_state_range=(-130, 130),      # default (-100, 100)
-                   healthy_z_range=(0.2, float('inf')),  # default (0.7, float("inf"))
-                   healthy_angle_range=(-0.45, 0.45),      # default (-0.2, 0.2)
-                   terminate_when_unhealthy=True,
-                   render_mode='human')
-    play(env_, agent, cfg, episode_count=2, render=True) # render=True)  #  
+    env_ = gym.make(env_name, 
+                    exclude_current_positions_from_observation=True,
+                    render_mode='human'
+                    ) # , render_mode='human'
+    play(env_, agent, cfg, episode_count=2, render=True)
+
+
+def rd_hopper():
+    env_name = 'Hopper-v4'
+    gym_env_desc(env_name)
+    print("gym.__version__ = ", gym.__version__ )
+    env = gym.make(
+        env_name, 
+        render_mode='human',
+        exclude_current_positions_from_observation=True,
+    )
+    random_play(env, episode_count=10)
+
 
 
 def Humanoid_v4_ppo2_test():
@@ -356,3 +344,4 @@ if __name__ == '__main__':
     # HalfCheetah_v4_ppo_test()
     Hopper_v4_ppo2_test()
     # Humanoid_v4_ppo2_test()
+    # rd_hopper()

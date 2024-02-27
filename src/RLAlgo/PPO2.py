@@ -24,8 +24,11 @@ from typing import List
 def mini_batch(batch, mini_batch_size):
     mini_batch_size += 1
     states, actions, old_log_probs, adv, td_target = zip(*batch)
+    # trick1: batch_normalize
+    adv = torch.stack(adv)
+    adv = (adv - torch.mean(adv)) / (torch.std(adv) + 1e-8)
     return torch.stack(states[:mini_batch_size]), torch.stack(actions[:mini_batch_size]), \
-        torch.stack(old_log_probs[:mini_batch_size]), torch.stack(adv[:mini_batch_size]), torch.stack(td_target[:mini_batch_size])
+        torch.stack(old_log_probs[:mini_batch_size]), adv[:mini_batch_size], torch.stack(td_target[:mini_batch_size])
 
         
 class memDataset(Dataset):
@@ -79,13 +82,14 @@ class PPO2:
                 reward_func: typ.Optional[typ.Callable]=None
                 ):
         dist_type = PPO_kwargs.get('dist_type', 'beta')
+        self.dist_type = dist_type
         self.actor = policyNet(state_dim, actor_hidden_layers_dim, action_dim, dist_type=dist_type).to(device)
         self.critic = valueNet(state_dim, critic_hidden_layers_dim).to(device)
         self.actor_lr = actor_lr
         self.critic_lr = critic_lr
         self.actor_opt = torch.optim.Adam(self.actor.parameters(), lr=actor_lr)
         self.critic_opt = torch.optim.Adam(self.critic.parameters(), lr=critic_lr)
-        
+
         self.gamma = gamma
         self.lmbda = PPO_kwargs['lmbda']
         self.k_epochs = PPO_kwargs['k_epochs'] # 一条序列的数据用来训练的轮次
@@ -93,15 +97,35 @@ class PPO2:
         self.sgd_batch_size = PPO_kwargs.get('sgd_batch_size', 512)
         self.minibatch_size = PPO_kwargs.get('minibatch_size', 128)
         self.action_bound = PPO_kwargs.get('action_bound', 1.0)
+        self.action_low = -1 * self.action_bound 
+        self.action_high = self.action_bound
+        if 'action_space' in PPO_kwargs:
+            self.action_low = self.action_space.low
+            self.action_high = self.action_space.high
+        
         self.count = 0 
         self.device = device
         self.reward_func = reward_func
         self.min_batch_collate_func = partial(mini_batch, mini_batch_size=self.minibatch_size)
     
+    def _action_fix(self, act):
+        if self.dist_type == 'beta':
+            # beta 0-1 -> low ~ high
+            return act * (self.action_high - self.action_low) + self.action_low
+        return act 
+    
+    def _action_return(self, act):
+        if self.dist_type == 'beta':
+            # low ~ high -> 0-1 
+            act_out = (act - self.action_low) / (self.action_high - self.action_low)
+            return act_out * 1 + 0
+        return act 
+
     def policy(self, state):
         state = torch.FloatTensor(np.array([state])).to(self.device)
         action_dist = self.actor.get_dist(state, self.action_bound)
         action = action_dist.sample()
+        action = self._action_fix(action)
         return action.cpu().detach().numpy()[0]
     
     def _one_deque_pp(self, samples: deque):
@@ -122,8 +146,7 @@ class PPO2:
         # recompute
         td_target = advantage + old_v
         action_dists = self.actor.get_dist(state, self.action_bound)
-        # 动作是正态分布
-        old_log_probs = action_dists.log_prob(action)
+        old_log_probs = action_dists.log_prob(self._action_return(action))
         return state, action, old_log_probs, advantage, td_target
         
     def data_prepare(self, samples_list: List[deque]):
@@ -163,11 +186,9 @@ class PPO2:
         for _ in range(self.k_epochs):
             for state_, action_, old_log_prob, adv, td_v in train_loader:
                 action_dists = self.actor.get_dist(state_, self.action_bound)
-                log_prob = action_dists.log_prob(action_)
+                log_prob = action_dists.log_prob(self._action_return(action_))
                 if len(log_prob.shape) == 2:
                     log_prob = log_prob.sum(dim=1)
-                # trick1: batch_normalize
-                adv = (adv - torch.mean(adv)) / (torch.std(adv) + 1e-8)
                 # e(log(a/b))
                 ratio = torch.exp(log_prob - old_log_prob.detach())
                 surr1 = ratio * adv

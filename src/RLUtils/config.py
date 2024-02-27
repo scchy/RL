@@ -124,6 +124,9 @@ class Config:
             print(k, '=>', v)
             self.__setattr__(k, v)
 
+        if self.off_buffer_size < self.off_minimal_size:
+            self.off_minimal_size = self.off_buffer_size - 1
+
     # def __iter__(self):
     
     # def dict2config(self, dict):

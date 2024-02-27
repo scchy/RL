@@ -39,6 +39,8 @@ class baseSkipFrame(gym.Wrapper):
         self.neg_action_kwargs = neg_action_kwargs
     
     def _cut_slice(self, obs):
+        if self.pic_cut_slices is None:
+            return obs
         slice_list = []
         for idx, dim_i_slice in enumerate(self.pic_cut_slices):
             slice_list.append(eval('np.s_[{st}:{ed}]'.format(st=dim_i_slice[0], ed=dim_i_slice[1])))
