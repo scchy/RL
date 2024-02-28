@@ -1,4 +1,4 @@
-
+.vscode
 /src/RLUtils/__pycache__
 /src/RLUtils/__pycache__/*.pyc
 /src/__pycache__
