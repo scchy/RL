@@ -7,6 +7,32 @@ import numpy as np
 import wandb
 import copy
 from torch.optim.lr_scheduler import StepLR
+from datetime import datetime 
+from pynvml import (
+    nvmlDeviceGetHandleByIndex, nvmlInit, nvmlDeviceGetMemoryInfo, 
+    nvmlDeviceGetName,  nvmlShutdown, nvmlDeviceGetCount
+)
+
+
+def cuda_mem():
+    # 21385MiB / 81920MiB
+    fill = 0
+    n = datetime.now()
+    nvmlInit()
+    # 创建句柄
+    for i in range(nvmlDeviceGetCount()):
+        handle = nvmlDeviceGetHandleByIndex(i)
+        # 获取信息
+        info = nvmlDeviceGetMemoryInfo(handle)
+        # 获取gpu名称
+        gpu_name = nvmlDeviceGetName(handle)
+        # 查看型号、显存、温度、电源
+        print("[ {} ]-[ GPU{}: {}".format(n, 0, gpu_name), end="    ")
+        print("总共显存: {:.3}G".format((info.total // 1048576) / 1024), end="    ")
+        print("空余显存: {:.3}G".format((info.free // 1048576) / 1024), end="    ")
+        model_use = (info.used  // 1048576) - fill
+        print("模型使用显存: {:.3}G({}MiB)".format( model_use / 1024, model_use))
+    nvmlShutdown()
 
 
 def save_agent_model(agent, cfg, info=None):

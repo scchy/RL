@@ -16,6 +16,7 @@ sys.path.append(dir_)
 from RLAlgo.PPO import PPO
 from RLAlgo.PPO2 import PPO2
 from RLUtils import train_on_policy, random_play, play, Config, gym_env_desc
+from RLUtils.env_wrapper import FrameStack, baseSkipFrame, GrayScaleObservation, ResizeObservation
 
 
 def r_func(r):
@@ -283,6 +284,7 @@ def Humanoid_v4_ppo2_test():
     policyNet: 
     valueNet: 
     """
+    # [ Humanoid-v4 ](state: (376,),action: (17,)(连续 <-0.4 -> 0.4>))
     env_name = 'Humanoid-v4'
     gym_env_desc(env_name)
     print("gym.__version__ = ", gym.__version__ )
@@ -294,24 +296,23 @@ def Humanoid_v4_ppo2_test():
         save_path=os.path.join(path_, "test_models" ,'PPO_Humanoid-v4_test'), 
         seed=42,
         # 网络参数
-        actor_hidden_layers_dim=[512, 512],
-        critic_hidden_layers_dim=[512, 512],
+        actor_hidden_layers_dim=[800, 400, 200, 128],
+        critic_hidden_layers_dim=[800, 400, 200, 128],
         # agent参数
-        actor_lr=1e-4,
-        critic_lr=5e-4,
-        gamma=0.98,
+        actor_lr=2.0e-4,
+        critic_lr=5.5e-3,
+        gamma=0.99,
         # 训练参数
-        num_episode=5000,
+        num_episode=10000,
         off_buffer_size=512,
         max_episode_steps=500,
         PPO_kwargs={
             'lmbda': 0.9,
-            'eps': 0.15,
-            'k_epochs': 8, 
-            'sgd_batch_size': 256,
-            'minibatch_size': 32, 
-            'actor_nums': 3,
-            'actor_bound': 0.4
+            'eps': 0.2, 
+            'k_epochs': 4, 
+            'sgd_batch_size': 128,
+            'minibatch_size': 16, 
+            'action_space': env.action_space
         }
     )
     agent = PPO2(
@@ -333,7 +334,87 @@ def Humanoid_v4_ppo2_test():
     agent.load_model(cfg.save_path)
     agent.eval()
     env_ = gym.make(env_name, render_mode='human')
-    play(env_, agent, cfg, episode_count=2, render=True) # render=True)  #  
+    play(env_, agent, cfg, episode_count=3, play_without_seed=True, render=True) 
+
+
+
+def DemonAttack_v5_ppo2_test():
+    env_name = 'ALE/DemonAttack-v5' 
+    gym_env_desc(env_name)
+    env = gym.make(env_name, obs_type="rgb")
+    print("gym.__version__ = ", gym.__version__ )
+    env = FrameStack(
+        ResizeObservation(
+            GrayScaleObservation(baseSkipFrame(
+                env, 
+                skip=5, 
+                cut_slices=[[15, 188], [0, 160]],
+                start_skip=14,
+                )), 
+            shape=84
+        ), 
+        num_stack=4
+    )
+    path_ = os.path.dirname(__file__)
+    cfg = Config(
+        env, 
+        # 环境参数
+        save_path=os.path.join(path_, "test_models" ,'PPO2_DemonAttack-v4_test'), 
+        seed=42,
+        # 网络参数
+        actor_hidden_layers_dim=[256, 256, 256],
+        critic_hidden_layers_dim=[256, 256, 256],
+        # agent参数
+        actor_lr=1.5e-4,
+        critic_lr=5.5e-4,
+        gamma=0.99,
+        # 训练参数
+        num_episode=1500,
+        off_buffer_size=1024,
+        max_episode_steps=280,
+        PPO_kwargs={
+            'lmbda': 0.9,
+            'eps': 0.2,
+            'k_epochs': 4, 
+            'sgd_batch_size': 128,
+            'minibatch_size': 12, 
+            'actor_bound': 1,
+            'dist_type': 'beta'
+        }
+    )
+    # todo 支持CNN
+    agent = PPO2(
+        state_dim=cfg.state_dim,
+        actor_hidden_layers_dim=cfg.actor_hidden_layers_dim,
+        critic_hidden_layers_dim=cfg.critic_hidden_layers_dim,
+        action_dim=cfg.action_dim,
+        actor_lr=cfg.actor_lr,
+        critic_lr=cfg.critic_lr,
+        gamma=cfg.gamma,
+        PPO_kwargs=cfg.PPO_kwargs,
+        device=cfg.device,
+        reward_func=None
+    )
+    agent.train()
+    train_on_policy(env, agent, cfg, wandb_flag=False, train_without_seed=True, test_ep_freq=1000, 
+                    online_collect_nums=cfg.off_buffer_size,
+                    test_episode_count=5)
+    agent.load_model(cfg.save_path)
+    agent.eval()
+    env = gym.make(env_name, obs_type="rgb") #, render_mode='human')
+    env = FrameStack(
+        ResizeObservation(
+            GrayScaleObservation(baseSkipFrame(
+                env, 
+                skip=5, 
+                cut_slices=[[15, 188], [0, 160]],
+                start_skip=14
+                )), 
+            shape=84
+        ), 
+        num_stack=4
+    )
+    play(env, agent, cfg, episode_count=3, play_without_seed=True, render=False)
 
 
 
@@ -342,6 +423,6 @@ def Humanoid_v4_ppo2_test():
 if __name__ == '__main__':
     # ppo_InvertedPendulum_test()
     # HalfCheetah_v4_ppo_test()
-    Hopper_v4_ppo2_test()
-    # Humanoid_v4_ppo2_test()
+    # Hopper_v4_ppo2_test()
     # rd_hopper()
+    Humanoid_v4_ppo2_test()

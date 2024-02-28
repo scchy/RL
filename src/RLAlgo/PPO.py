@@ -95,11 +95,11 @@ class PPO:
         self.sgd_batch_size = PPO_kwargs.get('sgd_batch_size', 512)
         self.minibatch_size = PPO_kwargs.get('minibatch_size', 128)
         self.action_bound = PPO_kwargs.get('action_bound', 1.0)
-        self.action_low = -1 * self.action_bound 
-        self.action_high = self.action_bound
+        self.action_low = torch.FloatTensor([-1 * self.action_bound]).to(device)
+        self.action_high = torch.FloatTensor([self.action_bound]).to(device)
         if 'action_space' in PPO_kwargs:
-            self.action_low = self.action_space.low
-            self.action_high = self.action_space.high
+            self.action_low = torch.FloatTensor(PPO_kwargs['action_space'].low).to(device)
+            self.action_high = torch.FloatTensor(PPO_kwargs['action_space'].high).to(device)
         
         self.count = 0 
         self.device = device
