@@ -69,6 +69,7 @@ def train_off_policy(env, agent ,cfg,
                      action_contiguous=False, done_add=False, 
                      reward_func=None, train_without_seed=False,
                      wandb_flag=False,
+                     wandb_project_name="RL-train_off_policy",
                      step_lr_flag=False,
                      step_lr_kwargs=None,
                      update_every=1,
@@ -82,8 +83,12 @@ def train_off_policy(env, agent ,cfg,
         if step_lr_flag:
             cfg_dict['step_lr_flag'] = step_lr_flag
             cfg_dict['step_lr_kwargs'] = step_lr_kwargs
+        env_id = str(env).split('>')[0].split('<')[-1]
+        algo = agent.__class__.__name__
+        now_ = datetime.now().strftime('%Y%m%d__%H%M')
         wandb.init(
-            project="RL-train_off_policy",
+            project=wandb_project_name,
+            name= f"{algo}__{env_id}__{now_}",
             config=cfg_dict
         )
     if step_lr_flag:
@@ -93,15 +98,15 @@ def train_off_policy(env, agent ,cfg,
     tq_bar = tqdm(range(cfg.num_episode))
     rewards_list = []
     now_reward = -np.inf
-    bf_reward = -np.inf
+    recent_best_reward = -np.inf
     best_ep_reward = -np.inf
     policy_idx = 0
     tt_steps = 0
     for i in tq_bar:
         if (1 + i) % test_ep_freq == 0:
-            ep_reward = play(env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False)
-            if ep_reward > best_ep_reward:
-                best_ep_reward = ep_reward
+            freq_ep_reward = play(env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False)
+            if freq_ep_reward > best_ep_reward:
+                best_ep_reward = freq_ep_reward
                 # 模型保存
                 save_agent_model(agent, cfg, info='[ test_ep_freq-SAVE ]')
 
@@ -162,28 +167,28 @@ def train_off_policy(env, agent ,cfg,
         if (len(buffer) >= cfg.off_minimal_size) and (i >= 10):
             rewards_list.append(episode_rewards)
             now_reward = np.mean(rewards_list[-10:])
-        if (bf_reward < now_reward) and (i >= 10) and (len(buffer) >= cfg.off_minimal_size):
+        if (now_reward > recent_best_reward) and (i >= 10) and (len(buffer) >= cfg.off_minimal_size):
             # best 时也进行测试
-            ep_reward = play(env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False)
+            test_ep_reward = play(env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False)
 
-            if ep_reward > best_ep_reward:
-                best_ep_reward = ep_reward
+            if test_ep_reward > best_ep_reward:
+                best_ep_reward = test_ep_reward
                 # 模型保存
                 save_agent_model(agent, cfg, info='[ now_reward-SAVE ]')
 
-            bf_reward = now_reward
+            recent_best_reward = now_reward
             
         tq_bar.set_postfix({
             "steps": steps,
             'lastMeanRewards': f'{now_reward:.2f}',
-            'BEST': f'{bf_reward:.2f}',
+            'BEST': f'{recent_best_reward:.2f}',
             "bestTestReward": f'{best_ep_reward:.2f}'
         })
         if wandb_flag:
             log_dict = {
                 "steps": steps,
                 'lastMeanRewards': now_reward,
-                'BEST': bf_reward,
+                'BEST': recent_best_reward,
                 "episodeRewards": episode_rewards,
                 "bestTestReward": best_ep_reward
             }
@@ -244,8 +249,8 @@ def play(env_in, env_agent, cfg, episode_count=2, action_contiguous=False, play_
         env_agent.train()
     except Exception as e:
         pass
-
-    return np.percentile(ep_reward_record, 50)
+    print(f'[ PLAY ] Get reward {np.mean(ep_reward_record)}.')
+    return np.mean(ep_reward_record) # np.percentile(ep_reward_record, 50)
 
 
 
@@ -258,6 +263,7 @@ def train_on_policy(env, agent, cfg,
                     online_collect_nums=None,
                     test_episode_count=3,
                     done_fix_flag=False,
+                    wandb_project_name="RL-train_on_policy",
                     *args,
                     **kwargs
                     ):
@@ -267,8 +273,12 @@ def train_on_policy(env, agent, cfg,
         if step_lr_flag:
             cfg_dict['step_lr_flag'] = step_lr_flag
             cfg_dict['step_lr_kwargs'] = step_lr_kwargs
+        env_id = str(env).split('>')[0].split('<')[-1]
+        algo = agent.__class__.__name__
+        now_ = datetime.now().strftime('%Y%m%d__%H%M')
         wandb.init(
-            project="RL-train_on_policy",
+            project=wandb_project_name,
+            name=f"{algo}__{env_id}__{now_}",
             config=cfg_dict
         )
     try:
@@ -282,7 +292,7 @@ def train_on_policy(env, agent, cfg,
     tq_bar = tqdm(range(cfg.num_episode))
     rewards_list = []
     now_reward = 0
-    bf_reward = -np.inf
+    recent_best_reward = -np.inf
     update_flag = False
     best_ep_reward = -np.inf
     buffer_ = replayBuffer(cfg.off_buffer_size)
@@ -295,12 +305,12 @@ def train_on_policy(env, agent, cfg,
             buffer_ = replayBuffer(cfg.off_buffer_size)
             
         if (1 + i) % test_ep_freq == 0 and policy_idx > 0:
-            ep_reward = play(env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False)
+            freq_ep_reward = play(env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False)
             
-            if ep_reward > best_ep_reward:
-                best_ep_reward = ep_reward
+            if freq_ep_reward > best_ep_reward:
+                best_ep_reward = freq_ep_reward
                 # 模型保存
-                save_agent_model(agent, cfg)
+                save_agent_model(agent, cfg, f"[ ep={i+1} ](freqBest) bestTestReward={best_ep_reward:.2f}")
 
         tq_bar.set_description(f'Episode [ {i+1} / {cfg.num_episode} ](minibatch={mini_b})')    
         rand_seed = np.random.randint(0, 9999)
@@ -331,6 +341,19 @@ def train_on_policy(env, agent, cfg,
             if (episode_rewards >= cfg.max_episode_rewards) or (steps >= cfg.max_episode_steps):
                 break
         
+        rewards_list.append(episode_rewards)
+        now_reward = np.mean(rewards_list[-10:])
+        if (now_reward > recent_best_reward) and (i >= 10) and policy_idx > 0:
+            # best 时也进行测试
+            test_ep_reward = play(env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False)
+
+            if test_ep_reward > best_ep_reward:
+                best_ep_reward = test_ep_reward
+                # 模型保存
+                save_agent_model(agent, cfg, f"[ ep={i+1} ](recentBest) bestTestReward={best_ep_reward:.2f}")
+
+            recent_best_reward = now_reward
+
         if online_collect_flag and online_collect_count < online_collect_nums:
             online_collect_count += len(buffer_)
             online_collect_deque_list.append(buffer_.buffer)
@@ -345,23 +368,11 @@ def train_on_policy(env, agent, cfg,
 
         if step_lr_flag:
             schedule.step()
-        rewards_list.append(episode_rewards)
-        now_reward = np.mean(rewards_list[-10:])
-        if (bf_reward < now_reward) and (i >= 10) and policy_idx > 0:
-            # best 时也进行测试
-            ep_reward = play(env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False)
 
-            if ep_reward > best_ep_reward:
-                best_ep_reward = ep_reward
-                # 模型保存
-                save_agent_model(agent, cfg)
-
-            bf_reward = now_reward
-        
         tq_bar.set_postfix({
             "steps": steps,
             'lastMeanRewards': f'{now_reward:.2f}', 
-            'BEST': f'{bf_reward:.2f}',
+            'BEST': f'{recent_best_reward:.2f}',
             "bestTestReward": f'{best_ep_reward:.2f}'
         })
 
@@ -369,7 +380,7 @@ def train_on_policy(env, agent, cfg,
             log_dict = {
                 "steps": steps,
                 'lastMeanRewards': now_reward,
-                'BEST': bf_reward,
+                'BEST': recent_best_reward,
                 "episodeRewards": episode_rewards,
                 "bestTestReward": best_ep_reward
             }
@@ -413,5 +424,6 @@ def random_play(env_in, episode_count=3, render=True, play_without_seed=False):
     
     if render:
         env.close()
-    return np.percentile(ep_reward_record, 50)
+    print(f'[ PLAY ] Get reward {np.mean(ep_reward_record)}.')
+    return np.mean(ep_reward_record) # np.percentile(ep_reward_record, 50)
 

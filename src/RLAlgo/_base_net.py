@@ -1,6 +1,7 @@
 # python3
 # Create Date: 2023-01-22
 # Func: QNet 
+# reference: https://iclr-blog-track.github.io/2022/03/25/ppo-implementation-details/
 # =================================================================================
 
 import typing as typ
@@ -164,13 +165,12 @@ class SACPolicyNet(nn.Module):
         self.fc_mu = nn.Linear(hidden_layers_dim[-1], action_dim)
         self.fc_std = nn.Linear(hidden_layers_dim[-1], action_dim)
 
-
     def forward(self, x):
         for layer in self.features:
             x = layer['linear_action'](layer['linear'](x))
         
         mean_ = self.fc_mu(x)
-        std = F.softplus(self.fc_std(x)) + 3e-5
+        std = F.softplus(self.fc_std(x).clip(-100, 650)) + 3e-5
         dist = Normal(mean_, std)
         normal_sample = dist.rsample()
         log_prob = dist.log_prob(normal_sample)
@@ -322,48 +322,85 @@ class PPOPolicyBetaNet(nn.Module):
     """
     continuity action:
     normal distribution (mean, std) 
-    Chou P W, Maturana D, Scherer S. Improving stochastic policy gradients in continuous control with deep reinforcement learning using the beta distribution[C]//International conference on machine learning. PMLR, 2017: 834-843.
+    Chou P W, Maturana D, Scherer S. Improving stochastic policy gradients in continuous control with deep reinforcement learning using the beta distribution[C]
+    //International conference on machine learning. PMLR, 2017: 834-843.
+    https://proceedings.mlr.press/v70/chou17a.html
+    my trick: action attention
     """
     def __init__(self, state_dim: int, hidden_layers_dim: typ.List, action_dim: int, 
                  state_feature_share: bool=False,
-                 dist_type='beta'):
+                 dist_type='beta', 
+                 act_type='relu',
+                 act_attention_flag=False):
         super(PPOPolicyBetaNet, self).__init__()
         if state_feature_share:
             state_dim = 512
-
+        self.act_attention_flag = act_attention_flag
+        print(f'PPOPolicyBetaNet.act_attention_flag={self.act_attention_flag}')
         self.dist_type = dist_type
         self.features = nn.ModuleList()
         for idx, h in enumerate(hidden_layers_dim):
             self.features.append(nn.ModuleDict({
                 'linear': nn.Linear(hidden_layers_dim[idx-1] if idx else state_dim, h),
-                'linear_action': nn.ReLU(inplace=True)
+                'linear_action': nn.ReLU(inplace=True) if act_type == 'relu' else nn.Tanh()
             }))
         self.alpha_layer = nn.Linear(hidden_layers_dim[-1], action_dim)
         self.beta_layer = nn.Linear(hidden_layers_dim[-1], action_dim)
+        self.norm_out_layer = nn.Linear(hidden_layers_dim[-1], action_dim)
         self.log_std = nn.Parameter(torch.zeros(1, action_dim))
+        self.__init()
+        # attention 
+        self.alpha_attn_ly = nn.Linear(action_dim, action_dim)
+        self.alpha_act_tran_ly = nn.Linear(action_dim, action_dim)
+        
+        self.beta_attn_ly = nn.Linear(action_dim, action_dim)
+        self.beta_act_tran_ly = nn.Linear(action_dim, action_dim)
+        
+        self.mean_attn_ly = nn.Linear(action_dim, action_dim)
+        self.mean_act_tran_ly = nn.Linear(action_dim, action_dim)
+        self.sft = nn.Softmax(dim=1)
+
+    def simple_attention(self, a, act_tran_ly, ln):
+        a = act_tran_ly(torch.tanh(a))
+        one = torch.ones_like(a).to(a.device)
+        a_one = torch.einsum('bc,ba->bca', a, one).float()
+        return torch.sum(a_one * self.sft(ln(a_one)),  1)
 
     def forward(self, x):
+        # nan -> pip install --upgrade numpy
+        x_org = x
         for layer in self.features:
             x = layer['linear_action'](layer['linear'](x))
         
-        alpha = F.softplus(self.alpha_layer(x)) + 1.0
-        beta = F.softplus(self.beta_layer(x)) + 1.0
-        return alpha, beta 
+        alpha = self.alpha_layer(x)
+        beta = self.beta_layer(x)
+        mean = self.norm_out_layer(x)
+        if self.act_attention_flag:
+            alpha = self.simple_attention(alpha, self.alpha_act_tran_ly, self.alpha_attn_ly)
+            beta = self.simple_attention(beta, self.beta_act_tran_ly, self.beta_attn_ly)
+            mean = self.simple_attention(mean, self.mean_act_tran_ly, self.mean_attn_ly)
+    
+        alpha = F.softplus(alpha.clip(-100, 650)) + 1.0
+        beta = F.softplus(beta.clip(-100, 650)) + 1.0
+        
+        if np.isnan(alpha.sum().cpu().detach().numpy()):
+            print('x=', x)
+            print('x_org=', x_org)
+        return alpha, beta, mean
 
     def mean(self, s):
-        alpha, beta = self.forward(s)
-        mean = alpha
+        alpha, beta, mean = self.forward(s)
         if self.dist_type == 'beta':
             mean = alpha / (alpha + beta)  # The mean of the beta distribution
         return mean
     
     def get_dist(self, x, max_action=1.0):
-        alpha, beta = self.forward(x)
+        alpha, beta, mean = self.forward(x)
         if self.dist_type == "beta":
             dist = torch.distributions.Beta(alpha, beta)
             return dist
 
-        mean = alpha * max_action
+        mean = mean * max_action
         log_std = self.log_std.expand_as(mean) 
         std = torch.exp(log_std)  # The reason we train the 'log_std' is to ensure std=exp(log_std)>0
         dist = torch.distributions.Normal(mean, std)
@@ -371,10 +408,11 @@ class PPOPolicyBetaNet(nn.Module):
 
     def __init(self):
         for layer in self.features:
-            orthogonal_init(layer['linear'])
+            orthogonal_init(layer['linear'], gain=np.sqrt(2))
             
         orthogonal_init(self.alpha_layer, gain=0.01)
         orthogonal_init(self.beta_layer, gain=0.01)
+        orthogonal_init(self.norm_out_layer, gain=0.01)
 
 
 def orthogonal_init(layer, gain=1.0):
@@ -547,17 +585,24 @@ class TD3CNNValueNet(nn.Module):
 
 
 class PPOValueNet(nn.Module):
-    def __init__(self, state_dim, hidden_layers_dim):
+    def __init__(self, state_dim, hidden_layers_dim, act_type='relu'):
         super(PPOValueNet, self).__init__()
         self.features = nn.ModuleList()
         for idx, h in enumerate(hidden_layers_dim):
             self.features.append(nn.ModuleDict({
                 'linear': nn.Linear(hidden_layers_dim[idx-1] if idx else state_dim, h),
-                'linear_activation': nn.ReLU(inplace=True)
+                'linear_activation': nn.ReLU(inplace=True) if act_type == 'relu' else nn.Tanh()
             }))
         
         self.head = nn.Linear(hidden_layers_dim[-1] , 1)
-        
+        self.__init()
+
+    def __init(self):
+        for layer in self.features:
+            orthogonal_init(layer['linear'], gain=np.sqrt(2))
+
+        orthogonal_init(self.head, gain=1)
+
     def forward(self, x):
         for layer in self.features:
             x = layer['linear_activation'](layer['linear'](x))

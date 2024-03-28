@@ -2,6 +2,8 @@ import os
 from os.path import dirname
 import sys
 import gymnasium as gym
+import numpy as np
+from gymnasium.wrappers import ClipAction, NormalizeObservation, TransformObservation, NormalizeReward, TransformReward  
 import torch
 try:
     dir_ = dirname(dirname(__file__))
@@ -290,29 +292,42 @@ def Humanoid_v4_ppo2_test():
     print("gym.__version__ = ", gym.__version__ )
     path_ = os.path.dirname(__file__)
     env = gym.make(env_name)  
+    env = TransformObservation(
+            NormalizeObservation(ClipAction(env)), lambda obs: np.clip(obs, -10, 10)
+    )
     cfg = Config(
         env, 
         # 环境参数
-        save_path=os.path.join(path_, "test_models" ,'PPO_Humanoid-v4_test'), 
-        seed=42,
+        save_path=os.path.join(path_, "test_models" ,'PPO_Humanoid-v4_test-2'), 
+        seed=202403,
         # 网络参数
-        actor_hidden_layers_dim=[800, 400, 200, 128],
-        critic_hidden_layers_dim=[800, 400, 200, 128],
+        actor_hidden_layers_dim=[128, 128, 128, 128],
+        critic_hidden_layers_dim=[128, 128, 128, 128],
         # agent参数
-        actor_lr=2.0e-4,
-        critic_lr=5.5e-3,
+        actor_lr=3.5e-4, # base=1.5e-4
+        critic_lr=4.5e-4, # base=5.5e-4,
         gamma=0.99,
         # 训练参数
-        num_episode=10000,
-        off_buffer_size=512,
-        max_episode_steps=500,
+        num_episode=250000,
+        off_buffer_size=2048, # base=512
+        max_episode_steps=1000,
         PPO_kwargs={
-            'lmbda': 0.9,
-            'eps': 0.2, 
-            'k_epochs': 4, 
-            'sgd_batch_size': 128,
-            'minibatch_size': 16, 
-            'action_space': env.action_space
+            'lmbda': 0.95,
+            'eps': 0.2,
+            'k_epochs': 10,  # update_epochs
+            'sgd_batch_size': 128, # 128
+            'minibatch_size': 64, #48, # 96
+            'action_space': env.action_space,
+            'act_type': 'tanh',
+            'dist_type': 'beta',
+            'critic_coef': 1.3,
+            'act_attention_flag': False, # relation of different actions
+            'max_grad_norm': 1,
+            'clip_vloss': True,
+
+            'anneal_lr': True,
+            'num_episode': 250000,
+            'off_buffer_size': 2048
         }
     )
     agent = PPO2(
@@ -328,14 +343,17 @@ def Humanoid_v4_ppo2_test():
         reward_func=None
     )
     agent.train()
-    train_on_policy(env, agent, cfg, wandb_flag=False, train_without_seed=True, test_ep_freq=1000, 
+    train_on_policy(env, agent, cfg, wandb_flag=True, wandb_project_name="PPO2",
+                    train_without_seed=False, test_ep_freq=1000, 
                     online_collect_nums=cfg.off_buffer_size,
                     test_episode_count=5)
     agent.load_model(cfg.save_path)
     agent.eval()
-    env_ = gym.make(env_name, render_mode='human')
-    play(env_, agent, cfg, episode_count=3, play_without_seed=True, render=True) 
-
+    env = gym.make(env_name) #, render_mode='human')  
+    env = TransformObservation(
+            NormalizeObservation(ClipAction(env)), lambda obs: np.clip(obs, -10, 10)
+    )
+    play(env, agent, cfg, episode_count=5, play_without_seed=False, render=False)
 
 
 def DemonAttack_v5_ppo2_test():
@@ -379,7 +397,7 @@ def DemonAttack_v5_ppo2_test():
             'sgd_batch_size': 128,
             'minibatch_size': 12, 
             'actor_bound': 1,
-            'dist_type': 'beta'
+            'dist_type': 'beta',
         }
     )
     # todo 支持CNN
