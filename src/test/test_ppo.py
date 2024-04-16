@@ -17,7 +17,8 @@ print(dir_)
 sys.path.append(dir_)
 from RLAlgo.PPO import PPO
 from RLAlgo.PPO2 import PPO2
-from RLUtils import train_on_policy, random_play, play, Config, gym_env_desc
+from RLUtils import train_on_policy, random_play, play, Config, gym_env_desc, ppo2_train
+from RLUtils import make_env
 from RLUtils.env_wrapper import FrameStack, baseSkipFrame, GrayScaleObservation, ResizeObservation
 
 
@@ -288,48 +289,55 @@ def Humanoid_v4_ppo2_test():
     """
     # [ Humanoid-v4 ](state: (376,),action: (17,)(连续 <-0.4 -> 0.4>))
     env_name = 'Humanoid-v4'
+    num_envs = 10
     gym_env_desc(env_name)
     print("gym.__version__ = ", gym.__version__ )
     path_ = os.path.dirname(__file__)
     env = gym.make(env_name)  
-    env = TransformObservation(
-            NormalizeObservation(ClipAction(env)), lambda obs: np.clip(obs, -10, 10)
+    # env = TransformObservation(
+    #         NormalizeObservation(ClipAction(env)), lambda obs: np.clip(obs, -10, 10)
+    # )
+    envs = gym.vector.SyncVectorEnv(
+        [make_env(env_name, obs_norm_trans_flag=True) for _ in range(num_envs)]
     )
+    # env = TransformReward(NormalizeReward(env, gamma=0.99), lambda reward: np.clip(reward, -10, 10))
     cfg = Config(
         env, 
         # 环境参数
         save_path=os.path.join(path_, "test_models" ,'PPO_Humanoid-v4_test-2'), 
         seed=202403,
         # 网络参数
-        actor_hidden_layers_dim=[128, 128, 128, 128],
-        critic_hidden_layers_dim=[128, 128, 128, 128],
+        actor_hidden_layers_dim=[128, 128, 128],
+        critic_hidden_layers_dim=[128, 128, 128],
         # agent参数
-        actor_lr=3.5e-4, # base=1.5e-4
-        critic_lr=4.5e-4, # base=5.5e-4,
+        actor_lr=3.0e-3, #3.0e-4,
+        critic_lr=3.0e-3,
         gamma=0.99,
         # 训练参数
-        num_episode=250000,
-        off_buffer_size=2048, # base=512
-        max_episode_steps=1000,
+        num_episode=500, #350000//4096,
+        off_buffer_size=2048, # 2048
+        max_episode_steps=64,
         PPO_kwargs={
             'lmbda': 0.95,
             'eps': 0.2,
-            'k_epochs': 10,  # update_epochs
-            'sgd_batch_size': 128, # 128
-            'minibatch_size': 64, #48, # 96
-            'action_space': env.action_space,
+            'k_epochs': 2,  # update_epochs
+            'sgd_batch_size': 1024, # 128
+            'minibatch_size': 512, #48, # 96
+            'action_space': envs.single_action_space,
             'act_type': 'tanh',
-            'dist_type': 'beta',
+            'dist_type': 'norm',
             'critic_coef': 1.3,
             'act_attention_flag': False, # relation of different actions
-            'max_grad_norm': 1,
+            'max_grad_norm': 3.5,
             'clip_vloss': True,
 
             'anneal_lr': True,
-            'num_episode': 250000,
+            'num_episode': 350000,
             'off_buffer_size': 2048
         }
     )
+    cfg.state_dim = envs.single_observation_space.shape[0]
+    cfg.action_dim = envs.single_action_space.shape[0]
     agent = PPO2(
         state_dim=cfg.state_dim,
         actor_hidden_layers_dim=cfg.actor_hidden_layers_dim,
@@ -343,64 +351,72 @@ def Humanoid_v4_ppo2_test():
         reward_func=None
     )
     agent.train()
-    train_on_policy(env, agent, cfg, wandb_flag=True, wandb_project_name="PPO2",
-                    train_without_seed=False, test_ep_freq=1000, 
+    ppo2_train(envs, agent, cfg, wandb_flag=True, wandb_project_name="PPO2",
+                    train_without_seed=True, test_ep_freq=40000, 
                     online_collect_nums=cfg.off_buffer_size,
                     test_episode_count=5)
+    # {'P25': 0.08523080311715603, 'P50': 7.071380615234375, 'P75': 34.25641632080078, 
+    # 'P95': 60.77569007873534, 'P99': 108.51971694946333}
+    # print(agent.grad_collector.describe())
+    # agent.grad_collector.dump(cfg.save_path + '.npy')
     agent.load_model(cfg.save_path)
     agent.eval()
-    env = gym.make(env_name) #, render_mode='human')  
-    env = TransformObservation(
-            NormalizeObservation(ClipAction(env)), lambda obs: np.clip(obs, -10, 10)
-    )
-    play(env, agent, cfg, episode_count=5, play_without_seed=False, render=False)
+    env = gym.make(env_name)#, render_mode='human')  
+    # env = TransformObservation(
+    #         NormalizeObservation(ClipAction(env)), lambda obs: np.clip(obs, -10, 10)
+    # )
+    # env = TransformReward(NormalizeReward(env, gamma=0.99), lambda reward: np.clip(reward, -10, 10))
+    play(env, agent, cfg, episode_count=6, play_without_seed=False, render=False)
 
 
-def DemonAttack_v5_ppo2_test():
-    env_name = 'ALE/DemonAttack-v5' 
+def Pendulum_v1_ppo2_test():
+    """
+    policyNet: 
+    valueNet: 
+    """
+    env_name = 'Pendulum-v1'
+    num_envs = 4
     gym_env_desc(env_name)
-    env = gym.make(env_name, obs_type="rgb")
     print("gym.__version__ = ", gym.__version__ )
-    env = FrameStack(
-        ResizeObservation(
-            GrayScaleObservation(baseSkipFrame(
-                env, 
-                skip=5, 
-                cut_slices=[[15, 188], [0, 160]],
-                start_skip=14,
-                )), 
-            shape=84
-        ), 
-        num_stack=4
-    )
     path_ = os.path.dirname(__file__)
+    envs = gym.vector.SyncVectorEnv(
+        [make_env(env_name) for _ in range(num_envs)]
+    )
     cfg = Config(
-        env, 
+        envs, 
         # 环境参数
-        save_path=os.path.join(path_, "test_models" ,'PPO2_DemonAttack-v4_test'), 
-        seed=42,
+        save_path=os.path.join(path_, "test_models" ,'PPO2_Pendulum-v1_test-2'), 
+        seed=202403,
         # 网络参数
-        actor_hidden_layers_dim=[256, 256, 256],
-        critic_hidden_layers_dim=[256, 256, 256],
+        actor_hidden_layers_dim=[128, 128],
+        critic_hidden_layers_dim=[128, 128],
         # agent参数
-        actor_lr=1.5e-4,
-        critic_lr=5.5e-4,
+        actor_lr=5.5e-4,
         gamma=0.99,
         # 训练参数
-        num_episode=1500,
+        num_episode=500,
         off_buffer_size=1024,
-        max_episode_steps=280,
+        max_episode_steps=200,
         PPO_kwargs={
-            'lmbda': 0.9,
+            'lmbda': 0.95,
             'eps': 0.2,
-            'k_epochs': 4, 
-            'sgd_batch_size': 128,
-            'minibatch_size': 12, 
-            'actor_bound': 1,
-            'dist_type': 'beta',
+            'k_epochs': 4,  # update_epochs
+            'sgd_batch_size': 64,
+            'minibatch_size': 48,
+            'action_space': envs.single_action_space,
+            'act_type': 'tanh',
+            'dist_type': 'norm',
+            'critic_coef': 1.0,
+            'max_grad_norm': 0.5, # close == 0
+            'clip_vloss': True,
+
+            'anneal_lr': False,
+            'num_episode': 1200,
+            'off_buffer_size': 1024
         }
     )
-    # todo 支持CNN
+    cfg.state_dim = envs.single_observation_space.shape[0]
+    cfg.action_dim = envs.single_action_space.shape[0]
     agent = PPO2(
         state_dim=cfg.state_dim,
         actor_hidden_layers_dim=cfg.actor_hidden_layers_dim,
@@ -411,30 +427,19 @@ def DemonAttack_v5_ppo2_test():
         gamma=cfg.gamma,
         PPO_kwargs=cfg.PPO_kwargs,
         device=cfg.device,
-        reward_func=None
+        reward_func=lambda r: (r + 10.0 ) / 10.0
     )
-    agent.train()
-    train_on_policy(env, agent, cfg, wandb_flag=False, train_without_seed=True, test_ep_freq=1000, 
-                    online_collect_nums=cfg.off_buffer_size,
-                    test_episode_count=5)
+    # agent.train()
+    # ppo2_train(env_name, envs, agent, cfg, wandb_flag=False, wandb_project_name="PPO2",
+    #                 train_without_seed=False, test_ep_freq=10000, 
+    #                 online_collect_nums=cfg.off_buffer_size,
+    #                 test_episode_count=10)
+    # print(agent.grad_collector.describe())
+    # agent.grad_collector.dump(cfg.save_path + '.npy')
     agent.load_model(cfg.save_path)
     agent.eval()
-    env = gym.make(env_name, obs_type="rgb") #, render_mode='human')
-    env = FrameStack(
-        ResizeObservation(
-            GrayScaleObservation(baseSkipFrame(
-                env, 
-                skip=5, 
-                cut_slices=[[15, 188], [0, 160]],
-                start_skip=14
-                )), 
-            shape=84
-        ), 
-        num_stack=4
-    )
-    play(env, agent, cfg, episode_count=3, play_without_seed=True, render=False)
-
-
+    env = make_env(env_name, render_mode='human')()
+    play(env, agent, cfg, episode_count=6, play_without_seed=False, render=False)
 
 
 
@@ -443,4 +448,5 @@ if __name__ == '__main__':
     # HalfCheetah_v4_ppo_test()
     # Hopper_v4_ppo2_test()
     # rd_hopper()
-    Humanoid_v4_ppo2_test()
+    # Humanoid_v4_ppo2_test()
+    Pendulum_v1_ppo2_test()

@@ -24,7 +24,7 @@ def mini_batch(batch, mini_batch_size):
     states, actions, old_log_probs, adv, td_target = zip(*batch)
     # trick1: batch_normalize
     adv = torch.stack(adv)
-    adv = (adv - torch.mean(adv)) / (torch.std(adv) + 1e-8)
+    # adv = (adv - torch.mean(adv)) / (torch.std(adv) + 1e-8)
     return torch.stack(states[:mini_batch_size]), torch.stack(actions[:mini_batch_size]), \
         torch.stack(old_log_probs[:mini_batch_size]), adv[:mini_batch_size], torch.stack(td_target[:mini_batch_size])
 
@@ -122,6 +122,7 @@ class PPO:
     def policy(self, state):
         state = torch.FloatTensor(np.array([state])).to(self.device)
         action_dist = self.actor.get_dist(state, self.action_bound)
+        action = action_dist.sample()
         action = self._action_fix(action)
         return action.cpu().detach().numpy()[0]
 
@@ -144,7 +145,7 @@ class PPO:
         # recompute
         td_target = advantage + old_v
         # trick1: batch_normalize
-        # advantage = (advantage - torch.mean(advantage)) / (torch.std(advantage) + 1e-5)
+        advantage = (advantage - torch.mean(advantage)) / (torch.std(advantage) + 1e-5)
         action_dists = self.actor.get_dist(state, self.action_bound)
         # 动作是正态分布
         old_log_probs = action_dists.log_prob(self._action_return(action))

@@ -3,6 +3,7 @@ from .memory import replayBuffer
 from .state_util import Pendulum_dis_to_con
 import torch
 from tqdm.auto import tqdm
+import gymnasium as gym
 import numpy as np
 import wandb
 import copy
@@ -89,7 +90,8 @@ def train_off_policy(env, agent ,cfg,
         wandb.init(
             project=wandb_project_name,
             name= f"{algo}__{env_id}__{now_}",
-            config=cfg_dict
+            config=cfg_dict,
+            monitor_gym=True
         )
     if step_lr_flag:
         opt = agent.actor_opt if hasattr(agent, "actor_opt") else agent.opt
@@ -134,7 +136,7 @@ def train_off_policy(env, agent ,cfg,
             else:
                 n_s, r, terminated, truncated, _ = env.step(a)
             
-            done = terminated or truncated
+            done = np.logical_or(terminated, truncated)
             steps += 1
             tt_steps += 1
 
@@ -153,7 +155,10 @@ def train_off_policy(env, agent ,cfg,
             # buffer update
             if (len(buffer) >= cfg.off_minimal_size) and (tt_steps % update_every == 0):
                 samples = buffer.sample(cfg.sample_size)
-                agent.update(samples)
+                try:
+                    agent.update(samples, wandb=wandb if wandb_flag else None)
+                except Exception as e:
+                    agent.update(samples)
 
             if (episode_rewards >= cfg.max_episode_rewards) or (steps >= cfg.max_episode_steps):
                 drop_flag = True
@@ -279,7 +284,8 @@ def train_on_policy(env, agent, cfg,
         wandb.init(
             project=wandb_project_name,
             name=f"{algo}__{env_id}__{now_}",
-            config=cfg_dict
+            config=cfg_dict,
+            monitor_gym=True
         )
     try:
         mini_b = cfg.PPO_kwargs.get('minibatch_size', 12)
@@ -297,6 +303,7 @@ def train_on_policy(env, agent, cfg,
     best_ep_reward = -np.inf
     buffer_ = replayBuffer(cfg.off_buffer_size)
     online_collect_flag = online_collect_nums is not None
+    print(f"[ online_collect_flag={online_collect_flag} ] ")
     online_collect_deque_list = []
     online_collect_count = 0
     policy_idx = 0
@@ -320,7 +327,7 @@ def train_on_policy(env, agent, cfg,
         episode_rewards = 0
         steps = 0
         while not done:
-            if sum([len(i) for i in online_collect_deque_list]) < cfg.off_minimal_size and policy_idx == 0:
+            if sum([len(i) for i in online_collect_deque_list]) < cfg.off_minimal_size and policy_idx == 0 and online_collect_flag:
                 a = random_action(env)
             else:
                 a = agent.policy(s)
@@ -359,12 +366,18 @@ def train_on_policy(env, agent, cfg,
             online_collect_deque_list.append(buffer_.buffer)
             update_flag = True
         elif(online_collect_flag and online_collect_count >= online_collect_nums):
-            update_flag = agent.update(online_collect_deque_list)
+            try:
+                update_flag = agent.update(online_collect_deque_list, wandb=wandb if wandb_flag else None)
+            except Exception as e:
+                update_flag = agent.update(online_collect_deque_list)
             online_collect_count = 0
             online_collect_deque_list = []
             # print('collect training')
         else:
-            update_flag = agent.update(buffer_.buffer)
+            try:
+                update_flag = agent.update(buffer_.buffer, wandb=wandb if wandb_flag else None)
+            except Exception as e:
+                update_flag = agent.update(buffer_.buffer)
 
         if step_lr_flag:
             schedule.step()
@@ -426,4 +439,113 @@ def random_play(env_in, episode_count=3, render=True, play_without_seed=False):
         env.close()
     print(f'[ PLAY ] Get reward {np.mean(ep_reward_record)}.')
     return np.mean(ep_reward_record) # np.percentile(ep_reward_record, 50)
+
+
+
+
+def ppo2_train(envs, agent, cfg, 
+                    wandb_flag=False, 
+                    train_without_seed=False, 
+                    step_lr_flag=False, 
+                    step_lr_kwargs=None, 
+                    test_ep_freq=100,
+                    online_collect_nums=1024,
+                    test_episode_count=3,
+                    wandb_project_name="RL-train_on_policy",
+                ):
+    test_env = envs.env_fns[0]()
+    env_id = str(test_env).split('>')[0].split('<')[-1]
+    if wandb_flag:
+        wandb.login()
+        cfg_dict = cfg.__dict__
+        if step_lr_flag:
+            cfg_dict['step_lr_flag'] = step_lr_flag
+            cfg_dict['step_lr_kwargs'] = step_lr_kwargs
+
+        algo = agent.__class__.__name__
+        now_ = datetime.now().strftime('%Y%m%d__%H%M')
+        wandb.init(
+            project=wandb_project_name,
+            name=f"{algo}__{env_id}__{now_}",
+            config=cfg_dict,
+            monitor_gym=True
+        )
+    mini_b = cfg.PPO_kwargs.get('minibatch_size', 12)
+    if step_lr_flag:
+        opt = agent.actor_opt if hasattr(agent, "actor_opt") else agent.opt
+        schedule = StepLR(opt, step_size=step_lr_kwargs['step_size'], gamma=step_lr_kwargs['gamma'])
+
+    tq_bar = tqdm(range(cfg.num_episode))
+    rewards_list = []
+    now_reward = 0
+    recent_best_reward = -np.inf
+    update_flag = False
+    best_ep_reward = -np.inf
+    buffer_ = replayBuffer(cfg.off_buffer_size)
+    steps = 0
+    for i in tq_bar:
+        if update_flag:
+            buffer_ = replayBuffer(cfg.off_buffer_size)
+
+        tq_bar.set_description(f'Episode [ {i+1} / {cfg.num_episode} ](minibatch={mini_b})')    
+        rand_seed = np.random.randint(0, 9999)
+        final_seed = rand_seed if train_without_seed else cfg.seed
+        s, _ = envs.reset(seed=final_seed)
+        done = False
+        episode_rewards = np.zeros(envs.num_envs)
+        for step_i in range(cfg.off_buffer_size):
+            a = agent.policy(s)
+            n_s, r, terminated, truncated, _ = envs.step(a)
+            done = np.logical_or(terminated, truncated)
+            steps += 1
+            mem_done = done 
+            buffer_.add(s, a, r, n_s, mem_done)
+            s = n_s
+            episode_rewards += r
+            if (steps % test_ep_freq == 0) and (steps > cfg.off_buffer_size):
+                freq_ep_reward = play(test_env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False)
+                
+                if freq_ep_reward > best_ep_reward:
+                    best_ep_reward = freq_ep_reward
+                    # 模型保存
+                    save_agent_model(agent, cfg, f"[ ep={i+1} ](freqBest) bestTestReward={best_ep_reward:.2f}")
+
+            if(steps % cfg.max_episode_steps == 0):
+                rewards_list.append(episode_rewards.mean())
+                episode_rewards = np.zeros(envs.num_envs)
+                now_reward = np.mean(rewards_list[-10:])
+
+                if (now_reward > recent_best_reward):
+                    # best 时也进行测试
+                    test_ep_reward = play(test_env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False)
+                    if test_ep_reward > best_ep_reward:
+                        best_ep_reward = test_ep_reward
+                        # 模型保存
+                        save_agent_model(agent, cfg, f"[ ep={i+1} ](recentBest) bestTestReward={best_ep_reward:.2f}")
+                    recent_best_reward = now_reward
+                
+                tq_bar.set_postfix({
+                    'lastMeanRewards': f'{now_reward:.2f}', 
+                    'BEST': f'{recent_best_reward:.2f}',
+                    "bestTestReward": f'{best_ep_reward:.2f}'
+                })
+                if wandb_flag:
+                    log_dict = {
+                        'lastMeanRewards': now_reward,
+                        'BEST': recent_best_reward,
+                        "episodeRewards": episode_rewards,
+                        "bestTestReward": best_ep_reward
+                    }
+                    if step_lr_flag:
+                        log_dict['actor_lr'] = opt.param_groups[0]['lr']
+                    wandb.log(log_dict)
+
+        update_flag = agent.update(buffer_.buffer, wandb=wandb if wandb_flag else None)
+        if step_lr_flag:
+            schedule.step()
+
+    envs.close()
+    if wandb_flag:
+        wandb.finish()
+    return agent
 

@@ -1,5 +1,14 @@
 import gymnasium as gym
+import numpy as np
 
+def make_env(env_id, obs_norm_trans_flag=False, render_mode=None):
+    def thunk():
+        env = gym.make(env_id, render_mode=render_mode)
+        if obs_norm_trans_flag:
+            env = gym.wrappers.NormalizeObservation(gym.wrappers.ClipAction(env))
+            env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10))
+        return env
+    return thunk
 
 
 def Pendulum_dis_to_con(discrete_action, env, action_dim):  # 离散动作转回连续的函数

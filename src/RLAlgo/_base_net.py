@@ -349,22 +349,6 @@ class PPOPolicyBetaNet(nn.Module):
         self.norm_out_layer = nn.Linear(hidden_layers_dim[-1], action_dim)
         self.log_std = nn.Parameter(torch.zeros(1, action_dim))
         self.__init()
-        # attention 
-        self.alpha_attn_ly = nn.Linear(action_dim, action_dim)
-        self.alpha_act_tran_ly = nn.Linear(action_dim, action_dim)
-        
-        self.beta_attn_ly = nn.Linear(action_dim, action_dim)
-        self.beta_act_tran_ly = nn.Linear(action_dim, action_dim)
-        
-        self.mean_attn_ly = nn.Linear(action_dim, action_dim)
-        self.mean_act_tran_ly = nn.Linear(action_dim, action_dim)
-        self.sft = nn.Softmax(dim=1)
-
-    def simple_attention(self, a, act_tran_ly, ln):
-        a = act_tran_ly(torch.tanh(a))
-        one = torch.ones_like(a).to(a.device)
-        a_one = torch.einsum('bc,ba->bca', a, one).float()
-        return torch.sum(a_one * self.sft(ln(a_one)),  1)
 
     def forward(self, x):
         # nan -> pip install --upgrade numpy
@@ -375,14 +359,9 @@ class PPOPolicyBetaNet(nn.Module):
         alpha = self.alpha_layer(x)
         beta = self.beta_layer(x)
         mean = self.norm_out_layer(x)
-        if self.act_attention_flag:
-            alpha = self.simple_attention(alpha, self.alpha_act_tran_ly, self.alpha_attn_ly)
-            beta = self.simple_attention(beta, self.beta_act_tran_ly, self.beta_attn_ly)
-            mean = self.simple_attention(mean, self.mean_act_tran_ly, self.mean_attn_ly)
-    
-        alpha = F.softplus(alpha.clip(-100, 650)) + 1.0
-        beta = F.softplus(beta.clip(-100, 650)) + 1.0
         
+        alpha = F.softplus(alpha.clip(-200, 650)) + 1.0
+        beta = F.softplus(beta.clip(-200, 650)) + 1.0
         if np.isnan(alpha.sum().cpu().detach().numpy()):
             print('x=', x)
             print('x_org=', x_org)
@@ -400,7 +379,7 @@ class PPOPolicyBetaNet(nn.Module):
             dist = torch.distributions.Beta(alpha, beta)
             return dist
 
-        mean = mean * max_action
+        # mean = mean * max_action
         log_std = self.log_std.expand_as(mean) 
         std = torch.exp(log_std)  # The reason we train the 'log_std' is to ensure std=exp(log_std)>0
         dist = torch.distributions.Normal(mean, std)
@@ -415,7 +394,7 @@ class PPOPolicyBetaNet(nn.Module):
         orthogonal_init(self.norm_out_layer, gain=0.01)
 
 
-def orthogonal_init(layer, gain=1.0):
+def orthogonal_init(layer, gain=np.sqrt(2)):
     nn.init.orthogonal_(layer.weight, gain=gain)
     nn.init.constant_(layer.bias, 0)
 
@@ -600,8 +579,7 @@ class PPOValueNet(nn.Module):
     def __init(self):
         for layer in self.features:
             orthogonal_init(layer['linear'], gain=np.sqrt(2))
-
-        orthogonal_init(self.head, gain=1)
+        orthogonal_init(self.head, gain=1.0)
 
     def forward(self, x):
         for layer in self.features:
