@@ -15,7 +15,6 @@ from torch import nn
 from torch.nn import functional as F
 from ._base_net import PPOValueNet as valueNet
 from ._base_net import PPOPolicyBetaNet as policyNet
-from ._base_net import PPOValueCNN, PPOPolicyCNN
 from .grad_ana import gradCollecter
 import copy
 from torch import tensor
@@ -25,15 +24,16 @@ from collections import deque
 from typing import List
 
 
-def mini_batch(batch, mini_batch_size, adv_norm=False):
+
+def mini_batch(batch, mini_batch_size):
+    mini_batch_size += 1
     states, actions, old_log_probs, adv, td_target, b_values = zip(*batch)
-    rand_ids = np.random.randint(0, len(states), mini_batch_size)
+    # trick1: batch_normalize
     adv = torch.stack(adv)
-    if adv_norm:
-        adv = (adv - torch.mean(adv)) / (torch.std(adv) + 1e-8)
-    return torch.stack(states)[rand_ids, ...], torch.stack(actions)[rand_ids, :], \
-        torch.stack(old_log_probs).reshape(-1, 1)[rand_ids, :], adv[rand_ids, :], \
-        torch.stack(td_target)[rand_ids, :], torch.stack(b_values).reshape(-1, 1)[rand_ids, :]
+    adv = (adv - torch.mean(adv)) / (torch.std(adv) + 1e-8)
+    return torch.stack(states[:mini_batch_size]), torch.stack(actions[:mini_batch_size]), \
+        torch.stack(old_log_probs[:mini_batch_size]), adv[:mini_batch_size], \
+            torch.stack(td_target[:mini_batch_size]), torch.stack(b_values[:mini_batch_size])
 
 
 def ppo_train_iter(mini_batch_size: int, states: tensor, actions: tensor, old_log_probs: tensor, 
@@ -74,6 +74,19 @@ class memDataset(Dataset):
         return states, actions, old_log_probs, adv, td_target, b_value
 
 
+def compute_advantage(gamma, lmbda, td_delta, done):
+    td_delta = td_delta.cpu().detach().numpy()
+    done_arr = done.cpu().detach().numpy()
+    adv_list = [] 
+    adv = 0
+    for delta, d in zip(td_delta[::-1], done_arr[::-1]):
+        adv = gamma * lmbda * adv * (1.0 - d) + delta
+        adv_list.append(adv)
+    adv_list.reverse()
+    return torch.FloatTensor(np.array(adv_list))
+
+
+
 class PPO2:
     """
     PPO2算法, 采用截断方式
@@ -93,23 +106,15 @@ class PPO2:
         self.grad_collector = gradCollecter()
         dist_type = PPO_kwargs.get('dist_type', 'beta')
         act_type = PPO_kwargs.get('act_type', 'relu')
-        self.act_type = act_type
         act_attention_flag = PPO_kwargs.get('act_attention_flag', False)
         self.dist_type = dist_type
+        self.actor = policyNet(state_dim, actor_hidden_layers_dim, action_dim, dist_type=dist_type, act_type=act_type, act_attention_flag=act_attention_flag).to(device)
+        self.critic = valueNet(state_dim, critic_hidden_layers_dim, act_type=act_type).to(device)
         self.actor_lr = actor_lr
         self.critic_lr = critic_lr
-        self.cnn_flag = PPO_kwargs.get('cnn_flag', False)
-        self.continue_action_flag = PPO_kwargs.get('continue_action_flag', True)
-        if self.cnn_flag:
-            self.actor = PPOPolicyCNN(state_dim, actor_hidden_layers_dim, action_dim, dist_type=self.dist_type, act_type=self.act_type, continue_action_flag=self.continue_action_flag).to(device)
-            self.critic = PPOValueCNN(state_dim, critic_hidden_layers_dim, act_type=self.act_type).to(device)
-        else:
-            self.actor = policyNet(state_dim, actor_hidden_layers_dim, action_dim, dist_type=self.dist_type, act_type=self.act_type).to(device)
-            self.critic = valueNet(state_dim, critic_hidden_layers_dim, act_type=self.act_type).to(device)
-        self.opt = torch.optim.Adam([
-            {'params': self.actor.parameters(), 'lr': actor_lr, "eps": 1e-5}, 
-            {'params': self.critic.parameters(), 'lr': actor_lr, "eps": 1e-5}
-        ])
+
+        self.actor_opt = torch.optim.Adam(self.actor.parameters(), lr=actor_lr, eps=1e-5)
+        self.critic_opt = torch.optim.Adam(self.critic.parameters(), lr=critic_lr, eps=1e-5)
 
         self.gamma = gamma
         self.lmbda = PPO_kwargs['lmbda']
@@ -130,33 +135,24 @@ class PPO2:
         self.count = 0 
         self.device = device
         self.reward_func = reward_func
-        self.min_adv_norm = PPO_kwargs.get('min_adv_norm', False)
-        self.min_batch_collate_func = partial(
-            mini_batch, 
-            mini_batch_size=self.minibatch_size,
-            adv_norm=self.min_adv_norm 
-        )
+        self.min_batch_collate_func = partial(mini_batch, mini_batch_size=self.minibatch_size)
         self.update_cnt = 0
         self.anneal_lr = PPO_kwargs.get('act_type', False)
         self.max_grad_norm = PPO_kwargs.get('max_grad_norm', 0)
         if self.anneal_lr:
-            self.num_iters = PPO_kwargs['num_episode']
+            self.num_iters = PPO_kwargs['num_episode'] * 100 // PPO_kwargs['off_buffer_size']
 
         self.clip_vloss = PPO_kwargs.get('clip_vloss', False)
-        
+
 
     def _action_fix(self, act):
-        if not self.continue_action_flag:
-            return act
         if self.dist_type == 'beta':
             # beta 0-1 -> low ~ high
             return act * (self.action_high - self.action_low) + self.action_low
-        return act.clip(self.action_low, self.action_high)
+        return act 
     
     def _action_return(self, act):
-        if not self.continue_action_flag:
-            return act.reshape(-1)
-        if self.dist_type == 'beta' and self.continue_action_flag:
+        if self.dist_type == 'beta':
             # low ~ high -> 0-1 
             act_out = (act - self.action_low) / (self.action_high - self.action_low)
             return (act_out * 1 + 0).clip(1e-4, 9.999)
@@ -167,90 +163,61 @@ class PPO2:
         action_dist = self.actor.get_dist(state, self.action_bound)
         action = action_dist.sample()
         action = self._action_fix(action)
-        # print(f"action.cpu().detach().numpy()={action.cpu().detach().numpy()}")
-        return action.cpu().detach().numpy()
-    
-    @torch.no_grad()
-    def data_prepare(self, samples: deque):
+        return action.cpu().detach().numpy()[0]
+
+
+    def _one_deque_pp(self, samples: deque):
         state, action, reward, next_state, done = zip(*samples)
-        # print(f"state[0]={state[0].shape} ") # 4, 3
         state = torch.FloatTensor(np.stack(state)).to(self.device)
         action = torch.FloatTensor(np.stack(action)).to(self.device)
-        reward = np.stack(reward) # n, env_nums
-        # state=torch.Size([2048, 4, 3]), action=torch.Size([2048, 4, 1]), reward=(2048, 4)
+        reward = torch.tensor(np.stack(reward)).view(-1, 1).to(self.device)
         if self.reward_func is not None:
             reward = self.reward_func(reward)
 
         next_state = torch.FloatTensor(np.stack(next_state)).to(self.device)
-        #print(f'next_state.shape={next_state.shape}')
-        done = np.stack(done)
-        td_target = np.zeros_like(reward) 
-        advantage = np.zeros_like(reward) 
-        old_v_arr = np.zeros_like(reward) 
-        for env_idx in range(state.size(1)):
-            # compute adv 
-            old_v = self.critic(state[:, env_idx, ...]).detach().cpu().numpy().flatten()
-            last_v = self.critic(next_state[:, env_idx, ...]).detach().cpu().numpy()[len(reward)-1]
-            # print(f'old_v={old_v.shape} last_v={last_v.shape}')
-            gae = 0
-            for t in reversed(range(len(reward))):
-                if t == len(reward) - 1:
-                    mask = 1.0 - done[t, env_idx]
-                    next_v = last_v
-                else:
-                    mask = 1.0 - done[t+1, env_idx]
-                    next_v = old_v[t+1]
-                
-                delta = reward[t, env_idx] + self.gamma * next_v * mask - old_v[t]
-                gae = delta + self.gamma * self.lmbda * mask * gae
-                advantage[t, env_idx] = gae
-            # recompute
-            td_target[:, env_idx] = advantage[:, env_idx] + old_v
-            old_v_arr[:, env_idx] = old_v
+        done = torch.FloatTensor(np.stack(done)).view(-1, 1).to(self.device)
 
-        advantage = advantage.reshape(-1, 1)
-        td_target = td_target.reshape(-1, 1)
-        old_v_arr = old_v_arr.reshape(-1, 1)
-        try:
-            b, env_nums, action_dim = action.size()
-            action = action.reshape(-1, action_dim)
-        except Exception as e:
-            b, env_nums = action.size()
-            action_dim = 1
-            action = action.reshape(-1, 1)
-            
-        if self.cnn_flag:
-            b, env_nums, channel, s1, s2 = state.size()
-            state = state.reshape(-1, channel, s1, s2)
-        else:
-            _, _, state_dim = state.size()
-            state = state.reshape(-1, state_dim)
+        old_v = self.critic(state)
+        td_target = reward + self.gamma * self.critic(next_state) * (1 - done)
+        td_delta = td_target - old_v
+        advantage = compute_advantage(self.gamma, self.lmbda, td_delta, done).to(self.device)
+        # recompute
+        td_target = advantage + old_v
         action_dists = self.actor.get_dist(state, self.action_bound)
-        if action_dim == 1:
-            old_log_probs = action_dists.log_prob(self._action_return(action))
-        else:
-            old_log_probs = action_dists.log_prob(self._action_return(action)).sum(1)
+        old_log_probs = action_dists.log_prob(self._action_return(action))
+        return state, action, old_log_probs, advantage, td_target
 
-        # trick1: batch-normalize https://zhuanlan.zhihu.com/p/512327050  
-        if not self.min_adv_norm:
-            advantage = (advantage - np.mean(advantage)) / (np.std(advantage) + 1e-8)
-        return state, action, old_log_probs, \
-                torch.FloatTensor(advantage).to(self.device), \
-                torch.FloatTensor(td_target).to(self.device), \
-                torch.FloatTensor(old_v_arr).to(self.device)
+    def data_prepare(self, samples_list: List[deque]):
+        state_pt_list = []
+        action_pt_list = []
+        old_log_probs_pt_list = []
+        advantage_pt_list = []
+        td_target_pt_list = []
+        for sample in samples_list:
+            state_i, action_i, old_log_probs_i, advantage_i, td_target_i = self._one_deque_pp(sample)
+            state_pt_list.append(state_i)
+            action_pt_list.append(action_i)
+            old_log_probs_pt_list.append(old_log_probs_i)
+            advantage_pt_list.append(advantage_i)
+            td_target_pt_list.append(td_target_i)
+
+        state = torch.concat(state_pt_list) 
+        action = torch.concat(action_pt_list) 
+        old_log_probs = torch.concat(old_log_probs_pt_list) 
+        advantage = torch.concat(advantage_pt_list) 
+        td_target = torch.concat(td_target_pt_list)
+        return state, action, old_log_probs, advantage, td_target
 
     def lr_update(self, opt, lr, iteration):
         # total_timesteps = cfg.num_episode * 100
         # num_iters = args.total_timesteps // cfg.off_buffer_size # batch_size
         frac = max(1e-6, 1.0 - (iteration - 1.0) / self.num_iters)
         opt.param_groups[0]["lr"] = frac * lr
-        opt.param_groups[1]["lr"] = frac * lr
 
-    def update(self, samples_buffer: deque, wandb = None):
+    def update(self, samples_list: List[deque], wandb = None):
         self.update_cnt += 1
-        state, action, old_log_probs, advantage, td_target, b_values = self.data_prepare(samples_buffer)
-        print(f"update old_log_probs={old_log_probs.shape}")
-        # print(f'state={state.shape}, action={action.shape}, advantage.shape={advantage.shape} td_target.shape={td_target.shape}')
+        state, action, old_log_probs, advantage, td_target = self.data_prepare(samples_list)
+        b_values = self.critic(state).detach().reshape(-1)
         if len(old_log_probs.shape) == 2:
             old_log_probs = old_log_probs.sum(dim=1)
 
@@ -262,26 +229,18 @@ class PPO2:
             drop_last=True,
             collate_fn=self.min_batch_collate_func
         )
-        # train_loader = ppo_train_iter(
-        #     self.minibatch_size,
-        #     state, action, old_log_probs, advantage, td_target, b_values
-        # )
+
         for _ in range(self.k_epochs):
             for state_, action_, old_log_prob, adv, td_v, before_v in train_loader:
-                self.opt.zero_grad()
                 action_dists = self.actor.get_dist(state_, self.action_bound)
+                log_prob = action_dists.log_prob(self._action_return(action_))
+                entropy = action_dists.entropy().sum(1).mean()
+                if len(log_prob.shape) == 2:
+                    log_prob = log_prob.sum(dim=1)
                 new_log_prob = action_dists.log_prob(self._action_return(action_))
-                if self.continue_action_flag:
-                    new_log_prob = new_log_prob.sum(1)
-                else:
-                    new_log_prob = new_log_prob.reshape(-1, 1)
-                # print(f'new_log_prob.shape={new_log_prob.shape} old_log_prob.shape={old_log_prob.shape}')
-                try:
-                    entropy_loss = action_dists.entropy().sum(1).mean()
-                except Exception as e:
-                    # sperate action
-                    entropy_loss = action_dists.entropy().sum().mean()
+                entropy_loss = action_dists.entropy().sum(1).mean()
                 # e(log(a/b))
+                ratio = torch.exp(log_prob - old_log_prob.detach())
                 ratio = torch.exp(new_log_prob - old_log_prob.detach())
                 surr1 = ratio * adv
                 surr2 = torch.clamp(ratio, 1 - self.eps, 1 + self.eps) * adv
@@ -297,19 +256,14 @@ class PPO2:
                     )
                 else:
                     critic_loss = 0.5 * torch.mean((new_v - td_v).pow(2))
-                
+
                 total_loss = actor_loss + self.critic_coef * critic_loss
                 loss_item = total_loss.cpu().detach().numpy()
-                if np.isnan(loss_item):
-                    print(f'>>>>>>>>>> nan loss=', loss_item)
-                    print(f'>>>>>>>>>> actor_loss=', actor_loss)
-                    print(f'>>>>>>>>>> ratio =', ratio)
-                    print(f'>>>>>>>>>> new_log_prob =', new_log_prob)
-                    print(f'>>>>>>>>>> old_log_prob =', old_log_prob)
-                    print(f'>>>>>>>>>> adv =', adv)
-                    print(f'>>>>>>>>>> critic_loss=', critic_loss)
 
-                total_loss.backward()
+                self.actor_opt.zero_grad()
+                self.critic_opt.zero_grad()
+                actor_loss.backward()
+                critic_loss.backward()
                 self.grad_collector(self.actor.parameters())
                 self.grad_collector(self.critic.parameters())
                 if wandb is not None:
@@ -321,11 +275,12 @@ class PPO2:
                 if self.max_grad_norm > 0.0001:
                     torch.nn.utils.clip_grad_norm_(self.actor.parameters(), self.max_grad_norm) 
                     torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.max_grad_norm ) 
-                self.opt.step()
-        
+                self.actor_opt.step()
+                self.critic_opt.step()
+
         if self.anneal_lr:
-            self.lr_update(self.opt, self.actor_lr, self.update_cnt)
-            # self.lr_update(self.critic_opt, self.critic_lr, self.update_cnt)
+            self.lr_update(self.actor_opt, self.actor_lr, self.update_cnt)
+            self.lr_update(self.critic_opt, self.critic_lr, self.update_cnt)
         return True
 
     def save_model(self, file_path):
@@ -336,23 +291,22 @@ class PPO2:
         critic_f = os.path.join(file_path, 'PPO_critic.ckpt')
         torch.save(self.actor.state_dict(), act_f)
         torch.save(self.critic.state_dict(), critic_f)
-
+        
+        
     def load_model(self, file_path):
         act_f = os.path.join(file_path, 'PPO_actor.ckpt')
         critic_f = os.path.join(file_path, 'PPO_critic.ckpt')
         try:
-            self.actor.load_state_dict(torch.load(act_f))
-            self.critic.load_state_dict(torch.load(critic_f))
-        except Exception as e:
             self.actor.load_state_dict(torch.load(act_f, map_location='cpu'))
             self.critic.load_state_dict(torch.load(critic_f, map_location='cpu'))
+        except Exception as e:
+            self.actor.load_state_dict(torch.load(act_f, map_location='cpu'), strict=False)
+            self.critic.load_state_dict(torch.load(critic_f, map_location='cpu'), strict=False)
 
         self.actor.to(self.device)
         self.critic.to(self.device)
-        self.opt = torch.optim.Adam([
-            {'params': self.actor.parameters(), 'lr': self.actor_lr, "eps": 1e-5}, 
-            {'params': self.critic.parameters(), 'lr': self.actor_lr, "eps": 1e-5}
-        ])
+        self.actor_opt = torch.optim.Adam(self.actor.parameters(), lr=self.actor_lr, eps=1e-5)
+        self.critic_opt = torch.optim.Adam(self.critic.parameters(), lr=self.critic_lr, eps=1e-5)
         self.update_cnt = 0
 
     def train(self):

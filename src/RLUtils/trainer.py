@@ -209,10 +209,11 @@ def train_off_policy(env, agent ,cfg,
 
 
 @torch.no_grad()
-def play(env_in, env_agent, cfg, episode_count=2, action_contiguous=False, play_without_seed=False, render=True):
+def play(env_in, env_agent, cfg, episode_count=2, action_contiguous=False, play_without_seed=False, render=True, ppo_train=False):
     """
     对训练完成的Agent进行游戏
     """
+    time_int = max(int(not ppo_train) * 3, 1)
     env = copy.deepcopy(env_in)
     try:
         env_agent.eval()
@@ -231,18 +232,26 @@ def play(env_in, env_agent, cfg, episode_count=2, action_contiguous=False, play_
             a = env_agent.policy(s)
             if action_contiguous:
                 c_a = Pendulum_dis_to_con(a, env, cfg.action_dim)
-                n_state, reward, terminated, truncated, _ = env.step([c_a])
+                n_state, reward, terminated, truncated, info = env.step([c_a])
             else:
-                n_state, reward, terminated, truncated, _ = env.step(a)
-            
+                try:
+                    n_state, reward, terminated, truncated, info = env.step(a)
+                except Exception as e:  # Atari
+                    n_state, reward, terminated, truncated, info = env.step(a[0])
+
             done = terminated or truncated
             episode_reward += reward
             episode_cnt += 1
+            # episode
             s = n_state
             if done:
                 break
-            if (episode_reward >= 3 * cfg.max_episode_rewards) or (episode_cnt >= 3 * cfg.max_episode_steps):
+            if (episode_reward >= time_int * cfg.max_episode_rewards) or (episode_cnt >= time_int * cfg.max_episode_steps):
                 break
+        
+        # if ppo_train:
+        #     ep_reward_record.append(info['episode']['r'])
+        # else:    
         ep_reward_record.append(episode_reward)
 
         print(f'[ seed={final_seed} ] Get reward {episode_reward}. Last {episode_cnt} times')
@@ -483,41 +492,47 @@ def ppo2_train(envs, agent, cfg,
     best_ep_reward = -np.inf
     buffer_ = replayBuffer(cfg.off_buffer_size)
     steps = 0
+    rand_seed = np.random.randint(0, 9999)
+    final_seed = rand_seed if train_without_seed else cfg.seed
+    s, _ = envs.reset(seed=final_seed)
     for i in tq_bar:
         if update_flag:
             buffer_ = replayBuffer(cfg.off_buffer_size)
 
         tq_bar.set_description(f'Episode [ {i+1} / {cfg.num_episode} ](minibatch={mini_b})')    
-        rand_seed = np.random.randint(0, 9999)
-        final_seed = rand_seed if train_without_seed else cfg.seed
-        s, _ = envs.reset(seed=final_seed)
         done = False
-        episode_rewards = np.zeros(envs.num_envs)
         for step_i in range(cfg.off_buffer_size):
             a = agent.policy(s)
-            n_s, r, terminated, truncated, _ = envs.step(a)
+            n_s, r, terminated, truncated, infos = envs.step(a)
             done = np.logical_or(terminated, truncated)
             steps += 1
             mem_done = done 
             buffer_.add(s, a, r, n_s, mem_done)
             s = n_s
-            episode_rewards += r
             if (steps % test_ep_freq == 0) and (steps > cfg.off_buffer_size):
-                freq_ep_reward = play(test_env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False)
+                freq_ep_reward = play(test_env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False, ppo_train=True)
                 
                 if freq_ep_reward > best_ep_reward:
                     best_ep_reward = freq_ep_reward
                     # 模型保存
                     save_agent_model(agent, cfg, f"[ ep={i+1} ](freqBest) bestTestReward={best_ep_reward:.2f}")
 
-            if(steps % cfg.max_episode_steps == 0):
-                rewards_list.append(episode_rewards.mean())
-                episode_rewards = np.zeros(envs.num_envs)
+            if "final_info" in infos:
+                info_counts = 0.0001
+                episode_rewards = 0
+                for info in infos["final_info"]:
+                    if info and "episode" in info:
+                        # print(f"global_step={step_i}, episodic_return={info['episode']['r']}")
+                        episode_rewards += info["episode"]["r"]
+                        info_counts += 1
+ 
+            # if(steps % cfg.max_episode_steps == 0):
+                rewards_list.append(episode_rewards/info_counts)
                 now_reward = np.mean(rewards_list[-10:])
 
                 if (now_reward > recent_best_reward):
                     # best 时也进行测试
-                    test_ep_reward = play(test_env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False)
+                    test_ep_reward = play(test_env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False, ppo_train=True)
                     if test_ep_reward > best_ep_reward:
                         best_ep_reward = test_ep_reward
                         # 模型保存

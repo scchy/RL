@@ -1,12 +1,33 @@
 import gymnasium as gym
 import numpy as np
+from .env_wrapper import baseSkipFrame, EpisodicLifeEnv, ClipRewardEnv, FireResetEnv, ResizeObservation, GrayScaleObservation
 
-def make_env(env_id, obs_norm_trans_flag=False, render_mode=None):
+
+def make_env(env_id, obs_norm_trans_flag=False, reward_norm_trans_flag=False, gamma=0.99, render_mode=None, **kwargs):
     def thunk():
-        env = gym.make(env_id, render_mode=render_mode)
+        env = gym.make(env_id, render_mode=render_mode, **kwargs)
+        env = gym.wrappers.RecordEpisodeStatistics(env)
         if obs_norm_trans_flag:
             env = gym.wrappers.NormalizeObservation(gym.wrappers.ClipAction(env))
             env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10))
+        if reward_norm_trans_flag:
+            env = gym.wrappers.NormalizeReward(env, gamma=gamma)
+            env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
+        return env
+    return thunk
+
+
+def make_atari_env(env_id, **kwargs):
+    def thunk():
+        env = gym.make(env_id, **kwargs)
+        env = gym.wrappers.RecordEpisodeStatistics(env)
+        env = baseSkipFrame(env, skip=5, start_skip=30)
+        env = EpisodicLifeEnv(env)
+        if "FIRE" in env.unwrapped.get_action_meanings():
+            env = FireResetEnv(env)
+        env = ClipRewardEnv(env)
+        env = ResizeObservation(GrayScaleObservation(env), shape=84)
+        env = gym.wrappers.FrameStack(env, 4)
         return env
     return thunk
 

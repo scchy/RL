@@ -100,7 +100,8 @@ class CarV2SkipFrame(gym.Wrapper):
         done = False
         total_reward = 0
         for i in range(self._skip):
-            obs, reward, done, info, _ = self.env.step(action)
+            obs, reward, terminated, truncated, info = self.env.step(action)
+            done = terminated or truncated
             out_done = self.judge_out_of_route(obs)
             done_f = done or out_done
             reward = -10 if out_done else reward
@@ -154,8 +155,9 @@ class GrayScaleObservation(gym.ObservationWrapper):
         (high, width, channel) -> (1, high, width) 
         """
         super().__init__(env)
+        # change observation type for [ sync_vector_env ]
         self.observation_space = Box(
-            low=0, high=255, shape=self.observation_space.shape[:2], dtype=np.uint8
+            low=0, high=255, shape=self.observation_space.shape[:2], dtype=np.float32
         )
     
     def observation(self, observation):
@@ -174,7 +176,8 @@ class ResizeObservation(gym.ObservationWrapper):
         super().__init__(env)
         self.shape = (shape, shape)
         obs_shape = self.shape + self.observation_space.shape[2:]
-        self.observation_space = Box(low=0, high=255, shape=obs_shape, dtype=np.uint8)
+        # change observation type for [ sync_vector_env ]
+        self.observation_space = Box(low=0, high=255, shape=obs_shape, dtype=np.float32)
 
     def observation(self, observation):
         #  Normalize -> input[channel] - mean[channel]) / std[channel]
@@ -182,9 +185,79 @@ class ResizeObservation(gym.ObservationWrapper):
         return transformations(observation).squeeze(0)
 
 
+# reference: https://github.com/Stable-Baselines-Team/stable-baselines/blob/master/stable_baselines/common/atari_wrappers.py
+# NoopResetEnv == baseSkipFrame
+class EpisodicLifeEnv(gym.Wrapper):
+    def __init__(self, env):
+        """
+        Make end-of-life == end-of-episode, but only reset on true game over.
+        Done by DeepMind for the DQN and co. since it helps value estimation.
+
+        :param env: (Gym Environment) the environment to wrap
+        """
+        gym.Wrapper.__init__(self, env)
+        self.lives = 0
+        self.was_real_done = True
+
+    def step(self, action):
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        done = terminated or truncated
+        self.was_real_done = done
+        # check current lives, make loss of life terminal,
+        # then update lives to handle bonus lives
+        lives = self.env.unwrapped.ale.lives()
+        if 0 < lives < self.lives:
+            # for Qbert sometimes we stay in lives == 0 condtion for a few frames
+            # so its important to keep lives > 0, so that we only reset once
+            # the environment advertises done.
+            done = True
+        self.lives = lives
+        return obs, reward, done, done, info
 
 
+class ClipRewardEnv(gym.RewardWrapper):
+    def __init__(self, env):
+        """
+        clips the reward to {+1, 0, -1} by its sign.
 
+        :param env: (Gym Environment) the environment
+        """
+        gym.RewardWrapper.__init__(self, env)
+
+    def reward(self, reward):
+        """
+        Bin reward to {+1, 0, -1} by its sign.
+
+        :param reward: (float)
+        """
+        return np.sign(reward)
+
+
+class FireResetEnv(gym.Wrapper):
+    def __init__(self, env):
+        """
+        Take action on reset for environments that are fixed until firing.
+
+        :param env: (Gym Environment) the environment to wrap
+        """
+        gym.Wrapper.__init__(self, env)
+        assert env.unwrapped.get_action_meanings()[1] == 'FIRE'
+        assert len(env.unwrapped.get_action_meanings()) >= 3
+
+    def reset(self, **kwargs):
+        self.env.reset(**kwargs)
+        obs, reward, terminated, truncated, info = self.env.step(1)
+        done = terminated or truncated
+        if done:
+            self.env.reset(**kwargs)
+        obs, reward, terminated, truncated, info = self.env.step(2)
+        done = terminated or truncated
+        if done:
+            self.env.reset(**kwargs)
+        return obs, info
+
+    def step(self, action):
+        return self.env.step(action)
 
 
 

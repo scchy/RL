@@ -60,10 +60,7 @@ class CNNQNet(nn.Module):
 
     @torch.no_grad
     def _get_cnn_out_dim(self):
-        pic = torch.randn((1, 4, self.# The above code is declaring a variable named "state_dim" in
-        # Python. However, the code is incomplete and does not assign a
-        # value to the variable.
-        state_dim, self.state_dim))
+        pic = torch.randn((1, 4, self.state_dim, self.state_dim))
         return self.cnn_feature(pic).shape[1]
     
     def forward(self, state):
@@ -339,6 +336,7 @@ class PPOPolicyBetaNet(nn.Module):
         print(f'PPOPolicyBetaNet.act_attention_flag={self.act_attention_flag}')
         self.dist_type = dist_type
         self.features = nn.ModuleList()
+        self.act_type = act_type
         for idx, h in enumerate(hidden_layers_dim):
             self.features.append(nn.ModuleDict({
                 'linear': nn.Linear(hidden_layers_dim[idx-1] if idx else state_dim, h),
@@ -354,17 +352,22 @@ class PPOPolicyBetaNet(nn.Module):
         # nan -> pip install --upgrade numpy
         x_org = x
         for layer in self.features:
-            x = layer['linear_action'](layer['linear'](x))
+            x_lin = layer['linear'](x)
+            if self.act_type.lower() == 'tanh':
+                x = layer['linear_action'](x_lin.clip(-200.0, 200.0))
+                continue
+            x = layer['linear_action'](x_lin)
         
         alpha = self.alpha_layer(x)
         beta = self.beta_layer(x)
         mean = self.norm_out_layer(x)
         
-        alpha = F.softplus(alpha.clip(-200, 650)) + 1.0
-        beta = F.softplus(beta.clip(-200, 650)) + 1.0
+        alpha = F.softplus(alpha.clip(-200.0, 650.0)) + 1.0
+        beta = F.softplus(beta.clip(-200.0, 650.0)) + 1.0
         if np.isnan(alpha.sum().cpu().detach().numpy()):
-            print('x=', x)
             print('x_org=', x_org)
+            print('x=', x)
+            print('x_lin=', x_lin)
         return alpha, beta, mean
 
     def mean(self, s):
@@ -572,7 +575,7 @@ class PPOValueNet(nn.Module):
                 'linear': nn.Linear(hidden_layers_dim[idx-1] if idx else state_dim, h),
                 'linear_activation': nn.ReLU(inplace=True) if act_type == 'relu' else nn.Tanh()
             }))
-        
+        self.act_type = act_type
         self.head = nn.Linear(hidden_layers_dim[-1] , 1)
         self.__init()
 
@@ -583,7 +586,11 @@ class PPOValueNet(nn.Module):
 
     def forward(self, x):
         for layer in self.features:
-            x = layer['linear_activation'](layer['linear'](x))
+            x = layer['linear'](x)
+            if self.act_type.lower() == 'tanh':
+                x = layer['linear_activation'](x.clip(-200.0, 200.0))
+                continue
+            x = layer['linear_activation'](x)
         return self.head(x)
 
 
@@ -622,3 +629,176 @@ def weights_init(m):
         nn.init.xavier_normal_(m.weight.data)
     elif classname.find('Linear') != -1:
         nn.init.xavier_normal_(m.weight)
+
+
+class PPOValueCNN(nn.Module):
+    def __init__(self, state_dim, hidden_layers_dim, act_type='relu'):
+        super(PPOValueCNN, self).__init__()
+        self.state_dim = 84 # reshape 84， 84
+        # Atria-CNN
+        self.cnn_feature = nn.Sequential(
+            nn.Conv2d(in_channels=4, out_channels=16, kernel_size=4, stride=2),
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2, 0),
+            nn.Conv2d(in_channels=16, out_channels=32, kernel_size=4, stride=2),
+            nn.ReLU(),
+            nn.AvgPool2d(2, 2, 0),
+            nn.Flatten()
+        )
+        cnn_out_dim = self._get_cnn_out_dim()
+        self.features = nn.ModuleList()
+        for idx, h in enumerate(hidden_layers_dim):
+            self.features.append(nn.ModuleDict({
+                'linear': nn.Linear(hidden_layers_dim[idx-1] if idx else cnn_out_dim, h),
+                'linear_activation': nn.ReLU(inplace=True) if act_type == 'relu' else nn.Tanh()
+            }))
+        self.act_type = act_type
+        self.head = nn.Linear(hidden_layers_dim[-1] , 1)
+        self.__init()
+
+    def __init(self):
+        for layer in self.features:
+            orthogonal_init(layer['linear'], gain=np.sqrt(2))
+        orthogonal_init(self.head, gain=1.0)
+        
+        for layer in self.cnn_feature:
+            classname = layer.__class__.__name__
+            if classname.find('Conv2d') != -1:
+                _ = nn.init.xavier_normal_(layer.weight.data)
+
+    @torch.no_grad
+    def _get_cnn_out_dim(self):
+        pic = torch.randn((1, 4, self.state_dim, self.state_dim))
+        return self.cnn_feature(pic).shape[1]
+
+    def forward(self, state):
+        if len(state.shape) == 3:
+            state = state.unsqueeze(0)
+        try:
+            x = self.cnn_feature(state)
+        except Exception as e:
+            state = state.permute(0, 3, 1, 2)
+            x = self.cnn_feature(state)
+
+        for layer in self.features:
+            x = layer['linear'](x)
+            if self.act_type.lower() == 'tanh':
+                x = layer['linear_activation'](x.clip(-200.0, 200.0))
+                continue
+            x = layer['linear_activation'](x)
+        return self.head(x)
+
+
+
+class PPOPolicyCNN(nn.Module):
+    """
+    continuity action:
+    normal distribution (mean, std) 
+    Chou P W, Maturana D, Scherer S. Improving stochastic policy gradients in continuous control with deep reinforcement learning using the beta distribution[C]
+    //International conference on machine learning. PMLR, 2017: 834-843.
+    https://proceedings.mlr.press/v70/chou17a.html
+    my trick: action attention
+    """
+    def __init__(self, state_dim: int, hidden_layers_dim: typ.List, action_dim: int, 
+                 dist_type='beta', 
+                 act_type='relu',
+                 continue_action_flag=False,
+                 **kwargs):
+        super(PPOPolicyCNN, self).__init__()
+        self.continue_action_flag = continue_action_flag
+        self.state_dim = 84 # reshape 84， 84
+        # Atria-CNN
+        self.cnn_feature = nn.Sequential(
+            nn.Conv2d(in_channels=4, out_channels=16, kernel_size=4, stride=2),
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2, 0),
+            nn.Conv2d(in_channels=16, out_channels=32, kernel_size=4, stride=2),
+            nn.ReLU(),
+            nn.AvgPool2d(2, 2, 0),
+            nn.Flatten()
+        )
+        cnn_out_dim = self._get_cnn_out_dim()
+        self.dist_type = dist_type
+        self.features = nn.ModuleList()
+        self.act_type = act_type
+        for idx, h in enumerate(hidden_layers_dim):
+            self.features.append(nn.ModuleDict({
+                'linear': nn.Linear(hidden_layers_dim[idx-1] if idx else cnn_out_dim, h),
+                'linear_action': nn.ReLU(inplace=True) if act_type == 'relu' else nn.Tanh()
+            }))
+        self.alpha_layer = nn.Linear(hidden_layers_dim[-1], action_dim)
+        self.beta_layer = nn.Linear(hidden_layers_dim[-1], action_dim)
+        self.norm_out_layer = nn.Linear(hidden_layers_dim[-1], action_dim)
+        self.log_std = nn.Parameter(torch.zeros(1, action_dim))
+        self.__init()
+
+    @torch.no_grad
+    def _get_cnn_out_dim(self):
+        pic = torch.randn((1, 4, self.state_dim, self.state_dim))
+        return self.cnn_feature(pic).shape[1]
+
+    def forward(self, state):
+        if len(state.shape) == 5:
+            state = state.squeeze(0)
+        if len(state.shape) == 3:
+            state = state.unsqueeze(0)
+        try:
+            x = self.cnn_feature(state)
+        except Exception as e:
+            state = state.permute(0, 3, 1, 2)
+            x = self.cnn_feature(state)
+
+        for layer in self.features:
+            x_lin = layer['linear'](x)
+            if self.act_type.lower() == 'tanh':
+                x = layer['linear_action'](x_lin.clip(-200.0, 200.0))
+                continue
+            x = layer['linear_action'](x_lin)
+        
+        alpha = self.alpha_layer(x)
+        beta = self.beta_layer(x)
+        mean = self.norm_out_layer(x)
+        
+        alpha = F.softplus(alpha.clip(-200.0, 650.0)) + 1.0
+        beta = F.softplus(beta.clip(-200.0, 650.0)) + 1.0
+        return alpha, beta, mean
+
+    def mean(self, s):
+        alpha, beta, mean = self.forward(s)
+        if self.dist_type == 'beta':
+            mean = alpha / (alpha + beta)  # The mean of the beta distribution
+        return mean
+    
+    def get_dist(self, x, max_action=1.0):
+        if self.continue_action_flag:
+            return self.get_continue_dist(x, max_action)
+        return self.get_sperate_dist(x)
+        
+    def get_continue_dist(self, x, max_action=1.0):
+        alpha, beta, mean = self.forward(x)
+        if self.dist_type == "beta":
+            dist = torch.distributions.Beta(alpha, beta)
+            return dist
+
+        # mean = mean * max_action
+        log_std = self.log_std.expand_as(mean) 
+        std = torch.exp(log_std)  # The reason we train the 'log_std' is to ensure std=exp(log_std)>0
+        dist = torch.distributions.Normal(mean, std)
+        return dist
+
+    def get_sperate_dist(self, x):
+        _, _, mean = self.forward(x)
+        dist = torch.distributions.Categorical(logits=mean)
+        return dist
+
+    def __init(self):
+        for layer in self.features:
+            orthogonal_init(layer['linear'], gain=np.sqrt(2))
+            
+        orthogonal_init(self.alpha_layer, gain=0.01)
+        orthogonal_init(self.beta_layer, gain=0.01)
+        orthogonal_init(self.norm_out_layer, gain=0.01)
+        for layer in self.cnn_feature:
+            classname = layer.__class__.__name__
+            if classname.find('Conv2d') != -1:
+                _ = nn.init.xavier_normal_(layer.weight.data)
