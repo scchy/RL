@@ -17,15 +17,17 @@ def make_env(env_id, obs_norm_trans_flag=False, reward_norm_trans_flag=False, ga
     return thunk
 
 
-def make_atari_env(env_id, **kwargs):
+def make_atari_env(env_id, episod_life=True, clip_reward=True, **kwargs):
     def thunk():
         env = gym.make(env_id, **kwargs)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env = baseSkipFrame(env, skip=5, start_skip=30)
-        env = EpisodicLifeEnv(env)
+        if episod_life:
+            env = EpisodicLifeEnv(env)
         if "FIRE" in env.unwrapped.get_action_meanings():
             env = FireResetEnv(env)
-        env = ClipRewardEnv(env)
+        if clip_reward:
+            env = ClipRewardEnv(env)
         env = ResizeObservation(GrayScaleObservation(env), shape=84)
         env = gym.wrappers.FrameStack(env, 4)
         return env

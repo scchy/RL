@@ -664,7 +664,7 @@ class PPOValueCNN(nn.Module):
         for layer in self.cnn_feature:
             classname = layer.__class__.__name__
             if classname.find('Conv2d') != -1:
-                _ = nn.init.xavier_normal_(layer.weight.data)
+                orthogonal_init(layer, gain=np.sqrt(2))
 
     @torch.no_grad
     def _get_cnn_out_dim(self):
@@ -801,4 +801,4 @@ class PPOPolicyCNN(nn.Module):
         for layer in self.cnn_feature:
             classname = layer.__class__.__name__
             if classname.find('Conv2d') != -1:
-                _ = nn.init.xavier_normal_(layer.weight.data)
+                orthogonal_init(layer, gain=np.sqrt(2))

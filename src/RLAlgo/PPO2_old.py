@@ -185,6 +185,8 @@ class PPO2:
         td_target = advantage + old_v
         action_dists = self.actor.get_dist(state, self.action_bound)
         old_log_probs = action_dists.log_prob(self._action_return(action))
+        if len(old_log_probs.shape) == 2:
+            old_log_probs = old_log_probs.sum(dim=1)
         return state, action, old_log_probs, advantage, td_target
 
     def data_prepare(self, samples_list: List[deque]):
@@ -233,14 +235,12 @@ class PPO2:
         for _ in range(self.k_epochs):
             for state_, action_, old_log_prob, adv, td_v, before_v in train_loader:
                 action_dists = self.actor.get_dist(state_, self.action_bound)
-                log_prob = action_dists.log_prob(self._action_return(action_))
-                entropy = action_dists.entropy().sum(1).mean()
-                if len(log_prob.shape) == 2:
-                    log_prob = log_prob.sum(dim=1)
                 new_log_prob = action_dists.log_prob(self._action_return(action_))
+                entropy = action_dists.entropy().sum(1).mean()
+                if len(new_log_prob.shape) == 2:
+                    new_log_prob = new_log_prob.sum(dim=1)
                 entropy_loss = action_dists.entropy().sum(1).mean()
                 # e(log(a/b))
-                ratio = torch.exp(log_prob - old_log_prob.detach())
                 ratio = torch.exp(new_log_prob - old_log_prob.detach())
                 surr1 = ratio * adv
                 surr2 = torch.clamp(ratio, 1 - self.eps, 1 + self.eps) * adv

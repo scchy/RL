@@ -111,7 +111,7 @@ class CarV2SkipFrame(gym.Wrapper):
             tt_reward_list.append(reward)
             if done_f:
                 break
-        return obs[:84, 6:90, :], total_reward, done_f, info, _
+        return obs[:84, 6:90, :], total_reward, done_f, done_f, info
     
     def judge_out_of_route(self, obs):
         s = obs[:84, 6:90, :]
@@ -201,10 +201,10 @@ class EpisodicLifeEnv(gym.Wrapper):
 
     def step(self, action):
         obs, reward, terminated, truncated, info = self.env.step(action)
-        done = terminated or truncated
-        self.was_real_done = done
+        self.was_real_done = terminated
         # check current lives, make loss of life terminal,
         # then update lives to handle bonus lives
+        done = False
         lives = self.env.unwrapped.ale.lives()
         if 0 < lives < self.lives:
             # for Qbert sometimes we stay in lives == 0 condtion for a few frames
@@ -212,7 +212,8 @@ class EpisodicLifeEnv(gym.Wrapper):
             # the environment advertises done.
             done = True
         self.lives = lives
-        return obs, reward, done, done, info
+        # test 继续，train的时候mask
+        return obs, reward, self.was_real_done, done, info
 
 
 class ClipRewardEnv(gym.RewardWrapper):

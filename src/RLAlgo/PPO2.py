@@ -168,8 +168,11 @@ class PPO2:
         action = action_dist.sample()
         action = self._action_fix(action)
         # print(f"action.cpu().detach().numpy()={action.cpu().detach().numpy()}")
-        return action.cpu().detach().numpy()
-    
+        out = action.cpu().detach().numpy()
+        if len(out.shape) == 3:
+            return out[0]
+        return out
+
     @torch.no_grad()
     def data_prepare(self, samples: deque):
         state, action, reward, next_state, done = zip(*samples)
@@ -242,14 +245,14 @@ class PPO2:
     def lr_update(self, opt, lr, iteration):
         # total_timesteps = cfg.num_episode * 100
         # num_iters = args.total_timesteps // cfg.off_buffer_size # batch_size
-        frac = max(1e-6, 1.0 - (iteration - 1.0) / self.num_iters)
+        frac = max(1e-8, 1.0 - (iteration - 1.0) / self.num_iters)
         opt.param_groups[0]["lr"] = frac * lr
         opt.param_groups[1]["lr"] = frac * lr
 
     def update(self, samples_buffer: deque, wandb = None):
         self.update_cnt += 1
         state, action, old_log_probs, advantage, td_target, b_values = self.data_prepare(samples_buffer)
-        print(f"update old_log_probs={old_log_probs.shape}")
+        # print(f"update old_log_probs={old_log_probs.shape}")
         # print(f'state={state.shape}, action={action.shape}, advantage.shape={advantage.shape} td_target.shape={td_target.shape}')
         if len(old_log_probs.shape) == 2:
             old_log_probs = old_log_probs.sum(dim=1)
@@ -272,10 +275,9 @@ class PPO2:
                 action_dists = self.actor.get_dist(state_, self.action_bound)
                 new_log_prob = action_dists.log_prob(self._action_return(action_))
                 if self.continue_action_flag:
-                    new_log_prob = new_log_prob.sum(1)
+                    new_log_prob = new_log_prob.sum(1).reshape(-1, 1)
                 else:
                     new_log_prob = new_log_prob.reshape(-1, 1)
-                # print(f'new_log_prob.shape={new_log_prob.shape} old_log_prob.shape={old_log_prob.shape}')
                 try:
                     entropy_loss = action_dists.entropy().sum(1).mean()
                 except Exception as e:
@@ -285,13 +287,14 @@ class PPO2:
                 ratio = torch.exp(new_log_prob - old_log_prob.detach())
                 surr1 = ratio * adv
                 surr2 = torch.clamp(ratio, 1 - self.eps, 1 + self.eps) * adv
-
                 actor_loss = -torch.min(surr1, surr2).mean().float() - self.ent_coef * entropy_loss
                 new_v = self.critic(state_).float()
                 td_v = td_v.detach().float()
+                # print(f'new_log_prob.shape={new_log_prob.shape} old_log_prob.shape={old_log_prob.shape} ratio={ratio.shape} adv={adv.shape} actor_loss={actor_loss} new_v={new_v.shape} td_v={td_v.shape}')
                 if self.clip_vloss:
                     # ref: https://iclr-blog-track.github.io/2022/03/25/ppo-implementation-details/
                     v = torch.clamp(new_v, before_v - self.eps, before_v + self.eps)
+                    # print(f'v={v.shape} td_v={td_v.shape} new_v={new_v.shape}')
                     critic_loss = 0.5 * torch.mean(
                         torch.max((v - td_v).pow(2), (new_v - td_v).pow(2))
                     )

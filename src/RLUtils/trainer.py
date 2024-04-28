@@ -239,7 +239,7 @@ def play(env_in, env_agent, cfg, episode_count=2, action_contiguous=False, play_
                 except Exception as e:  # Atari
                     n_state, reward, terminated, truncated, info = env.step(a[0])
 
-            done = terminated or truncated
+            done = terminated if ppo_train else (terminated or truncated)
             episode_reward += reward
             episode_cnt += 1
             # episode
@@ -461,6 +461,7 @@ def ppo2_train(envs, agent, cfg,
                     online_collect_nums=1024,
                     test_episode_count=3,
                     wandb_project_name="RL-train_on_policy",
+                    add_max_step_reward_flag=False
                 ):
     test_env = envs.env_fns[0]()
     env_id = str(test_env).split('>')[0].split('<')[-1]
@@ -500,7 +501,8 @@ def ppo2_train(envs, agent, cfg,
             buffer_ = replayBuffer(cfg.off_buffer_size)
 
         tq_bar.set_description(f'Episode [ {i+1} / {cfg.num_episode} ](minibatch={mini_b})')    
-        done = False
+        step_rewards = np.zeros(envs.num_envs)
+        step_reward_mean = 0.0
         for step_i in range(cfg.off_buffer_size):
             a = agent.policy(s)
             n_s, r, terminated, truncated, infos = envs.step(a)
@@ -509,6 +511,7 @@ def ppo2_train(envs, agent, cfg,
             mem_done = done 
             buffer_.add(s, a, r, n_s, mem_done)
             s = n_s
+            step_rewards += r
             if (steps % test_ep_freq == 0) and (steps > cfg.off_buffer_size):
                 freq_ep_reward = play(test_env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False, ppo_train=True)
                 
@@ -517,18 +520,29 @@ def ppo2_train(envs, agent, cfg,
                     # 模型保存
                     save_agent_model(agent, cfg, f"[ ep={i+1} ](freqBest) bestTestReward={best_ep_reward:.2f}")
 
-            if "final_info" in infos:
+
+            max_step_flag = (step_i == (cfg.off_buffer_size - 1)) and add_max_step_reward_flag
+            if max_step_flag:
+                step_reward_mean = step_rewards.mean()
+
+            if (("final_info" in infos) or max_step_flag) and step_i >= 5:
                 info_counts = 0.0001
                 episode_rewards = 0
-                for info in infos["final_info"]:
+                for info in infos.get("final_info", dict()):
                     if info and "episode" in info:
                         # print(f"global_step={step_i}, episodic_return={info['episode']['r']}")
-                        episode_rewards += info["episode"]["r"]
+                        if isinstance(info["episode"]["r"], np.ndarray):
+                            episode_rewards += info["episode"]["r"][0]
+                        else:
+                            episode_rewards += info["episode"]["r"]
                         info_counts += 1
- 
+
             # if(steps % cfg.max_episode_steps == 0):
-                rewards_list.append(episode_rewards/info_counts)
+                rewards_list.append(max(episode_rewards/info_counts, step_reward_mean))
+                # print(rewards_list[-10:])  0: in buffer_size step not get any point
                 now_reward = np.mean(rewards_list[-10:])
+                if max_step_flag:
+                    step_reward_mean = 0.0
 
                 if (now_reward > recent_best_reward):
                     # best 时也进行测试

@@ -3,7 +3,6 @@ from os.path import dirname
 import sys
 import gymnasium as gym
 import numpy as np
-from gymnasium.wrappers import ClipAction, NormalizeObservation, TransformObservation, NormalizeReward, TransformReward  
 import torch
 try:
     dir_ = dirname(dirname(__file__))
@@ -290,7 +289,7 @@ def Humanoid_v4_ppo2_test():
     """
     # [ Humanoid-v4 ](state: (376,),action: (17,)(连续 <-0.4 -> 0.4>))
     env_name = 'Humanoid-v4'
-    num_envs = 10
+    num_envs = 30
     gym_env_desc(env_name)
     print("gym.__version__ = ", gym.__version__ )
     path_ = os.path.dirname(__file__)
@@ -309,18 +308,18 @@ def Humanoid_v4_ppo2_test():
         actor_hidden_layers_dim=[128, 128, 128],
         critic_hidden_layers_dim=[128, 128, 128],
         # agent参数
-        actor_lr=1.5e-4, #2.0e-3, # 1.8e-4, # 3.5e-4,  # 1.5e-4, # X2.5e-4
+        actor_lr=1.8e-4, #2.0e-3, # 1.8e-4, # 3.5e-4,  # 1.5e-4, # X2.5e-4
         gamma=0.99,
         # 训练参数
-        num_episode=12000, 
+        num_episode=15000, 
         off_buffer_size=500, # batch_size = off_buffer_size * num_env
         max_episode_steps=500,
         PPO_kwargs={
-            'lmbda': 0.9,
-            'eps': 0.25,
+            'lmbda': 0.95,
+            'eps': 0.2,
             'k_epochs': 2,  # update_epochs
-            'sgd_batch_size': 128,  # 1024, # 512, # 256,  
-            'minibatch_size': 16,  # 900,  # 256, # 128,  
+            'sgd_batch_size': 2048, # 128,  # 1024, # 512, 
+            'minibatch_size': 128,  # 16,   # 900,  # 256,  
             'action_space': envs.single_action_space,
             'act_type': 'tanh',
             'dist_type': dist_type,
@@ -352,11 +351,11 @@ def Humanoid_v4_ppo2_test():
         device=cfg.device,
         reward_func=None, # lambda r: (r + 10.0)/10.0
     )
-    # agent.train()
-    # ppo2_train(envs, agent, cfg, wandb_flag=True, wandb_project_name=f"PPO2-{env_name}",
-    #                 train_without_seed=False, test_ep_freq=cfg.off_buffer_size * 10, 
-    #                 online_collect_nums=cfg.off_buffer_size,
-    #                 test_episode_count=10)
+    agent.train()
+    ppo2_train(envs, agent, cfg, wandb_flag=True, wandb_project_name=f"PPO2-{env_name}",
+                    train_without_seed=False, test_ep_freq=cfg.off_buffer_size * 10, 
+                    online_collect_nums=cfg.off_buffer_size,
+                    test_episode_count=10)
     # # {'P25': 0.07006523385643959, 'P50': 2.732730984687805, 'P75': 43.27479934692383, 
     # # 'P95': 330.70052642822253, 'P99': 460.6548526000974}
     # print(agent.grad_collector.describe())
@@ -364,6 +363,7 @@ def Humanoid_v4_ppo2_test():
     agent.load_model(cfg.save_path)
     agent.eval()
     env = make_env(env_name, obs_norm_trans_flag=norm_flag, render_mode='human')()
+    cfg.max_episode_steps = 1020 
     play(env, agent, cfg, episode_count=6, play_without_seed=False, render=True)
 
 
