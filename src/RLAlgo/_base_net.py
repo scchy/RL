@@ -631,15 +631,23 @@ def weights_init(m):
         nn.init.xavier_normal_(m.weight)
 
 
+class Identity(nn.Module):
+    def __init__(self):
+        super().__init__()
+    
+    def forward(self, x):
+        return x
+
+
 class PPOValueCNN(nn.Module):
-    def __init__(self, state_dim, hidden_layers_dim, act_type='relu'):
+    def __init__(self, state_dim, hidden_layers_dim, act_type='relu', max_pooling=True):
         super(PPOValueCNN, self).__init__()
         self.state_dim = 84 # reshape 84， 84
         # Atria-CNN
         self.cnn_feature = nn.Sequential(
             nn.Conv2d(in_channels=4, out_channels=16, kernel_size=4, stride=2),
             nn.ReLU(),
-            nn.MaxPool2d(2, 2, 0),
+            nn.MaxPool2d(2, 2, 0) if max_pooling else Identity(),
             nn.Conv2d(in_channels=16, out_channels=32, kernel_size=4, stride=2),
             nn.ReLU(),
             nn.AvgPool2d(2, 2, 0),
@@ -702,7 +710,7 @@ class PPOPolicyCNN(nn.Module):
     def __init__(self, state_dim: int, hidden_layers_dim: typ.List, action_dim: int, 
                  dist_type='beta', 
                  act_type='relu',
-                 continue_action_flag=False,
+                 continue_action_flag=False, max_pooling=True,
                  **kwargs):
         super(PPOPolicyCNN, self).__init__()
         self.continue_action_flag = continue_action_flag
@@ -711,7 +719,7 @@ class PPOPolicyCNN(nn.Module):
         self.cnn_feature = nn.Sequential(
             nn.Conv2d(in_channels=4, out_channels=16, kernel_size=4, stride=2),
             nn.ReLU(),
-            nn.MaxPool2d(2, 2, 0),
+            nn.MaxPool2d(2, 2, 0) if max_pooling else Identity(),
             nn.Conv2d(in_channels=16, out_channels=32, kernel_size=4, stride=2),
             nn.ReLU(),
             nn.AvgPool2d(2, 2, 0),

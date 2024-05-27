@@ -214,6 +214,7 @@ def play(env_in, env_agent, cfg, episode_count=2, action_contiguous=False, play_
     对训练完成的Agent进行游戏
     """
     time_int = max(int(not ppo_train) * 3, 1)
+    max_steps = cfg.test_max_episode_steps if hasattr(cfg, "test_max_episode_steps") else cfg.max_episode_steps
     env = copy.deepcopy(env_in)
     try:
         env_agent.eval()
@@ -246,7 +247,7 @@ def play(env_in, env_agent, cfg, episode_count=2, action_contiguous=False, play_
             s = n_state
             if done:
                 break
-            if (episode_reward >= time_int * cfg.max_episode_rewards) or (episode_cnt >= time_int * cfg.max_episode_steps):
+            if (episode_reward >= time_int * cfg.max_episode_rewards) or (episode_cnt >= time_int * max_steps):
                 break
         
         # if ppo_train:
@@ -463,7 +464,7 @@ def ppo2_train(envs, agent, cfg,
                     wandb_project_name="RL-train_on_policy",
                     add_max_step_reward_flag=False
                 ):
-    test_env = envs.env_fns[0]()
+    test_env = envs.envs[0]
     env_id = str(test_env).split('>')[0].split('<')[-1]
     if wandb_flag:
         wandb.login()

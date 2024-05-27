@@ -21,7 +21,8 @@ class baseSkipFrame(gym.Wrapper):
             skip: int, 
             cut_slices: List[List[int]]=None,
             start_skip: int=None,
-            neg_action_kwargs: Dict=None
+            neg_action_kwargs: Dict=None,
+            action_map: Dict = None
         ):
         """_summary_
 
@@ -37,6 +38,12 @@ class baseSkipFrame(gym.Wrapper):
         self.pic_cut_slices = cut_slices
         self.start_skip = start_skip
         self.neg_action_kwargs = neg_action_kwargs
+        self.action_map = action_map
+    
+    def _get_need_action(self, action):
+        if self.action_map is None:
+            return action 
+        return self.action_map[action]
     
     def _cut_slice(self, obs):
         if self.pic_cut_slices is None:
@@ -56,6 +63,8 @@ class baseSkipFrame(gym.Wrapper):
             except Exception as e:
                 a_ = int(action)
             neg_r = self.neg_action_kwargs.get(a_, 0.0)
+        
+        action = self._get_need_action(action)
         tt_reward_list = []
         done = False
         total_reward = 0

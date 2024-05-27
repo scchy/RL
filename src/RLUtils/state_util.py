@@ -1,5 +1,6 @@
 import gymnasium as gym
 import numpy as np
+import cloudpickle
 from .env_wrapper import baseSkipFrame, EpisodicLifeEnv, ClipRewardEnv, FireResetEnv, ResizeObservation, GrayScaleObservation
 
 
@@ -17,11 +18,22 @@ def make_env(env_id, obs_norm_trans_flag=False, reward_norm_trans_flag=False, ga
     return thunk
 
 
-def make_atari_env(env_id, episod_life=True, clip_reward=True, **kwargs):
+def save_env(env, file_path):
+    # 保存环境状态
+    with open(file_path, 'wb') as file:
+        cloudpickle.dump(env, file)
+    print(f'saved env -> {file_path}')
+
+    # # 加载环境状态
+    # with open('env_state.pkl', 'rb') as file:
+    #     env_loaded = cloudpickle.load(file)
+
+
+def make_atari_env(env_id, episod_life=True, clip_reward=True, action_map=None, skip=5, **kwargs):
     def thunk():
         env = gym.make(env_id, **kwargs)
         env = gym.wrappers.RecordEpisodeStatistics(env)
-        env = baseSkipFrame(env, skip=5, start_skip=30)
+        env = baseSkipFrame(env, skip=skip, start_skip=30, action_map=action_map)
         if episod_life:
             env = EpisodicLifeEnv(env)
         if "FIRE" in env.unwrapped.get_action_meanings():

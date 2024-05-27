@@ -100,9 +100,10 @@ class PPO2:
         self.critic_lr = critic_lr
         self.cnn_flag = PPO_kwargs.get('cnn_flag', False)
         self.continue_action_flag = PPO_kwargs.get('continue_action_flag', True)
+        self.max_pooling = PPO_kwargs.get('max_pooling', True)
         if self.cnn_flag:
-            self.actor = PPOPolicyCNN(state_dim, actor_hidden_layers_dim, action_dim, dist_type=self.dist_type, act_type=self.act_type, continue_action_flag=self.continue_action_flag).to(device)
-            self.critic = PPOValueCNN(state_dim, critic_hidden_layers_dim, act_type=self.act_type).to(device)
+            self.actor = PPOPolicyCNN(state_dim, actor_hidden_layers_dim, action_dim, dist_type=self.dist_type, act_type=self.act_type, continue_action_flag=self.continue_action_flag, max_pooling=self.max_pooling).to(device)
+            self.critic = PPOValueCNN(state_dim, critic_hidden_layers_dim, act_type=self.act_type, max_pooling=self.max_pooling).to(device)
         else:
             self.actor = policyNet(state_dim, actor_hidden_layers_dim, action_dim, dist_type=self.dist_type, act_type=self.act_type).to(device)
             self.critic = valueNet(state_dim, critic_hidden_layers_dim, act_type=self.act_type).to(device)
