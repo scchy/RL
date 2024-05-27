@@ -286,6 +286,7 @@ def Humanoid_v4_ppo2_test():
     """
     info1: norm_flag=True, env_nums=128, off_buffer_size=max_episode_steps=80,actor_lr=4.5e-4,max_grad_norm=3.5 5000+ 斜着走
     info2: norm_flag=True, env_nums=128, off_buffer_size=max_episode_steps=80,actor_lr=2.5e-4,max_grad_norm=3.5 5000+
+    info3: norm_flag=True, env_nums=64, off_buffer_size=max_episode_steps=64,actor_lr=6.5e-4,max_grad_norm=3.5,eps=0.2 5000+
     """
     # [ Humanoid-v4 ](state: (376,),action: (17,)(连续 <-0.4 -> 0.4>))
     env_name = 'Humanoid-v4'
