@@ -3,4 +3,5 @@ torchvision==0.16.1
 gymnasium==0.29.0
 gymnasium[atari]
 gymnasium[accept-rom-license]
+cloudpickle==2.2.1
 

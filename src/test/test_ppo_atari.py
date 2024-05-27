@@ -98,10 +98,10 @@ def DemonAttack_v5_ppo2_test():
     # agent.grad_collector.dump(cfg.save_path + '.npy')
     agent.load_model(cfg.save_path)
     agent.eval()
-    env = make_atari_env(env_name, clip_reward=False)() #, render_mode='human')()
+    env = make_atari_env(env_name, clip_reward=False, render_mode='human')()
     # env = make_atari_env(env_name, clip_reward=True)()
     cfg.max_episode_steps = 1620 
-    play(env, agent, cfg, episode_count=3, play_without_seed=False, render=False, ppo_train=True)
+    play(env, agent, cfg, episode_count=3, play_without_seed=False, render=True, ppo_train=True)
 
 
 
