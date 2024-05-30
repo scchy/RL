@@ -6,9 +6,11 @@
 /src/test/*.log
 /src/test/*.ipynb
 /src/test/*.npy
+/src/test/*.pkl
 /src/test/wandb
 
 /wandb
 
 /src/RLAlgo/__pycache__
 /src/RLAlgo/__pycache__/*.pyc
+./*.log

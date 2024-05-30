@@ -284,9 +284,10 @@ def rd_hopper():
 
 def Humanoid_v4_ppo2_test():
     """
-    info1: norm_flag=True, env_nums=128, off_buffer_size=max_episode_steps=80,actor_lr=4.5e-4,max_grad_norm=3.5 5000+ 斜着走
-    info2: norm_flag=True, env_nums=128, off_buffer_size=max_episode_steps=80,actor_lr=2.5e-4,max_grad_norm=3.5 5000+
-    info3: norm_flag=True, env_nums=64, off_buffer_size=max_episode_steps=64,actor_lr=6.5e-4,max_grad_norm=3.5,eps=0.2 5000+
+    info1: beta norm_flag=True, env_nums=128, off_buffer_size=max_episode_steps=80,actor_lr=4.5e-4,max_grad_norm=3.5 5000+ 斜着走
+    info2: beta norm_flag=True, env_nums=128, off_buffer_size=max_episode_steps=80,actor_lr=2.5e-4,max_grad_norm=3.5 5000+
+    info3: beta norm_flag=True, env_nums=64, off_buffer_size=max_episode_steps=64,actor_lr=6.5e-4,max_grad_norm=3.5,eps=0.2 5000+
+    info4: norm oth same as info1
     """
     # [ Humanoid-v4 ](state: (376,),action: (17,)(连续 <-0.4 -> 0.4>))
     env_name = 'Humanoid-v4'
@@ -299,11 +300,11 @@ def Humanoid_v4_ppo2_test():
     envs = gym.vector.SyncVectorEnv(
         [make_env(env_name, obs_norm_trans_flag=norm_flag, reward_norm_trans_flag=reward_flag) for _ in range(num_envs)]
     )
-    dist_type = 'beta'
+    dist_type = 'norm' # 'beta' 
     cfg = Config(
         envs, 
         # 环境参数
-        save_path=os.path.join(path_, "test_models" ,f'PPO_Humanoid-v4-{norm_flag}-1'), 
+        save_path=os.path.join(path_, "test_models" ,f'PPO_Humanoid-v4-{norm_flag}-4'), 
         seed=202405,
         # 网络参数
         actor_hidden_layers_dim=[128, 128, 128],
@@ -365,10 +366,6 @@ def Humanoid_v4_ppo2_test():
     
     with open(os.path.join(cfg.save_path, 'norm_env.pkl'), 'rb') as f:
         env = cloudpickle.load(f)
-
-    # p = '/home/scc/sccWork/myGitHub/RL/src/test/test_models/PPO_Humanoid-v4-True-2/norm_env.pkl'
-    # with open(p, 'rb') as f:
-    #     env = cloudpickle.load(f)
     
     obs_rms = env.get_wrapper_attr('env').get_wrapper_attr("obs_rms")
     env = make_env(env_name, obs_norm_trans_flag=norm_flag, render_mode='human')()
@@ -524,6 +521,180 @@ def Hopper_v4_ppo2_new_test():
     play(env, agent, cfg, episode_count=3, play_without_seed=True, render=True)
 
 
+def Ant_v4_ppo2_test():
+    env_name = 'Ant-v4'
+    num_envs = 64
+    gym_env_desc(env_name)
+    print("gym.__version__ = ", gym.__version__ )
+    path_ = os.path.dirname(__file__)
+    norm_flag = True
+    reward_flag = False
+    envs = gym.vector.SyncVectorEnv(
+        [make_env(env_name, obs_norm_trans_flag=norm_flag, reward_norm_trans_flag=reward_flag) for _ in range(num_envs)]
+    )
+    dist_type = 'beta'
+    cfg = Config(
+        envs, 
+        # 环境参数
+        save_path=os.path.join(path_, "test_models" ,f'PPO_Ant-v4-{norm_flag}-1'), 
+        seed=202405,
+        # 网络参数
+        actor_hidden_layers_dim=[128, 128],
+        critic_hidden_layers_dim=[128, 128],
+        # agent参数
+        actor_lr=5.5e-4, 
+        gamma=0.99,
+        # 训练参数
+        num_episode=2000, 
+        off_buffer_size=80,
+        max_episode_steps=80,
+        PPO_kwargs={
+            'lmbda': 0.985, 
+            'eps': 0.125,  
+            'k_epochs': 3,
+            'sgd_batch_size': 2048,
+            'minibatch_size': 1024,
+            'action_space': envs.single_action_space,
+            'act_type': 'tanh',
+            'dist_type': dist_type,
+            'critic_coef': 1,
+            'max_grad_norm': 3.5, # 45.5
+            'clip_vloss': True,
+            # 'min_adv_norm': True,
+
+            'anneal_lr': False, # not work
+            'num_episode': 3000
+        }
+    )
+    cfg.test_max_episode_steps = 300
+    cfg.num_envs = num_envs
+    minibatch_size = cfg.PPO_kwargs['minibatch_size']
+    max_grad_norm = cfg.PPO_kwargs['max_grad_norm']
+    cfg.trail_desc = f"reward_flag={reward_flag},norm_flag={norm_flag},actor_lr={cfg.actor_lr},minibatch_size={minibatch_size},max_grad_norm={max_grad_norm},hidden_layers={cfg.actor_hidden_layers_dim}",
+    # {'P25': 0.054308490827679634, 'P50': 10.356741905212402, 'P75': 803.9899291992188, 'P95': 3986.836511230468, 'P99': 8209.22970703126}
+    agent = PPO2(
+        state_dim=cfg.state_dim,
+        actor_hidden_layers_dim=cfg.actor_hidden_layers_dim,
+        critic_hidden_layers_dim=cfg.critic_hidden_layers_dim,
+        action_dim=cfg.action_dim,
+        actor_lr=cfg.actor_lr,
+        critic_lr=cfg.critic_lr,
+        gamma=cfg.gamma,
+        PPO_kwargs=cfg.PPO_kwargs,
+        device=cfg.device,
+        reward_func=None
+    )
+    # agent.train()
+    # ppo2_train(envs, agent, cfg, wandb_flag=True, wandb_project_name=f"PPO2-{env_name}",
+    #                 train_without_seed=False, test_ep_freq=cfg.off_buffer_size * 10, 
+    #                 online_collect_nums=cfg.off_buffer_size,
+    #                 test_episode_count=10)
+    # # save norm env
+    # save_env(envs.envs[0], os.path.join(cfg.save_path, 'norm_env.pkl'))
+    # print(agent.grad_collector.describe())
+    # agent.grad_collector.dump(cfg.save_path + '.npy')
+    agent.load_model(cfg.save_path)
+    agent.eval()
+    
+    with open(os.path.join(cfg.save_path, 'norm_env.pkl'), 'rb') as f:
+        env = cloudpickle.load(f)
+
+    obs_rms = env.get_wrapper_attr('env').get_wrapper_attr("obs_rms")
+    env = make_env(env_name, obs_norm_trans_flag=norm_flag, render_mode='human')()
+    env.get_wrapper_attr('env').get_wrapper_attr("obs_rms").mean = obs_rms.mean
+    env.get_wrapper_attr('env').get_wrapper_attr("obs_rms").var = obs_rms.var
+    env.get_wrapper_attr('env').get_wrapper_attr("obs_rms").count = obs_rms.count
+    # env = make_env(env_name, obs_norm_trans_flag=norm_flag)()
+    play(env, agent, cfg, episode_count=2, play_without_seed=False, render=True)
+
+
+def Swimmer_v4_ppo2_test():
+    env_name = 'Swimmer-v4'
+    num_envs = 64
+    gym_env_desc(env_name)
+    print("gym.__version__ = ", gym.__version__ )
+    path_ = os.path.dirname(__file__)
+    norm_flag = True  
+    reward_flag = False
+    envs = gym.vector.SyncVectorEnv(
+        [make_env(env_name, obs_norm_trans_flag=norm_flag, reward_norm_trans_flag=reward_flag) for _ in range(num_envs)]
+    )
+    dist_type = 'beta'
+    cfg = Config(
+        envs, 
+        # 环境参数
+        save_path=os.path.join(path_, "test_models" ,f'PPO_{env_name}-{norm_flag}-1'), 
+        seed=202405,
+        # 网络参数
+        actor_hidden_layers_dim=[128, 128],
+        critic_hidden_layers_dim=[128, 128],
+        # agent参数
+        actor_lr=7.5e-4, 
+        gamma=0.99,
+        # 训练参数
+        num_episode=2500, 
+        off_buffer_size=100,
+        max_episode_steps=100,
+        PPO_kwargs={
+            'lmbda': 0.98, 
+            'eps': 0.2,  
+            'k_epochs': 4,
+            'sgd_batch_size': 512,
+            'minibatch_size': 128,
+            'action_space': envs.single_action_space,
+            'act_type': 'tanh',
+            'dist_type': dist_type,
+            'critic_coef': 1.5,
+            'max_grad_norm': 15.5, # 45.5
+            'clip_vloss': True,
+            # 'min_adv_norm': True,
+
+            'anneal_lr': False, # not work
+            'num_episode': 3000
+        }
+    )
+    cfg.test_max_episode_steps = 300
+    cfg.num_envs = num_envs
+    minibatch_size = cfg.PPO_kwargs['minibatch_size']
+    max_grad_norm = cfg.PPO_kwargs['max_grad_norm']
+    cfg.trail_desc = f"reward_flag={reward_flag},norm_flag={norm_flag},actor_lr={cfg.actor_lr},minibatch_size={minibatch_size},max_grad_norm={max_grad_norm},hidden_layers={cfg.actor_hidden_layers_dim}",
+    # {'P25': 0.054308490827679634, 'P50': 10.356741905212402, 'P75': 803.9899291992188, 'P95': 3986.836511230468, 'P99': 8209.22970703126}
+    agent = PPO2(
+        state_dim=cfg.state_dim,
+        actor_hidden_layers_dim=cfg.actor_hidden_layers_dim,
+        critic_hidden_layers_dim=cfg.critic_hidden_layers_dim,
+        action_dim=cfg.action_dim,
+        actor_lr=cfg.actor_lr,
+        critic_lr=cfg.critic_lr,
+        gamma=cfg.gamma,
+        PPO_kwargs=cfg.PPO_kwargs,
+        device=cfg.device,
+        reward_func=None
+    )
+    agent.train()
+    ppo2_train(envs, agent, cfg, wandb_flag=True, wandb_project_name=f"PPO2-{env_name}",
+                    train_without_seed=False, test_ep_freq=cfg.off_buffer_size * 10, 
+                    online_collect_nums=cfg.off_buffer_size,
+                    test_episode_count=10)
+    # save norm env
+    save_env(envs.envs[0], os.path.join(cfg.save_path, 'norm_env.pkl'))
+    # print(agent.grad_collector.describe())
+    # agent.grad_collector.dump(cfg.save_path + '.npy')
+    agent.load_model(cfg.save_path)
+    agent.eval()
+    
+    with open(os.path.join(cfg.save_path, 'norm_env.pkl'), 'rb') as f:
+        env = cloudpickle.load(f)
+
+    obs_rms = env.get_wrapper_attr('env').get_wrapper_attr("obs_rms")
+    env = make_env(env_name, obs_norm_trans_flag=norm_flag, render_mode='human')()
+    env.get_wrapper_attr('env').get_wrapper_attr("obs_rms").mean = obs_rms.mean
+    env.get_wrapper_attr('env').get_wrapper_attr("obs_rms").var = obs_rms.var
+    env.get_wrapper_attr('env').get_wrapper_attr("obs_rms").count = obs_rms.count
+    play(env, agent, cfg, episode_count=3, play_without_seed=False, render=True)
+
+
+
 if __name__ == '__main__':
     # ppo_InvertedPendulum_test()
     # HalfCheetah_v4_ppo_test()
@@ -533,5 +704,6 @@ if __name__ == '__main__':
     # Pendulum_v1_ppo2_test() # 2024-04-{16, 18} norm & beta
     # https://wandb.ai/296294812/PPO2-Hopper-v4?nw=nwuser296294812
     # Hopper_v4_ppo2_new_test() # 2024-04-19 
-    Humanoid_v4_ppo2_test()
-
+    Humanoid_v4_ppo2_test() # 2024-05-27 - beta / 2024-05-30 - norm 
+    # Ant_v4_ppo2_test() # 2024-05-28
+    # Swimmer_v4_ppo2_test()

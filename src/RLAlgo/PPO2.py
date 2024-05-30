@@ -152,7 +152,7 @@ class PPO2:
         if self.dist_type == 'beta':
             # beta 0-1 -> low ~ high
             return act * (self.action_high - self.action_low) + self.action_low
-        return act.clip(self.action_low, self.action_high)
+        return act
     
     def _action_return(self, act):
         if not self.continue_action_flag:
@@ -161,7 +161,7 @@ class PPO2:
             # low ~ high -> 0-1 
             act_out = (act - self.action_low) / (self.action_high - self.action_low)
             return (act_out * 1 + 0).clip(1e-4, 9.999)
-        return act 
+        return act
 
     def policy(self, state):
         state = torch.FloatTensor(np.array([state])).to(self.device)
@@ -254,7 +254,7 @@ class PPO2:
         self.update_cnt += 1
         state, action, old_log_probs, advantage, td_target, b_values = self.data_prepare(samples_buffer)
         # print(f"update old_log_probs={old_log_probs.shape}")
-        # print(f'state={state.shape}, action={action.shape}, advantage.shape={advantage.shape} td_target.shape={td_target.shape}')
+        # print(f'{state.shape=} {action.shape=} {advantage.shape=} {td_target.shape=} {b_values.shape=}')
         if len(old_log_probs.shape) == 2:
             old_log_probs = old_log_probs.sum(dim=1)
 
@@ -291,7 +291,10 @@ class PPO2:
                 actor_loss = -torch.min(surr1, surr2).mean().float() - self.ent_coef * entropy_loss
                 new_v = self.critic(state_).float()
                 td_v = td_v.detach().float()
-                # print(f'new_log_prob.shape={new_log_prob.shape} old_log_prob.shape={old_log_prob.shape} ratio={ratio.shape} adv={adv.shape} actor_loss={actor_loss} new_v={new_v.shape} td_v={td_v.shape}')
+                # print(
+                #     f'{state_.shape=} {action_.shape=} {old_log_prob.shape=} {new_log_prob.shape=} {ratio.shape=} {surr1.shape=} {surr2.shape=}',
+                #     f'{new_v.shape=} {td_v.shape=}'
+                # )
                 if self.clip_vloss:
                     # ref: https://iclr-blog-track.github.io/2022/03/25/ppo-implementation-details/
                     v = torch.clamp(new_v, before_v - self.eps, before_v + self.eps)
