@@ -462,7 +462,8 @@ def ppo2_train(envs, agent, cfg,
                     online_collect_nums=1024,
                     test_episode_count=3,
                     wandb_project_name="RL-train_on_policy",
-                    add_max_step_reward_flag=False
+                    add_max_step_reward_flag=False,
+                    batch_reset_env=False
                 ):
     test_env = envs.envs[0]
     env_id = str(test_env).split('>')[0].split('<')[-1]
@@ -498,6 +499,10 @@ def ppo2_train(envs, agent, cfg,
     final_seed = rand_seed if train_without_seed else cfg.seed
     s, _ = envs.reset(seed=final_seed)
     for i in tq_bar:
+        if batch_reset_env and i >= 1:
+            rand_seed = np.random.randint(0, 9999)
+            final_seed = rand_seed if train_without_seed else cfg.seed
+            s, _ = envs.reset(seed=final_seed)
         if update_flag:
             buffer_ = replayBuffer(cfg.off_buffer_size)
 
@@ -506,6 +511,9 @@ def ppo2_train(envs, agent, cfg,
         step_reward_mean = 0.0
         for step_i in range(cfg.off_buffer_size):
             a = agent.policy(s)
+            zero_bool = (np.abs(a) < 0.01).sum(axis=1) == 2
+            if zero_bool.sum():
+                print(f"NotMove {a[zero_bool, :]=}")
             n_s, r, terminated, truncated, infos = envs.step(a)
             done = np.logical_or(terminated, truncated)
             steps += 1
@@ -526,7 +534,7 @@ def ppo2_train(envs, agent, cfg,
             if max_step_flag:
                 step_reward_mean = step_rewards.mean()
 
-            if (("final_info" in infos) or max_step_flag) and step_i >= 5:
+            if (("final_info" in infos) or max_step_flag or batch_reset_env) and step_i >= 5:
                 info_counts = 0.0001
                 episode_rewards = 0
                 for info in infos.get("final_info", dict()):
