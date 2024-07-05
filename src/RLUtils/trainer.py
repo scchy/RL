@@ -511,9 +511,9 @@ def ppo2_train(envs, agent, cfg,
         step_reward_mean = 0.0
         for step_i in range(cfg.off_buffer_size):
             a = agent.policy(s)
-            zero_bool = (np.abs(a) < 0.01).sum(axis=1) == 2
-            if zero_bool.sum():
-                print(f"NotMove {a[zero_bool, :]=}")
+            # zero_bool = (np.abs(a) < 0.01).sum(axis=1) == 2
+            # if zero_bool.sum():
+            #     print(f"NotMove {a[zero_bool, :]=}")
             n_s, r, terminated, truncated, infos = envs.step(a)
             done = np.logical_or(terminated, truncated)
             steps += 1
