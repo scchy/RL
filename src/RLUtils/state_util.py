@@ -8,8 +8,9 @@ def make_env(env_id, obs_norm_trans_flag=False, reward_norm_trans_flag=False, ga
     def thunk():
         env = gym.make(env_id, render_mode=render_mode, **kwargs)
         env = gym.wrappers.RecordEpisodeStatistics(env)
+        env = gym.wrappers.ClipAction(env)
         if obs_norm_trans_flag:
-            env = gym.wrappers.NormalizeObservation(gym.wrappers.ClipAction(env))
+            env = gym.wrappers.NormalizeObservation(env)
             env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10))
         if reward_norm_trans_flag:
             env = gym.wrappers.NormalizeReward(env, gamma=gamma)

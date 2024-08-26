@@ -463,9 +463,11 @@ def ppo2_train(envs, agent, cfg,
                     test_episode_count=3,
                     wandb_project_name="RL-train_on_policy",
                     add_max_step_reward_flag=False,
-                    batch_reset_env=False
+                    batch_reset_env=False,
+                    play_func="play"
                 ):
-    test_env = envs.envs[0]
+    play_func_ = play if play_func == "play" else ppo2_play
+    test_env = copy.deepcopy(envs.envs[0])
     env_id = str(test_env).split('>')[0].split('<')[-1]
     if wandb_flag:
         wandb.login()
@@ -510,10 +512,11 @@ def ppo2_train(envs, agent, cfg,
         step_rewards = np.zeros(envs.num_envs)
         step_reward_mean = 0.0
         for step_i in range(cfg.off_buffer_size):
+            max_step_flag = False
             a = agent.policy(s)
-            # zero_bool = (np.abs(a) < 0.01).sum(axis=1) == 2
-            # if zero_bool.sum():
-            #     print(f"NotMove {a[zero_bool, :]=}")
+            zero_bool = (np.abs(a) < 0.01).sum(axis=1) == 2
+            if zero_bool.sum():
+                print(f"NotMove {a[zero_bool, :]=}")
             n_s, r, terminated, truncated, infos = envs.step(a)
             done = np.logical_or(terminated, truncated)
             steps += 1
@@ -522,7 +525,8 @@ def ppo2_train(envs, agent, cfg,
             s = n_s
             step_rewards += r
             if (steps % test_ep_freq == 0) and (steps > cfg.off_buffer_size):
-                freq_ep_reward = play(test_env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False, ppo_train=True)
+                test_env = copy.deepcopy(envs.envs[0])
+                freq_ep_reward = play_func_(test_env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False, ppo_train=True)
                 
                 if freq_ep_reward > best_ep_reward:
                     best_ep_reward = freq_ep_reward
@@ -534,7 +538,7 @@ def ppo2_train(envs, agent, cfg,
             if max_step_flag:
                 step_reward_mean = step_rewards.mean()
 
-            if (("final_info" in infos) or max_step_flag or batch_reset_env) and step_i >= 5:
+            if (("final_info" in infos) or max_step_flag) and step_i >= 5:
                 info_counts = 0.0001
                 episode_rewards = 0
                 for info in infos.get("final_info", dict()):
@@ -555,7 +559,8 @@ def ppo2_train(envs, agent, cfg,
 
                 if (now_reward > recent_best_reward):
                     # best 时也进行测试
-                    test_ep_reward = play(test_env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False, ppo_train=True)
+                    test_env = copy.deepcopy(envs.envs[0])
+                    test_ep_reward = play_func_(test_env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False, ppo_train=True)
                     if test_ep_reward > best_ep_reward:
                         best_ep_reward = test_ep_reward
                         # 模型保存
@@ -586,4 +591,70 @@ def ppo2_train(envs, agent, cfg,
     if wandb_flag:
         wandb.finish()
     return agent
+
+
+
+
+@torch.no_grad()
+def ppo2_play(env_in, env_agent, cfg, episode_count=2, action_contiguous=False, play_without_seed=False, render=True, ppo_train=False):
+    """
+    对训练完成的Agent进行游戏
+    """
+    time_int = max(int(not ppo_train) * 3, 1)
+    max_steps = cfg.test_max_episode_steps if hasattr(cfg, "test_max_episode_steps") else cfg.max_episode_steps
+    env = copy.deepcopy(env_in)
+    try:
+        env_agent.eval()
+    except Exception as e:
+        pass
+    ep_reward_record = []
+    for e in range(episode_count):
+        final_seed = np.random.randint(0, 9999) if play_without_seed else cfg.seed
+        s, _ = env.reset(seed=final_seed)
+        done = False
+        episode_reward = 0
+        episode_rewards = 0
+        episode_cnt = 0
+        final_str = ''
+        while not done:
+            if render:
+                env.render()
+            a = env_agent.policy(s)
+            try:
+                n_state, reward, terminated, truncated, info = env.step(a)
+            except Exception as e:  # Atari
+                n_state, reward, terminated, truncated, info = env.step(a[0])
+
+            done = terminated or truncated
+            episode_reward += reward
+            episode_cnt += 1
+            # episode
+            s = n_state
+            if done or (episode_cnt >= time_int * max_steps):
+                break
+        
+        if ("final_info" in info):
+            final_str = "final_info"
+            episode_rewards = 0
+            for info in info.get("final_info", dict()):
+                if info and "episode" in info:
+                    # print(f"global_step={step_i}, episodic_return={info['episode']['r']}")
+                    if isinstance(info["episode"]["r"], np.ndarray):
+                        episode_rewards += info["episode"]["r"][0]
+                    else:
+                        episode_rewards += info["episode"]["r"]
+
+        f_reward = max(episode_rewards, episode_reward)
+        ep_reward_record.append(f_reward)
+        print(f'[ seed={final_seed} ] Get reward {f_reward}. Last {episode_cnt} times. {final_str}')
+    
+    if render:
+        env.close()
+
+    try:
+        env_agent.train()
+    except Exception as e:
+        pass
+    print(f'[ PLAY ] Get reward {np.mean(ep_reward_record)}.')
+    return np.mean(ep_reward_record) # np.percentile(ep_reward_record, 50)
 

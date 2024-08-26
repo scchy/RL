@@ -609,52 +609,65 @@ def Ant_v4_ppo2_test():
 
 
 def Swimmer_v4_ppo2_test():
+    """
+    The episode truncates when the episode length is greater than 1000.
+    
+    tanh -> relu
+    max_grad_norm 0.5 -> 1.9 -> 2.5 -> 5.5 
+    dim 125 -> 200
+    rl 3.5e-4 -> 1.5e-4  
+    off_buffer_size 64 -> 100  & batch_reset_env=True
+    fix test_env bug
+    -- next try X 
+    off_buffer_size -> 32
+    num_envs -> 64 
+    batch_reset_env=True
+    """
     env_name = 'Swimmer-v4'
-    num_envs = 24
+    num_envs = 12
     gym_env_desc(env_name)
     print("gym.__version__ = ", gym.__version__ )
     path_ = os.path.dirname(__file__)
     norm_flag = True  
     reward_flag = False
     envs = gym.vector.SyncVectorEnv(
-        [make_env(env_name, obs_norm_trans_flag=norm_flag, reward_norm_trans_flag=reward_flag,
-                  exclude_current_positions_from_observation=True) for _ in range(num_envs)]
+        [make_env(env_name, obs_norm_trans_flag=norm_flag, reward_norm_trans_flag=reward_flag) for _ in range(num_envs)]
     )
-    dist_type = 'beta'
+    dist_type = 'norm'
     cfg = Config(
         envs, 
         # 环境参数
         save_path=os.path.join(path_, "test_models" ,f'PPO_{env_name}-{norm_flag}-1'), 
-        seed=202405,
+        seed=202408,
         # 网络参数
-        actor_hidden_layers_dim=[128, 128],
-        critic_hidden_layers_dim=[128, 128],
+        actor_hidden_layers_dim=[200, 200],
+        critic_hidden_layers_dim=[200, 200],
         # agent参数
-        actor_lr=5.5e-4, 
+        actor_lr=3.5e-4,
         gamma=0.99,
         # 训练参数
-        num_episode=5000, 
-        off_buffer_size=100,
-        max_episode_steps=100,
+        num_episode=3500, 
+        off_buffer_size=80, # total-exp: off_buffer_size * num_envs
+        max_episode_steps=80,
         PPO_kwargs={
             'lmbda': 0.98, 
-            'eps': 0.25,  
+            'eps': 0.165,  
             'k_epochs': 3,
-            'sgd_batch_size': 256,
-            'minibatch_size': 64,
+            'sgd_batch_size':  256,
+            'minibatch_size':  128, 
             'action_space': envs.single_action_space,
-            'act_type': 'tanh',
+            'act_type': 'tanh', #
             'dist_type': dist_type,
-            'critic_coef': 1.0,
-            'max_grad_norm': 0.5, # 45.5
+            'critic_coef': 1.5,
+            'max_grad_norm': 5.5, # 2.5, #1.9, 
             'clip_vloss': True,
             # 'min_adv_norm': True,
 
             'anneal_lr': False, # not work
-            'num_episode': 3000
+            'num_episode': 5000
         }
     )
-    cfg.test_max_episode_steps = 100
+    cfg.test_max_episode_steps = 100  
     cfg.num_envs = num_envs
     minibatch_size = cfg.PPO_kwargs['minibatch_size']
     max_grad_norm = cfg.PPO_kwargs['max_grad_norm']
@@ -677,9 +690,11 @@ def Swimmer_v4_ppo2_test():
     #                 train_without_seed=False, test_ep_freq=cfg.off_buffer_size * 10, 
     #                 online_collect_nums=cfg.off_buffer_size,
     #                 test_episode_count=10,
-    #                 batch_reset_env=False # True
+    #                 batch_reset_env=False, # True, # True
+    #                 add_max_step_reward_flag=True,
+    #                 play_func='ppo2_play'
     #                 )
-    # save norm env
+    # # save norm env
     # save_env(envs.envs[0], os.path.join(cfg.save_path, 'norm_env.pkl'))
     # print(agent.grad_collector.describe())
     # agent.grad_collector.dump(cfg.save_path + '.npy')
@@ -688,14 +703,15 @@ def Swimmer_v4_ppo2_test():
     
     with open(os.path.join(cfg.save_path, 'norm_env.pkl'), 'rb') as f:
         env = cloudpickle.load(f)
-    
-    env = make_env(env_name, obs_norm_trans_flag=norm_flag, exclude_current_positions_from_observation=True, render_mode='human')()
-    if norm_flag:
         obs_rms = env.get_wrapper_attr('env').get_wrapper_attr("obs_rms")
+    
+    env = make_env(env_name, obs_norm_trans_flag=norm_flag)()#, render_mode='human')()
+    if norm_flag:
         env.get_wrapper_attr('env').get_wrapper_attr("obs_rms").mean = obs_rms.mean
         env.get_wrapper_attr('env').get_wrapper_attr("obs_rms").var = obs_rms.var
         env.get_wrapper_attr('env').get_wrapper_attr("obs_rms").count = obs_rms.count
-    play(env, agent, cfg, episode_count=3, play_without_seed=False, render=True)
+    cfg.test_max_episode_steps = 400 # 62
+    play(env, agent, cfg, episode_count=3, play_without_seed=False, render=False)
 
 
 
