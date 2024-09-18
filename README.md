@@ -16,6 +16,8 @@ src
 │   ├── _base_net.py
 │   ├── DDPG.py
 │   ├── DQN.py
+│   ├── grad_ana.py
+│   ├── PPO2_old.py
 │   ├── PPO2.py
 │   ├── PPO.py
 │   ├── __pycache__
@@ -29,14 +31,16 @@ src
 │   ├── __pycache__
 │   ├── state_util.py
 │   └── trainer.py
+├── setup.py
 ├── test
 │   ├── border_detector.py
-│   ├── __dqn.log
 │   ├── test_ddpg.py
 │   ├── test_dqn.py
 │   ├── test_env_explore.ipynb
-│   ├── test_env.md
+│   ├── README.md
 │   ├── test_models
+│   ├── test_ppo_atari.py
+│   ├── test_ppo_new.py
 │   ├── test_ppo.py
 │   ├── test_sac.py
 │   └── test_TD3.py
@@ -52,7 +56,7 @@ src
 |python版本 | `Python 3.10`|
 |torch | 2.1.1|
 |torchvision | 0.16.1|
-|gymnasium | 0.29.0|
+|gymnasium | 0.29.1|
 
 ## 运行示例
 ```python
@@ -121,3 +125,26 @@ env_ = gym.make(env_name,
                 )
 play(env_, agent, cfg, episode_count=3, play_without_seed=True, render=False)
 ```
+## 训练结果展示
+
+|环境与描述 | 参数函数链接| 效果|
+|-|-|-|
+|[ Hopper-v4 ](state: (11,),action: (3,)(连续 <-1.0 -> 1.0>))| [Hopper_v4_ppo2_test](./src/test/test_ppo.py) |![PPO2-PPO2_Hopper-v4](./docs/pic/PPO2_Hopper-v4.gif) |
+|[ Humanoid-v4 ](state: (376,),action: (17,)(连续 <-0.4 -> 0.4>))| [Humanoid_v4_ppo2_test](./src/test/test_ppo.py) |![PPO2-PPO2_Humanoid-v4](./docs/pic/PPO2_Humanoid-v4-simple.gif) |
+|[ ALE/DemonAttack-v5 ](state: (210, 160, 3),action: 6(离散 ))| [DemonAttack_v5_ppo2_test](./src/test/test_ppo_atari.py) |![PPO2_DemonAttack_v5](./docs/pic/PPO2_DemonAttack_v5.gif) |
+|[ ALE/AirRaid-v5 ](state: (250, 160, 3),action: 6(离散 ))| [AirRaid_v5_ppo2_test](./src/test/test_ppo_atari.py) | ![PPO2_AirRaid_v5](./docs/pic/PPO2_AirRaid_v5.gif)|
+|[ ALE/Alien-v5 ](state: (210, 160, 3),action: 18(离散 ))| [Alien_v5_ppo2_test](./src/test/test_ppo_atari.py) |![PPO2_Alien_v5](./docs/pic/PPO2_Alien_v5.gif) |
+|[ Walker2d-v4 ](state: (17,),action: (6,)(连续 <-1.0 -> 1.0>))| [Walker2d_v4_ppo2_test](./src/test/test_ppo.py)   |![warlker](./docs/pic/PPO2_Walker2d_v4.gif) |
+|[ HumanoidStandup-v4 ](state: (376,),action: (17,)(连续 <-0.4 -> 0.4>))| [HumanoidStandup_v4_ppo2_test](./src/test/test_ppo.py) |![stand](./docs/pic/PPO2_HumanoidStandup_v4.gif) |
+|[ CartPole-v1 ](state: (4,),action: 2(离散))| [duelingDQN: dqn_test](./src/test/test_dqn.py) |  ![duelingDQN_CartPole](./docs/pic/duelingDQN_CartPole-v1.gif) |
+|[ MountainCar-v0 ](state: (2,),action: 3(离散 ))| [duelingDQN: dqn_test](./src/test/test_dqn.py) |  ![duelingDQN_MountainCar](./docs/pic/duelingDQN_MountainCar-v0.gif) |
+|[ Acrobot-v1 ](state: (6,),action: 3(离散 ))| [duelingDQN: Acrobot_dqn_test](./src/test/test_dqn.py) |  ![duelingDQN_Acrobot](./docs/pic/DQN_Acrobot-v1.gif) |
+|[ LunarLander-v2 ](state: (8,),action: 4(离散 ))| [duelingDQN: LunarLander_dqn_test](./src/test/test_dqn.py) |  ![duelingDQN_LunarLander](./docs/pic/duelingDQN_LunarLander-v2.gif) |
+|[ ALE/DemonAttack-v5 ](state: (210, 160, 3),action: 6(离散 ))| [doubleDQN: DemonAttack_v5_dqn_new_test](./src/test/test_dqn.py) |  ![doubleDQN-DemonAc](./docs/pic/DQN_DemonAttack-v5.gif) |
+|[ BipedalWalker-v3 ](state: (24,),action: (4,)(连续 <-1.0 -> 1.0>))| [BipedalWalker_ddpg_test](./src/test/test_ddpg.py) | ![DDPG](./docs/pic/DDPG_BipedalWalker.gif) |
+|[ BipedalWalkerHardcore-v3 ](state: (24,),action: (4,)(连续 <-1.0 -> 1.0>))| [BipedalWalkerHardcore_TD3_test](./src/test/test_TD3.py) | ![TD3](./docs/pic/TD3_perf_new.gif) |
+|[ Reacher-v4 ](state: (11,),action: (2,)(连续 <-1.0 -> 1.0>))| [sac_Reacher_v4_test](./src/test/test_SAC.py) | ![SAC](./docs/pic/SAC_Reacher-v4.gif) |
+|[ Pusher-v4 ](state: (23,),action: (7,)(连续 <-2.0 -> 2.0>))|  [sac_Pusher_v4_test](./src/test/test_SAC.py) | ![SAC-2](./docs/pic/SAC_Pusher-v4.gif) |
+|[ CarRacing-v2 ](state: (96, 96, 3),action: (3,)(连续 <-1.0 -> 1.0>))| [CarRacing_TD3_test](./src/test/test_TD3.py) | ![TD3-car](./docs/pic/TD3_CarRacing-v2.gif) |
+|[ InvertedPendulum-v4 ](state: (4,),action: (1,)(连续 <-3.0 -> 3.0>))| [InvertedPendulum_TD3_test](./src/test/test_TD3.py) | ![TD3-InvertedPendulum](./docs/pic/TD3_InvertedPendulum-v4.gif) |
+|[ HalfCheetah-v4 ](state: (17,),action: (6,)(连续 <-1.0 -> 1.0>))| [HalfCheetah_v4_ppo_test](./src/test/test_ppo.py)  | ![PPO-PPO_HalfCheetah-v4](./docs/pic/PPO_HalfCheetah-v4.gif) |

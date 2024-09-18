@@ -902,7 +902,7 @@ if __name__ == '__main__':
     # Hopper_v4_ppo2_new_test() # 2024-04-19 
     # Humanoid_v4_ppo2_test() # 2024-05-27 - beta / 2024-05-30 - norm 
     # Ant_v4_ppo2_test() # 2024-05-28
-    Swimmer_v4_ppo2_test()
+    Swimmer_v4_ppo2_test() # 2024-08-27
     # Walker2d_v4_ppo2_test() # 2024-07-01 
     # HumanoidStandup_v4_ppo2_test() # 2024-07-05
 

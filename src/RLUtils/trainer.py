@@ -464,7 +464,8 @@ def ppo2_train(envs, agent, cfg,
                     wandb_project_name="RL-train_on_policy",
                     add_max_step_reward_flag=False,
                     batch_reset_env=False,
-                    play_func="play"
+                    play_func="play",
+                    buffer_np_save=False
                 ):
     play_func_ = play if play_func == "play" else ppo2_play
     test_env = copy.deepcopy(envs.envs[0])
@@ -495,7 +496,7 @@ def ppo2_train(envs, agent, cfg,
     recent_best_reward = -np.inf
     update_flag = False
     best_ep_reward = -np.inf
-    buffer_ = replayBuffer(cfg.off_buffer_size)
+    buffer_ = replayBuffer(cfg.off_buffer_size, np_save=buffer_np_save)
     steps = 0
     rand_seed = np.random.randint(0, 9999)
     final_seed = rand_seed if train_without_seed else cfg.seed
@@ -506,7 +507,7 @@ def ppo2_train(envs, agent, cfg,
             final_seed = rand_seed if train_without_seed else cfg.seed
             s, _ = envs.reset(seed=final_seed)
         if update_flag:
-            buffer_ = replayBuffer(cfg.off_buffer_size)
+            buffer_ = replayBuffer(cfg.off_buffer_size, np_save=buffer_np_save)
 
         tq_bar.set_description(f'Episode [ {i+1} / {cfg.num_episode} ](minibatch={mini_b})')    
         step_rewards = np.zeros(envs.num_envs)
@@ -514,14 +515,16 @@ def ppo2_train(envs, agent, cfg,
         for step_i in range(cfg.off_buffer_size):
             max_step_flag = False
             a = agent.policy(s)
-            zero_bool = (np.abs(a) < 0.01).sum(axis=1) == 2
-            if zero_bool.sum():
-                print(f"NotMove {a[zero_bool, :]=}")
+            try:
+                zero_bool = (np.abs(a) < 0.01).sum(axis=1) == 2
+                if zero_bool.sum():
+                    print(f"NotMove {a[zero_bool, :]=}")
+            except Exception as e:
+                pass
             n_s, r, terminated, truncated, infos = envs.step(a)
             done = np.logical_or(terminated, truncated)
             steps += 1
-            mem_done = done 
-            buffer_.add(s, a, r, n_s, mem_done)
+            buffer_.add(s, a, r, n_s, done)
             s = n_s
             step_rewards += r
             if (steps % test_ep_freq == 0) and (steps > cfg.off_buffer_size):
@@ -600,7 +603,7 @@ def ppo2_play(env_in, env_agent, cfg, episode_count=2, action_contiguous=False, 
     """
     对训练完成的Agent进行游戏
     """
-    time_int = max(int(not ppo_train) * 3, 1)
+    time_int = max(int(ppo_train) * 3, 1)
     max_steps = cfg.test_max_episode_steps if hasattr(cfg, "test_max_episode_steps") else cfg.max_episode_steps
     env = copy.deepcopy(env_in)
     try:
@@ -625,7 +628,7 @@ def ppo2_play(env_in, env_agent, cfg, episode_count=2, action_contiguous=False, 
             except Exception as e:  # Atari
                 n_state, reward, terminated, truncated, info = env.step(a[0])
 
-            done = terminated or truncated
+            done = terminated if ppo_train else (terminated or truncated)
             episode_reward += reward
             episode_cnt += 1
             # episode

@@ -8,6 +8,8 @@
 # ============================================================================
 import typing as typ
 import numpy as np
+import numba
+from numba import prange
 import pandas as pd
 import torch
 import os
@@ -25,12 +27,12 @@ from collections import deque
 from typing import List
 
 
-def mini_batch(batch, mini_batch_size, adv_norm=False):
+def mini_batch(batch, mini_batch_size, adv_norm=False, device='cuda'):
     states, actions, old_log_probs, adv, td_target, b_values = zip(*batch)
     rand_ids = np.random.randint(0, len(states), mini_batch_size)
-    adv = torch.stack(adv)
+    adv = torch.stack(adv).to(device)
     if adv_norm:
-        adv = (adv - torch.mean(adv)) / (torch.std(adv) + 1e-8)
+        adv = (adv - torch.mean(adv)) / (torch.std(adv) + torch.tensor(1e-8, device=device))
     return torch.stack(states)[rand_ids, ...], torch.stack(actions)[rand_ids, :], \
         torch.stack(old_log_probs).reshape(-1, 1)[rand_ids, :], adv[rand_ids, :], \
         torch.stack(td_target)[rand_ids, :], torch.stack(b_values).reshape(-1, 1)[rand_ids, :]
@@ -74,6 +76,26 @@ class memDataset(Dataset):
         return states, actions, old_log_probs, adv, td_target, b_value
 
 
+@numba.jit(nopython=True)
+def reversed_comp(gamma, lbd, reward, done, last_v, old_v, advantage, gae, env_idx, td_target, old_v_arr):
+    for t in list(range(len(reward)))[::-1]:
+        if t == len(reward) - 1:
+            mask = 1.0 - done[t, env_idx]
+            next_v = last_v
+        else:
+            mask = 1.0 - done[t+1, env_idx]
+            next_v = old_v[t+1]
+        
+        # delta + gamma * lbd * mask * gae
+        delta = reward[t, env_idx] + gamma * next_v * mask - old_v[t]
+        gae = delta + gamma * lbd * mask * gae
+        advantage[t, env_idx] = gae
+
+    # recompute
+    td_target[:, env_idx] = advantage[:, env_idx] + old_v
+    old_v_arr[:, env_idx] = old_v
+
+
 class PPO2:
     """
     PPO2算法, 采用截断方式
@@ -102,8 +124,13 @@ class PPO2:
         self.continue_action_flag = PPO_kwargs.get('continue_action_flag', True)
         self.max_pooling = PPO_kwargs.get('max_pooling', True)
         if self.cnn_flag:
-            self.actor = PPOPolicyCNN(state_dim, actor_hidden_layers_dim, action_dim, dist_type=self.dist_type, act_type=self.act_type, continue_action_flag=self.continue_action_flag, max_pooling=self.max_pooling).to(device)
-            self.critic = PPOValueCNN(state_dim, critic_hidden_layers_dim, act_type=self.act_type, max_pooling=self.max_pooling).to(device)
+            self.actor = PPOPolicyCNN(state_dim, actor_hidden_layers_dim, action_dim, dist_type=self.dist_type, act_type=self.act_type, 
+                                      continue_action_flag=self.continue_action_flag, 
+                                      max_pooling=self.max_pooling,
+                                      third_cnn_flag=PPO_kwargs.get('third_cnn_flag', False)).to(device)
+            self.critic = PPOValueCNN(state_dim, critic_hidden_layers_dim, act_type=self.act_type, 
+                                      max_pooling=self.max_pooling, 
+                                      third_cnn_flag=PPO_kwargs.get('third_cnn_flag', False)).to(device)
         else:
             self.actor = policyNet(state_dim, actor_hidden_layers_dim, action_dim, dist_type=self.dist_type, act_type=self.act_type).to(device)
             self.critic = valueNet(state_dim, critic_hidden_layers_dim, act_type=self.act_type).to(device)
@@ -131,11 +158,12 @@ class PPO2:
         self.count = 0 
         self.device = device
         self.reward_func = reward_func
-        self.min_adv_norm = PPO_kwargs.get('min_adv_norm', False)
+        self.mini_adv_norm = PPO_kwargs.get('mini_adv_norm', False)
         self.min_batch_collate_func = partial(
             mini_batch, 
             mini_batch_size=self.minibatch_size,
-            adv_norm=self.min_adv_norm 
+            adv_norm=self.mini_adv_norm,
+            device=device
         )
         self.update_cnt = 0
         self.anneal_lr = PPO_kwargs.get('act_type', False)
@@ -181,12 +209,13 @@ class PPO2:
         state = torch.FloatTensor(np.stack(state)).to(self.device)
         action = torch.FloatTensor(np.stack(action)).to(self.device)
         reward = np.stack(reward) # n, env_nums
+        sample_n, env_n = reward.shape
         # state=torch.Size([2048, 4, 3]), action=torch.Size([2048, 4, 1]), reward=(2048, 4)
         if self.reward_func is not None:
             reward = self.reward_func(reward)
 
         next_state = torch.FloatTensor(np.stack(next_state)).to(self.device)
-        #print(f'next_state.shape={next_state.shape}')
+        # print(f'>>>>>>>>>>>>>>>>>>>>> next_state.shape={next_state.shape} len(reward)-1=', len(reward)-1)
         done = np.stack(done)
         td_target = np.zeros_like(reward) 
         advantage = np.zeros_like(reward) 
@@ -194,13 +223,14 @@ class PPO2:
         for env_idx in range(state.size(1)):
             # compute adv 
             old_v = self.critic(state[:, env_idx, ...]).detach().cpu().numpy().flatten()
-            last_v = self.critic(next_state[:, env_idx, ...]).detach().cpu().numpy()[len(reward)-1]
-            # print(f'old_v={old_v.shape} last_v={last_v.shape}')
-            gae = 0
+            last_v = self.critic(next_state[len(reward)-2:, env_idx, ...]).detach().cpu().numpy().flatten()
+            # print(f'old_v={old_v.shape} last_v={last_v}')
+            gae = 0.0
+            # reversed_comp(self.gamma, self.lmbda, reward, done, last_v[-1], old_v, advantage, gae, env_idx, td_target, old_v_arr)
             for t in reversed(range(len(reward))):
                 if t == len(reward) - 1:
                     mask = 1.0 - done[t, env_idx]
-                    next_v = last_v
+                    next_v = last_v[-1]
                 else:
                     mask = 1.0 - done[t+1, env_idx]
                     next_v = old_v[t+1]
@@ -236,7 +266,7 @@ class PPO2:
             old_log_probs = action_dists.log_prob(self._action_return(action)).sum(1)
 
         # trick1: batch-normalize https://zhuanlan.zhihu.com/p/512327050  
-        if not self.min_adv_norm:
+        if not self.mini_adv_norm:
             advantage = (advantage - np.mean(advantage)) / (np.std(advantage) + 1e-8)
         return state, action, old_log_probs, \
                 torch.FloatTensor(advantage).to(self.device), \
@@ -332,7 +362,6 @@ class PPO2:
         
         if self.anneal_lr:
             self.lr_update(self.opt, self.actor_lr, self.update_cnt)
-            # self.lr_update(self.critic_opt, self.critic_lr, self.update_cnt)
         return True
 
     def save_model(self, file_path):

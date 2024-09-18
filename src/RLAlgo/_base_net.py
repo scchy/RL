@@ -640,9 +640,10 @@ class Identity(nn.Module):
 
 
 class PPOValueCNN(nn.Module):
-    def __init__(self, state_dim, hidden_layers_dim, act_type='relu', max_pooling=True):
+    def __init__(self, state_dim, hidden_layers_dim, act_type='relu', max_pooling=True, **kwargs):
         super(PPOValueCNN, self).__init__()
         self.state_dim = 84 # reshape 84， 84
+        third_cnn_flag = kwargs.get("third_cnn_flag", False)
         # Atria-CNN
         self.cnn_feature = nn.Sequential(
             nn.Conv2d(in_channels=4, out_channels=16, kernel_size=4, stride=2),
@@ -651,6 +652,7 @@ class PPOValueCNN(nn.Module):
             nn.Conv2d(in_channels=16, out_channels=32, kernel_size=4, stride=2),
             nn.ReLU(),
             nn.AvgPool2d(2, 2, 0),
+            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=1) if third_cnn_flag else Identity(),
             nn.Flatten()
         )
         cnn_out_dim = self._get_cnn_out_dim()
@@ -715,6 +717,7 @@ class PPOPolicyCNN(nn.Module):
         super(PPOPolicyCNN, self).__init__()
         self.continue_action_flag = continue_action_flag
         self.state_dim = 84 # reshape 84， 84
+        third_cnn_flag = kwargs.get("third_cnn_flag", False)
         # Atria-CNN
         self.cnn_feature = nn.Sequential(
             nn.Conv2d(in_channels=4, out_channels=16, kernel_size=4, stride=2),
@@ -723,6 +726,7 @@ class PPOPolicyCNN(nn.Module):
             nn.Conv2d(in_channels=16, out_channels=32, kernel_size=4, stride=2),
             nn.ReLU(),
             nn.AvgPool2d(2, 2, 0),
+            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=1) if third_cnn_flag else Identity(),
             nn.Flatten()
         )
         cnn_out_dim = self._get_cnn_out_dim()

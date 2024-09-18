@@ -4,4 +4,4 @@ gymnasium==0.29.0
 gymnasium[atari]
 gymnasium[accept-rom-license]
 cloudpickle==2.2.1
-
+numba==0.57.1
