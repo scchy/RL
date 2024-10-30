@@ -17,7 +17,7 @@ from torch import nn
 from torch.nn import functional as F
 from ._base_net import PPOValueNet as valueNet
 from ._base_net import PPOPolicyBetaNet as policyNet
-from ._base_net import PPOValueCNN, PPOPolicyCNN
+from ._base_net import PPOValueCNN, PPOPolicyCNN, PPOSharedCNN
 from .grad_ana import gradCollecter
 import copy
 from torch import tensor
@@ -123,21 +123,42 @@ class PPO2:
         self.cnn_flag = PPO_kwargs.get('cnn_flag', False)
         self.continue_action_flag = PPO_kwargs.get('continue_action_flag', True)
         self.max_pooling = PPO_kwargs.get('max_pooling', True)
-        if self.cnn_flag:
+        self.avg_pooling = PPO_kwargs.get('avg_pooling', True)
+        self.clean_rl_cnn = PPO_kwargs.get('clean_rl_cnn', False)
+        self.share_cnn_flag = PPO_kwargs.get('share_cnn_flag', False)
+        if self.share_cnn_flag:
+            self.agent = PPOSharedCNN(
+                state_dim, 
+                critic_hidden_layers_dim, 
+                actor_hidden_layers_dim, 
+                action_dim,
+                dist_type=self.dist_type, 
+                act_type=self.act_type,
+                continue_action_flag=self.continue_action_flag, 
+            ).to(device)
+        elif self.cnn_flag:
             self.actor = PPOPolicyCNN(state_dim, actor_hidden_layers_dim, action_dim, dist_type=self.dist_type, act_type=self.act_type, 
                                       continue_action_flag=self.continue_action_flag, 
                                       max_pooling=self.max_pooling,
-                                      third_cnn_flag=PPO_kwargs.get('third_cnn_flag', False)).to(device)
+                                      avg_pooling=self.avg_pooling,
+                                      clean_rl_cnn=self.clean_rl_cnn
+                                      ).to(device)
             self.critic = PPOValueCNN(state_dim, critic_hidden_layers_dim, act_type=self.act_type, 
                                       max_pooling=self.max_pooling, 
-                                      third_cnn_flag=PPO_kwargs.get('third_cnn_flag', False)).to(device)
+                                      avg_pooling=self.avg_pooling,
+                                      clean_rl_cnn=self.clean_rl_cnn
+                                      ).to(device)
         else:
             self.actor = policyNet(state_dim, actor_hidden_layers_dim, action_dim, dist_type=self.dist_type, act_type=self.act_type).to(device)
             self.critic = valueNet(state_dim, critic_hidden_layers_dim, act_type=self.act_type).to(device)
-        self.opt = torch.optim.Adam([
-            {'params': self.actor.parameters(), 'lr': actor_lr, "eps": 1e-5}, 
-            {'params': self.critic.parameters(), 'lr': actor_lr, "eps": 1e-5}
-        ])
+        
+        if self.share_cnn_flag:
+            self.opt = torch.optim.Adam(self.agent.parameters(), lr=actor_lr, eps=1e-5)
+        else:
+            self.opt = torch.optim.Adam([
+                {'params': self.actor.parameters(), 'lr': actor_lr, "eps": 1e-5}, 
+                {'params': filter(lambda p: p.requires_grad, self.critic.parameters()), 'lr': actor_lr, "eps": 1e-5}
+            ])
 
         self.gamma = gamma
         self.lmbda = PPO_kwargs['lmbda']
@@ -193,7 +214,10 @@ class PPO2:
 
     def policy(self, state):
         state = torch.FloatTensor(np.array([state])).to(self.device)
-        action_dist = self.actor.get_dist(state, self.action_bound)
+        if self.share_cnn_flag:
+            action_dist, _ = self.agent.get_dist(state, self.action_bound)
+        else:
+            action_dist = self.actor.get_dist(state, self.action_bound)
         action = action_dist.sample()
         action = self._action_fix(action)
         # print(f"action.cpu().detach().numpy()={action.cpu().detach().numpy()}")
@@ -222,8 +246,12 @@ class PPO2:
         old_v_arr = np.zeros_like(reward) 
         for env_idx in range(state.size(1)):
             # compute adv 
-            old_v = self.critic(state[:, env_idx, ...]).detach().cpu().numpy().flatten()
-            last_v = self.critic(next_state[len(reward)-2:, env_idx, ...]).detach().cpu().numpy().flatten()
+            if self.share_cnn_flag:
+                old_v = self.agent.get_value(state[:, env_idx, ...]).detach().cpu().numpy().flatten()
+                last_v = self.agent.get_value(next_state[len(reward)-2:, env_idx, ...]).detach().cpu().numpy().flatten()
+            else:
+                old_v = self.critic(state[:, env_idx, ...]).detach().cpu().numpy().flatten()
+                last_v = self.critic(next_state[len(reward)-2:, env_idx, ...]).detach().cpu().numpy().flatten()
             # print(f'old_v={old_v.shape} last_v={last_v}')
             gae = 0.0
             # reversed_comp(self.gamma, self.lmbda, reward, done, last_v[-1], old_v, advantage, gae, env_idx, td_target, old_v_arr)
@@ -259,7 +287,10 @@ class PPO2:
         else:
             _, _, state_dim = state.size()
             state = state.reshape(-1, state_dim)
-        action_dists = self.actor.get_dist(state, self.action_bound)
+        if self.share_cnn_flag:
+            action_dists, _ = self.agent.get_dist(state, self.action_bound)
+        else:
+            action_dists = self.actor.get_dist(state, self.action_bound)
         if action_dim == 1:
             old_log_probs = action_dists.log_prob(self._action_return(action))
         else:
@@ -277,8 +308,11 @@ class PPO2:
         # total_timesteps = cfg.num_episode * 100
         # num_iters = args.total_timesteps // cfg.off_buffer_size # batch_size
         frac = max(1e-8, 1.0 - (iteration - 1.0) / self.num_iters)
-        opt.param_groups[0]["lr"] = frac * lr
-        opt.param_groups[1]["lr"] = frac * lr
+        if self.share_cnn_flag:
+            opt.param_groups[0]["lr"] = frac * lr
+        else: 
+            opt.param_groups[0]["lr"] = frac * lr
+            opt.param_groups[1]["lr"] = frac * lr
 
     def update(self, samples_buffer: deque, wandb = None):
         self.update_cnt += 1
@@ -303,7 +337,10 @@ class PPO2:
         for _ in range(self.k_epochs):
             for state_, action_, old_log_prob, adv, td_v, before_v in train_loader:
                 self.opt.zero_grad()
-                action_dists = self.actor.get_dist(state_, self.action_bound)
+                if self.share_cnn_flag:
+                    action_dists, critic_out = self.agent.get_dist(state_, self.action_bound)
+                else:
+                    action_dists = self.actor.get_dist(state_, self.action_bound)
                 new_log_prob = action_dists.log_prob(self._action_return(action_))
                 if self.continue_action_flag:
                     new_log_prob = new_log_prob.sum(1).reshape(-1, 1)
@@ -313,13 +350,16 @@ class PPO2:
                     entropy_loss = action_dists.entropy().sum(1).mean()
                 except Exception as e:
                     # sperate action
-                    entropy_loss = action_dists.entropy().sum().mean()
+                    entropy_loss = action_dists.entropy().mean()
                 # e(log(a/b))
                 ratio = torch.exp(new_log_prob - old_log_prob.detach())
                 surr1 = ratio * adv
                 surr2 = torch.clamp(ratio, 1 - self.eps, 1 + self.eps) * adv
                 actor_loss = -torch.min(surr1, surr2).mean().float() - self.ent_coef * entropy_loss
-                new_v = self.critic(state_).float()
+                if self.share_cnn_flag:
+                    new_v = critic_out.float()
+                else:
+                    new_v = self.critic(state_).float()
                 td_v = td_v.detach().float()
                 # print(
                 #     f'{state_.shape=} {action_.shape=} {old_log_prob.shape=} {new_log_prob.shape=} {ratio.shape=} {surr1.shape=} {surr2.shape=}',
@@ -347,17 +387,35 @@ class PPO2:
                     print(f'>>>>>>>>>> critic_loss=', critic_loss)
 
                 total_loss.backward()
-                self.grad_collector(self.actor.parameters())
-                self.grad_collector(self.critic.parameters())
+                if self.share_cnn_flag:
+                    self.grad_collector(self.agent.parameters())
+                    cnn_g = self.agent.cnn_feature[0].weight.grad.data.detach().cpu().numpy()
+                    cnn_g2 = self.agent.cnn_feature[2].weight.grad.data.detach().cpu().numpy()
+                    cnn_g3 = self.agent.cnn_feature[4].weight.grad.data.detach().cpu().numpy()
+                    cnn_g_sum = np.sum(np.abs(cnn_g))
+                    cnn_g_sum2 = np.sum(np.abs(cnn_g2))
+                    cnn_g_sum3 = np.sum(np.abs(cnn_g3))
+                    if  cnn_g_sum < 0.1 or cnn_g_sum2 < 0.1 or cnn_g_sum3 < 0.1:
+                        print(f"zero grad {cnn_g_sum=:.5f} {cnn_g_sum2=:.5f} {cnn_g_sum3=:.5f}")
+                else:
+                    self.grad_collector(self.actor.parameters())
+                    self.grad_collector(self.critic.parameters())
                 if wandb is not None:
                     wandb.log({
                         'total_loss': loss_item,
+                        'agent_gard_norm': self.grad_collector.collected_grad[-1]
+                        } if self.share_cnn_flag else {
+                        'total_loss': loss_item,
                         'actor_gard_norm': self.grad_collector.collected_grad[-2],
                         'critic_gard_norm': self.grad_collector.collected_grad[-1]
-                        })
+                        }
+                        )
                 if self.max_grad_norm > 0.0001:
-                    torch.nn.utils.clip_grad_norm_(self.actor.parameters(), self.max_grad_norm) 
-                    torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.max_grad_norm ) 
+                    if self.share_cnn_flag:
+                        torch.nn.utils.clip_grad_norm_(self.agent.parameters(), self.max_grad_norm) 
+                    else:
+                        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), self.max_grad_norm) 
+                        torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.max_grad_norm ) 
                 self.opt.step()
         
         if self.anneal_lr:
@@ -367,13 +425,23 @@ class PPO2:
     def save_model(self, file_path):
         if not os.path.exists(file_path):
             os.makedirs(file_path)
-
+        if self.share_cnn_flag:
+            file_path = os.path.join(file_path, 'PPO_shared_agent.ckpt')
+            torch.save(self.agent.state_dict(), file_path)
+            return 
         act_f = os.path.join(file_path, 'PPO_actor.ckpt')
         critic_f = os.path.join(file_path, 'PPO_critic.ckpt')
         torch.save(self.actor.state_dict(), act_f)
         torch.save(self.critic.state_dict(), critic_f)
 
     def load_model(self, file_path):
+        if self.share_cnn_flag:
+            file_path = os.path.join(file_path, 'PPO_shared_agent.ckpt')
+            try:
+                self.agent.load_state_dict(torch.load(file_path))
+            except Exception as e:
+                self.agent.load_state_dict(torch.load(file_path, map_location='cpu'))
+            return 
         act_f = os.path.join(file_path, 'PPO_actor.ckpt')
         critic_f = os.path.join(file_path, 'PPO_critic.ckpt')
         try:
@@ -393,10 +461,16 @@ class PPO2:
 
     def train(self):
         self.training = True
+        if self.share_cnn_flag:
+            self.agent.train() 
+            return 
         self.actor.train()
         self.critic.train()
 
     def eval(self):
         self.training = False
+        if self.share_cnn_flag:
+            self.agent.eval() 
+            return 
         self.actor.eval()
         self.critic.eval()

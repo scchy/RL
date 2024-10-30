@@ -3,7 +3,7 @@
 # Func: QNet 
 # reference: https://iclr-blog-track.github.io/2022/03/25/ppo-implementation-details/
 # =================================================================================
-
+import copy
 import typing as typ
 import numpy as np
 import pandas as pd
@@ -640,10 +640,13 @@ class Identity(nn.Module):
 
 
 class PPOValueCNN(nn.Module):
-    def __init__(self, state_dim, hidden_layers_dim, act_type='relu', max_pooling=True, **kwargs):
+    def __init__(self, state_dim, hidden_layers_dim, act_type='relu', 
+                 max_pooling=True, 
+                 avg_pooling=True,
+                 clean_rl_cnn=False, 
+                 **kwargs):
         super(PPOValueCNN, self).__init__()
         self.state_dim = 84 # reshape 84， 84
-        third_cnn_flag = kwargs.get("third_cnn_flag", False)
         # Atria-CNN
         self.cnn_feature = nn.Sequential(
             nn.Conv2d(in_channels=4, out_channels=16, kernel_size=4, stride=2),
@@ -651,8 +654,15 @@ class PPOValueCNN(nn.Module):
             nn.MaxPool2d(2, 2, 0) if max_pooling else Identity(),
             nn.Conv2d(in_channels=16, out_channels=32, kernel_size=4, stride=2),
             nn.ReLU(),
-            nn.AvgPool2d(2, 2, 0),
-            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=1) if third_cnn_flag else Identity(),
+            nn.AvgPool2d(2, 2, 0) if avg_pooling else Identity(),
+            nn.Flatten()
+        )if not clean_rl_cnn else nn.Sequential(
+            nn.Conv2d(4, 32, 8, stride=4),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, 4, stride=2),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, 3, stride=1),
+            nn.ReLU(),
             nn.Flatten()
         )
         cnn_out_dim = self._get_cnn_out_dim()
@@ -712,12 +722,14 @@ class PPOPolicyCNN(nn.Module):
     def __init__(self, state_dim: int, hidden_layers_dim: typ.List, action_dim: int, 
                  dist_type='beta', 
                  act_type='relu',
-                 continue_action_flag=False, max_pooling=True,
+                 continue_action_flag=False, 
+                 max_pooling=True,
+                 avg_pooling=True,
+                 clean_rl_cnn=False, 
                  **kwargs):
         super(PPOPolicyCNN, self).__init__()
         self.continue_action_flag = continue_action_flag
         self.state_dim = 84 # reshape 84， 84
-        third_cnn_flag = kwargs.get("third_cnn_flag", False)
         # Atria-CNN
         self.cnn_feature = nn.Sequential(
             nn.Conv2d(in_channels=4, out_channels=16, kernel_size=4, stride=2),
@@ -725,8 +737,15 @@ class PPOPolicyCNN(nn.Module):
             nn.MaxPool2d(2, 2, 0) if max_pooling else Identity(),
             nn.Conv2d(in_channels=16, out_channels=32, kernel_size=4, stride=2),
             nn.ReLU(),
-            nn.AvgPool2d(2, 2, 0),
-            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=1) if third_cnn_flag else Identity(),
+            nn.AvgPool2d(2, 2, 0) if avg_pooling else Identity(),
+            nn.Flatten()
+        ) if not clean_rl_cnn else nn.Sequential(
+            nn.Conv2d(4, 32, 8, stride=4),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, 4, stride=2),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, 3, stride=1),
+            nn.ReLU(),
             nn.Flatten()
         )
         cnn_out_dim = self._get_cnn_out_dim()
@@ -814,3 +833,198 @@ class PPOPolicyCNN(nn.Module):
             classname = layer.__class__.__name__
             if classname.find('Conv2d') != -1:
                 orthogonal_init(layer, gain=np.sqrt(2))
+
+
+
+class PPOSharedCNN(nn.Module):
+    """
+    continuity action:
+    normal distribution (mean, std) 
+    Chou P W, Maturana D, Scherer S. Improving stochastic policy gradients in continuous control with deep reinforcement learning using the beta distribution[C]
+    //International conference on machine learning. PMLR, 2017: 834-843.
+    https://proceedings.mlr.press/v70/chou17a.html
+    my trick: action attention
+    """
+    def __init__(self, state_dim: int, 
+                 critic_hidden_layers_dim: typ.List, 
+                 actor_hidden_layers_dim: typ.List, 
+                 action_dim: int, 
+                 dist_type='beta', 
+                 act_type='relu',
+                 continue_action_flag=False, 
+                 **kwargs):
+        super(PPOSharedCNN, self).__init__()
+        self.continue_action_flag = continue_action_flag
+        self.state_dim = 84 # reshape 84， 84
+        # Atria-CNN
+        self.cnn_feature = nn.Sequential(
+            nn.Conv2d(4, 32, 8, stride=4),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, 4, stride=2),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, 3, stride=1),
+            nn.ReLU(),
+            nn.Flatten()
+        )
+        cnn_out_dim = self._get_cnn_out_dim()
+        self.cnn_out_ln = nn.LayerNorm([cnn_out_dim])
+        self.dist_type = dist_type
+        self.act_type = act_type
+        # share mlp 
+        self.share_mlp = nn.ModuleList()
+        hid_idx = 0
+        for idx, (act_d, hid_d) in enumerate(zip(actor_hidden_layers_dim, critic_hidden_layers_dim)):
+            if hid_idx == idx and act_d == hid_d:
+                self.share_mlp.append(nn.ModuleDict({
+                    'linear': nn.Linear(actor_hidden_layers_dim[idx-1] if idx else cnn_out_dim, hid_d),
+                    'linear_action': nn.ReLU(inplace=True) if act_type == 'relu' else nn.Tanh()
+                }))
+                hid_idx += 1
+        
+        share_dim_ = actor_hidden_layers_dim[hid_idx - 1] if hid_idx >= 1 else cnn_out_dim
+        # actor
+        self.actor_features = nn.ModuleList()
+        for idx, h in enumerate(actor_hidden_layers_dim[hid_idx:]):
+            self.actor_features.append(nn.ModuleDict({
+                'linear': nn.Linear(actor_hidden_layers_dim[idx-1] if idx else share_dim_, h),
+                'linear_action': nn.ReLU(inplace=True) if act_type == 'relu' else nn.Tanh()
+            }))
+        self.alpha_layer = nn.Linear(actor_hidden_layers_dim[-1], action_dim)
+        self.beta_layer = nn.Linear(actor_hidden_layers_dim[-1], action_dim)
+        self.norm_out_layer = nn.Linear(actor_hidden_layers_dim[-1], action_dim)
+        self.log_std = nn.Parameter(torch.zeros(1, action_dim))
+
+        # critic 
+        self.critic_features = nn.ModuleList()
+        for idx, h in enumerate(critic_hidden_layers_dim[hid_idx:]):
+            self.critic_features.append(nn.ModuleDict({
+                'linear': nn.Linear(critic_hidden_layers_dim[idx-1] if idx else share_dim_, h),
+                'linear_activation': nn.ReLU(inplace=True) if act_type == 'relu' else nn.Tanh()
+            }))
+        self.head = nn.Linear(critic_hidden_layers_dim[-1] , 1)
+        self.__init()
+        # print(self.share_mlp, self.actor_features, self.critic_features)
+
+    @torch.no_grad
+    def _get_cnn_out_dim(self):
+        pic = torch.randn((1, 4, self.state_dim, self.state_dim))
+        return self.cnn_feature(pic).shape[1]
+
+    def forward(self, state):
+        if len(state.shape) == 5:
+            state = state.squeeze(0)
+        if len(state.shape) == 3:
+            state = state.unsqueeze(0)
+        try:
+            cnn_out = self.cnn_out_ln(self.cnn_feature(state))
+        except Exception as e:
+            state = state.permute(0, 3, 1, 2)
+            cnn_out = self.cnn_out_ln(self.cnn_feature(state))
+
+        for layer in self.share_mlp:
+            cnn_out = layer['linear'](cnn_out)
+            if self.act_type.lower() == 'tanh':
+                cnn_out = layer['linear_action'](cnn_out.clip(-200.0, 200.0))
+                continue
+            cnn_out = layer['linear_action'](cnn_out)
+            
+        a = cnn_out
+        for layer in self.actor_features:
+            a = layer['linear'](a)
+            if self.act_type.lower() == 'tanh':
+                a = layer['linear_action'](a.clip(-200.0, 200.0))
+                continue
+            a = layer['linear_action'](a)
+        
+        alpha = self.alpha_layer(a)
+        beta = self.beta_layer(a)
+        mean = self.norm_out_layer(a)
+        
+        alpha = F.softplus(alpha.clip(-200.0, 650.0)) + 1.0
+        beta = F.softplus(beta.clip(-200.0, 650.0)) + 1.0
+        
+        c = cnn_out
+        for layer in self.critic_features:
+            c = layer['linear'](c)
+            if self.act_type.lower() == 'tanh':
+                c = layer['linear_activation'](c.clip(-200.0, 200.0))
+                continue
+            c = layer['linear_activation'](c)
+        
+        value = self.head(c)
+        return alpha, beta, mean, value
+
+    def mean(self, s):
+        alpha, beta, mean, _ = self.forward(s)
+        if self.dist_type == 'beta':
+            mean = alpha / (alpha + beta)  # The mean of the beta distribution
+        return mean
+
+    def get_value(self, state):
+        if len(state.shape) == 5:
+            state = state.squeeze(0)
+        if len(state.shape) == 3:
+            state = state.unsqueeze(0)
+        try:
+            cnn_out = self.cnn_out_ln(self.cnn_feature(state))
+        except Exception as e:
+            state = state.permute(0, 3, 1, 2)
+            cnn_out = self.cnn_out_ln(self.cnn_feature(state))
+
+        for layer in self.share_mlp:
+            cnn_out = layer['linear'](cnn_out)
+            if self.act_type.lower() == 'tanh':
+                cnn_out = layer['linear_action'](cnn_out.clip(-200.0, 200.0))
+                continue
+            cnn_out = layer['linear_action'](cnn_out)
+        
+        c = cnn_out
+        for layer in self.critic_features:
+            c = layer['linear'](c)
+            if self.act_type.lower() == 'tanh':
+                c = layer['linear_activation'](c.clip(-200.0, 200.0))
+                continue
+            c = layer['linear_activation'](c)
+        return self.head(c)
+    
+    def get_dist(self, x, max_action=1.0):
+        if self.continue_action_flag:
+            return self.get_continue_dist(x, max_action)
+        return self.get_sperate_dist(x)
+        
+    def get_continue_dist(self, x, max_action=1.0):
+        alpha, beta, mean, value = self.forward(x)
+        if self.dist_type == "beta":
+            dist = torch.distributions.Beta(alpha, beta)
+            return dist, value
+
+        # mean = mean * max_action
+        log_std = self.log_std.expand_as(mean) 
+        std = torch.exp(log_std)  # The reason we train the 'log_std' is to ensure std=exp(log_std)>0
+        dist = torch.distributions.Normal(mean, std)
+        return dist, value
+
+    def get_sperate_dist(self, x):
+        _, _, mean, value = self.forward(x)
+        dist = torch.distributions.Categorical(logits=mean)
+        return dist, value
+
+    def __init(self):
+        # cnn
+        for layer in self.cnn_feature:
+            classname = layer.__class__.__name__
+            if classname.find('Conv2d') != -1:
+                orthogonal_init(layer, gain=np.sqrt(2))
+        # actor
+        for layer in self.actor_features:
+            orthogonal_init(layer['linear'], gain=np.sqrt(2))
+        # actor head
+        orthogonal_init(self.alpha_layer, gain=0.01)
+        orthogonal_init(self.beta_layer, gain=0.01)
+        orthogonal_init(self.norm_out_layer, gain=0.01)
+
+        # critic
+        for layer in self.critic_features:
+            orthogonal_init(layer['linear'], gain=np.sqrt(2))
+        # critic head
+        orthogonal_init(self.head, gain=1.0)

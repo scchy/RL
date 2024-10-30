@@ -14,3 +14,4 @@
 /src/RLAlgo/__pycache__
 /src/RLAlgo/__pycache__/*.pyc
 ./*.log
+*.log

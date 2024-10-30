@@ -106,7 +106,10 @@ class Config:
         
         # 环境相关变量
         if hasattr(env, 'num_envs'):
-            env = env.env_fns[0]()
+            try:
+                env = env.env_fns[0]()
+            except Exception as e:
+                pass 
         self.action_dim = action_dim
         self.state_dim = env.observation_space.shape[0]
         if len(env.observation_space.shape) == 3:

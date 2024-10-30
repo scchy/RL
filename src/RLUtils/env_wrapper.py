@@ -7,11 +7,145 @@
 import gymnasium as gym
 import torch
 import numpy as np
+import cv2
+import time 
 from torchvision import transforms
-from gymnasium.spaces import Box
-from gymnasium.wrappers import FrameStack, LazyFrames
+from gymnasium.spaces import Box, Space
+from gymnasium.wrappers import FrameStack, LazyFrames, RecordEpisodeStatistics
 from collections import deque
-from typing import List, Dict
+from typing import List, Dict, Optional, Callable, Iterable, Tuple, Any, Sequence, Union
+from numpy.typing import NDArray
+from gymnasium import Env
+from gymnasium.vector.utils import concatenate, create_empty_array, iterate
+from gymnasium.vector.vector_env import VectorEnv
+from copy import deepcopy
+
+
+class spSyncVectorEnv(gym.vector.SyncVectorEnv):
+    """
+    step_await _terminateds reset
+    """
+    def __init__(
+        self,
+        env_fns: Iterable[Callable[[], Env]],
+        observation_space: Space = None,
+        action_space: Space = None,
+        copy: bool = True,
+        random_reset: bool = False,
+        seed: int = None
+    ):
+        super().__init__(env_fns, observation_space, action_space, copy)
+        self.random_reset = random_reset
+        self.seed = seed
+    
+    def step_wait(self) -> Tuple[Any, NDArray[Any], NDArray[Any], NDArray[Any], dict]:
+        """Steps through each of the environments returning the batched results.
+
+        Returns:
+            The batched environment step results
+        """
+        observations, infos = [], {}
+        for i, (env, action) in enumerate(zip(self.envs, self._actions)):
+            (
+                observation,
+                self._rewards[i],
+                self._terminateds[i],
+                self._truncateds[i],
+                info,
+            ) = env.step(action)
+
+            if self._terminateds[i]:
+                old_observation, old_info = observation, info
+                if self.random_reset:
+                    observation, info = env.reset(seed=np.random.randint(0, 999999))
+                else:
+                    observation, info = env.reset() if self.seed is None else env.reset(seed=self.seed) 
+                info["final_observation"] = old_observation
+                info["final_info"] = old_info
+            observations.append(observation)
+            infos = self._add_info(infos, info, i)
+        self.observations = concatenate(
+            self.single_observation_space, observations, self.observations
+        )
+
+        return (
+            deepcopy(self.observations) if self.copy else self.observations,
+            np.copy(self._rewards),
+            np.copy(self._terminateds),
+            np.copy(self._truncateds),
+            infos,
+        )
+
+
+class envPoolRecordEpisodeStatistics(gym.Wrapper):
+    def __init__(self, envs, deque_size=100, max_no_reward_count: Optional[int]=None):
+        super().__init__(envs)
+        self.envs = envs
+        self.num_envs = getattr(envs, "num_envs", 1)
+        self.episode_returns = None
+        self.episode_lengths = None
+        self.record_episode_returns = None
+        self.lives = None
+        self.max_no_reward_count = max_no_reward_count
+        self.max_no_reward_arr = None
+        if max_no_reward_count is not None:
+            self.max_no_reward_arr = np.ones(self.num_envs) * self.max_no_reward_count
+        self.no_reward_count = np.zeros(self.num_envs)
+        self.env_id_arr = np.arange(self.num_envs)
+
+    def _one_env_reset(self, rewards, terminations, observations, infos, truncated):
+        self.no_reward_count += (rewards == 0) * 1
+        self.no_reward_count *= (rewards == 0) * 1 # 不等于0的重置
+        zero_bool = infos['lives'] == 0
+        truncated[zero_bool & terminations] = True
+        if self.max_no_reward_count is not None:
+            reset_bool = self.no_reward_count >= self.max_no_reward_arr
+            if reset_bool.sum():
+                self.no_reward_count[reset_bool] = 0
+                terminations[reset_bool] = True
+                infos['lives'][reset_bool] = 0
+                obs, _ = self.env.reset(self.env_id_arr[reset_bool])
+                print("Reset Info: env_id=", self.env_id_arr[reset_bool], "len(obs)=", len(obs))
+                observations[reset_bool] = obs
+            # switch terminations and truncated
+            return truncated, [i/255.0 for i in observations], infos, terminations
+        return truncated, [i/255.0 for i in observations], infos, terminations
+
+    def reset(self, **kwargs):
+        observations, info = self.envs.reset()
+        self.episode_returns = np.zeros(self.num_envs, dtype=np.float32)
+        self.episode_lengths = np.zeros(self.num_envs, dtype=np.int32)
+        self.record_episode_returns = np.zeros(self.num_envs, dtype=np.float32)
+        if self.max_no_reward_count is not None:
+            self.max_no_reward_arr = np.ones(self.num_envs) * self.max_no_reward_count
+        self.no_reward_count = np.zeros(self.num_envs)
+        return [i/255.0 for i in observations], info
+
+    def step(self, action):
+        observations, rewards, terminated, truncated, infos = self.envs.step(action)
+        # no_reward reset & float observations
+        terminated, observations, infos, truncated = self._one_env_reset(rewards, terminated, observations, infos, truncated)
+
+        self.episode_returns += rewards
+        self.episode_lengths += 1
+        # 上一次已经是0条命
+        collect_bool = np.logical_and(infos['lives'] == 0, terminated)
+        if collect_bool.sum() > 0:
+            if self.num_envs == 1:
+                infos['episode'] = {'r': self.episode_returns[0]}
+            else:
+                infos['final_info'] = [ 
+                    {'episode': {'r': self.episode_returns[idx]}, 'env_id': idx} for idx, i in enumerate(infos['lives']) if  i == 0 
+                ]
+            self.record_episode_returns = self.episode_returns
+            self.episode_returns[collect_bool] = 0.0 
+            self.episode_lengths[collect_bool] = 0.0 
+        return (
+            observations,
+            rewards,
+            terminated, truncated,
+            infos,
+        )
 
 
 class baseSkipFrame(gym.Wrapper):
@@ -22,7 +156,9 @@ class baseSkipFrame(gym.Wrapper):
             cut_slices: List[List[int]]=None,
             start_skip: int=None,
             neg_action_kwargs: Dict=None,
-            action_map: Dict = None
+            action_map: Dict = None,
+            max_no_reward_count: Optional[int] = None,
+            max_obs: bool = False
         ):
         """_summary_
 
@@ -39,6 +175,10 @@ class baseSkipFrame(gym.Wrapper):
         self.start_skip = start_skip
         self.neg_action_kwargs = neg_action_kwargs
         self.action_map = action_map
+        self.max_no_reward_count = max_no_reward_count
+        self.no_reward_count = 0
+        self.max_obs = max_obs
+        self._obs_buffer = np.zeros((2,) + env.observation_space.shape, dtype=np.uint8)
     
     def _get_need_action(self, action):
         if self.action_map is None:
@@ -65,32 +205,46 @@ class baseSkipFrame(gym.Wrapper):
             neg_r = self.neg_action_kwargs.get(a_, 0.0)
         
         action = self._get_need_action(action)
-        tt_reward_list = []
-        done = False
         total_reward = 0
         for i in range(self._skip):
             obs, reward, terminated, truncated, info = self.env.step(action)
+            if i == self._skip - 2: self._obs_buffer[0] = obs
+            if i == self._skip - 1: self._obs_buffer[1] = obs
             reward += neg_r
             done_f = terminated or truncated
             total_reward += reward
-            tt_reward_list.append(reward)
-            if done:
-                break
-        
+            if done_f:
+                obs = self._obs_buffer.max(axis=0) if self.max_obs else obs
+                obs = self._cut_slice(obs)  if self.pic_cut_slices is not None else obs
+                return obs, total_reward, terminated, truncated, info
+
+        # no reward max reset
+        self.no_reward_count += 1
+        if total_reward != 0:
+            self.no_reward_count = 0
+        if self.max_no_reward_count is not None and self.no_reward_count >= self.max_no_reward_count:
+            print(f"Rest {self.max_no_reward_count=} {self.no_reward_count=}")
+            self.no_reward_count = 0
+            terminated = True
+
+        obs = self._obs_buffer.max(axis=0) if self.max_obs else obs
         obs = self._cut_slice(obs)  if self.pic_cut_slices is not None else obs
-        return obs, total_reward, done_f, truncated, info
+        return obs, total_reward, terminated, truncated, info
     
-    def _start_skip(self):
+    def _start_skip(self, seed=0, options=None, **kwargs):
         a = np.array([0.0, 0.0, 0.0]) if hasattr(self.env.action_space, 'low') else np.array(0) 
         for i in range(self.start_skip):
             obs, reward, terminated, truncated, info = self.env.step(a)
+            if terminated or truncated:
+                obs, info = self.env.reset(seed=seed, options=options, **kwargs)
         return obs, info
 
-    def reset(self, seed=0, options=None):
-        s, info = self.env.reset(seed=seed, options=options)
+    def reset(self, seed=0, options=None, **kwargs):
+        obs, info = self.env.reset(seed=seed, options=options, **kwargs)
         if self.start_skip is not None:
-            obs, info = self._start_skip()
+            obs, info = self._start_skip(seed, options, **kwargs)
         obs = self._cut_slice(obs)  if self.pic_cut_slices is not None else obs
+        self.no_reward_count = 0
         return obs, info
 
 
@@ -159,36 +313,47 @@ class SkipFrame(gym.Wrapper):
 
 
 class GrayScaleObservation(gym.ObservationWrapper):
-    def __init__(self, env):
+    def __init__(self, env, resie_inner_area: bool=False):
         """RGP -> Gray
         (high, width, channel) -> (1, high, width) 
         """
         super().__init__(env)
         # change observation type for [ sync_vector_env ]
+        self.resie_inner_area = resie_inner_area
         self.observation_space = Box(
-            low=0, high=255, shape=self.observation_space.shape[:2], dtype=np.float32
+            low=0, high=255, shape=self.observation_space.shape[:2], dtype=np.uint8 if resie_inner_area else np.float32
         )
     
     def observation(self, observation):
+        if self.resie_inner_area:
+            return cv2.cvtColor(observation, cv2.COLOR_RGB2GRAY)
         tf = transforms.Grayscale()
         # channel first
         return tf(torch.tensor(np.transpose(observation, (2, 0, 1)).copy(), dtype=torch.float))
 
 
 class ResizeObservation(gym.ObservationWrapper):
-    def __init__(self, env, shape: int):
+    def __init__(self, env, shape: int, resie_inner_area: bool=False):
         """reshape observe
         Args:
             env (_type_): _description_
-            shape (int): reshape size
+            shape (int): reshape size  cv2.INTER_LINEAR  == BILINEAR  双线性插值
+            resie_inner_area (bool): resie_inner_area resize 使用cv2.INTER_AREA 区域插值，适合缩小图像: 可以避免在缩小的图像中引入不期望的模糊，保持图像的锐度
         """
         super().__init__(env)
         self.shape = (shape, shape)
         obs_shape = self.shape + self.observation_space.shape[2:]
+        self.resie_inner_area = resie_inner_area
         # change observation type for [ sync_vector_env ]
         self.observation_space = Box(low=0, high=255, shape=obs_shape, dtype=np.float32)
 
     def observation(self, observation):
+        # print(f"{observation.max()=} {observation.min()=}")
+        if self.resie_inner_area:
+            return cv2.resize(
+                observation, self.shape, interpolation=cv2.INTER_AREA
+            ) / 255.0
+
         #  Normalize -> input[channel] - mean[channel]) / std[channel]
         transformations = transforms.Compose([transforms.Resize(self.shape), transforms.Normalize(0, 255)])
         return transformations(observation).squeeze(0)
@@ -210,20 +375,34 @@ class EpisodicLifeEnv(gym.Wrapper):
 
     def step(self, action):
         obs, reward, terminated, truncated, info = self.env.step(action)
-        self.was_real_done = terminated
+        self.was_real_done = terminated or truncated
         # check current lives, make loss of life terminal,
         # then update lives to handle bonus lives
-        done = False
+        truncated = False
         lives = self.env.unwrapped.ale.lives()
         if 0 < lives < self.lives:
-            # for Qbert sometimes we stay in lives == 0 condtion for a few frames
-            # so its important to keep lives > 0, so that we only reset once
-            # the environment advertises done.
-            done = True
+            truncated = True
         self.lives = lives
         # test 继续，train的时候mask
-        return obs, reward, self.was_real_done, done, info
+        return obs, reward, terminated, truncated, info
 
+    def reset(self, **kwargs):
+        """
+        Calls the Gym environment reset, only when lives are exhausted.
+        This way all states are still reachable even though lives are episodic,
+        and the learner need not know about any of this behind-the-scenes.
+
+        :param kwargs: Extra keywords passed to env.reset() call
+        :return: the first observation of the environment
+        """
+        if self.was_real_done:
+            obs, info = self.env.reset(**kwargs)
+        else:
+            # no-op step to advance from terminal/lost life state
+            obs, reward, terminated, truncated, info = self.env.step(0)
+        self.lives = self.env.unwrapped.ale.lives()
+        return obs, info
+    
 
 class ClipRewardEnv(gym.RewardWrapper):
     def __init__(self, env):
@@ -255,24 +434,18 @@ class FireResetEnv(gym.Wrapper):
         assert len(env.unwrapped.get_action_meanings()) >= 3
 
     def reset(self, **kwargs):
-        self.env.reset(**kwargs)
+        obs, info = self.env.reset(**kwargs)
         obs, reward, terminated, truncated, info = self.env.step(1)
         done = terminated or truncated
         if done:
-            self.env.reset(**kwargs)
+            obs, info = self.env.reset(**kwargs)
         obs, reward, terminated, truncated, info = self.env.step(2)
         done = terminated or truncated
         if done:
-            self.env.reset(**kwargs)
+            obs, info = self.env.reset(**kwargs)
         return obs, info
 
     def step(self, action):
         return self.env.step(action)
-
-
-
-
-
-
 
 

@@ -891,6 +891,97 @@ def HumanoidStandup_v4_ppo2_test():
     play(env, agent, cfg, episode_count=2, play_without_seed=False, render=True)
 
 
+# Reacher-v4
+def Reacher_v4_ppo2_test():
+    # jump & another leg to be a tail 
+    env_name = 'Reacher-v4'
+    num_envs = 64
+    gym_env_desc(env_name)
+    print("gym.__version__ = ", gym.__version__ )
+    path_ = os.path.dirname(__file__)
+    norm_flag = True
+    reward_flag = False
+    envs = gym.vector.SyncVectorEnv(
+        [make_env(env_name, obs_norm_trans_flag=norm_flag, reward_norm_trans_flag=reward_flag) for _ in range(num_envs)]
+    )
+    dist_type = 'beta'
+    cfg = Config(
+        envs, 
+        # 环境参数
+        save_path=os.path.join(path_, "test_models" ,f'PPO_{env_name}-{norm_flag}-1'), 
+        seed=202410,
+        # 网络参数
+        actor_hidden_layers_dim=[256, 256],
+        critic_hidden_layers_dim=[256, 256],
+        # agent参数
+        actor_lr=4.5e-4,
+        gamma=0.99,
+        # 训练参数
+        num_episode=3000, 
+        off_buffer_size=100,
+        max_episode_steps=100,
+        PPO_kwargs={
+            'lmbda': 0.95,  
+            'eps': 0.2,
+            'k_epochs': 3,
+            'sgd_batch_size': 2048,
+            'minibatch_size': 1024,
+            'action_space': envs.single_action_space,
+            'act_type': 'tanh',
+            'dist_type': dist_type,
+            'critic_coef': 1,
+            'ent_coef': 0.01,
+            'max_grad_norm': 0.5, # 45.5
+            'clip_vloss': True,
+            'min_adv_norm': True,
+
+            'anneal_lr': False, # not work
+            'num_episode': 3000
+        }
+    )
+    cfg.test_max_episode_steps = 300
+    cfg.num_envs = num_envs
+    minibatch_size = cfg.PPO_kwargs['minibatch_size']
+    max_grad_norm = cfg.PPO_kwargs['max_grad_norm']
+    cfg.trail_desc = f"reward_flag={reward_flag},norm_flag={norm_flag},actor_lr={cfg.actor_lr},minibatch_size={minibatch_size},max_grad_norm={max_grad_norm},hidden_layers={cfg.actor_hidden_layers_dim}",
+    # {'P25': 0.054308490827679634, 'P50': 10.356741905212402, 'P75': 803.9899291992188, 'P95': 3986.836511230468, 'P99': 8209.22970703126}
+    agent = PPO2(
+        state_dim=cfg.state_dim,
+        actor_hidden_layers_dim=cfg.actor_hidden_layers_dim,
+        critic_hidden_layers_dim=cfg.critic_hidden_layers_dim,
+        action_dim=cfg.action_dim,
+        actor_lr=cfg.actor_lr,
+        critic_lr=cfg.critic_lr,
+        gamma=cfg.gamma,
+        PPO_kwargs=cfg.PPO_kwargs,
+        device=cfg.device,
+        reward_func=None
+    )
+    # agent.train()
+    # ppo2_train(envs, agent, cfg, wandb_flag=True, wandb_project_name=f"PPO2-{env_name}",
+    #                 train_without_seed=True,  # False
+    #                 test_ep_freq=cfg.off_buffer_size * 10, 
+    #                 online_collect_nums=cfg.off_buffer_size,
+    #                 test_episode_count=10)
+    # # save norm env
+    # save_env(envs.envs[0], os.path.join(cfg.save_path, 'norm_env.pkl'))
+    # print(agent.grad_collector.describe())
+    # agent.grad_collector.dump(cfg.save_path + '.npy')
+    agent.load_model(cfg.save_path)
+    agent.eval()
+    
+    with open(os.path.join(cfg.save_path, 'norm_env.pkl'), 'rb') as f:
+        env = cloudpickle.load(f)
+
+    obs_rms = env.get_wrapper_attr('env').get_wrapper_attr("obs_rms")
+    env = make_env(env_name, obs_norm_trans_flag=norm_flag, render_mode='human')()
+    env.get_wrapper_attr('env').get_wrapper_attr("obs_rms").mean = obs_rms.mean
+    env.get_wrapper_attr('env').get_wrapper_attr("obs_rms").var = obs_rms.var
+    env.get_wrapper_attr('env').get_wrapper_attr("obs_rms").count = obs_rms.count
+    # env = make_env(env_name, obs_norm_trans_flag=norm_flag)()
+    play(env, agent, cfg, episode_count=10, play_without_seed=True, render=True)
+
+
 if __name__ == '__main__':
     # ppo_InvertedPendulum_test()
     # HalfCheetah_v4_ppo_test()
@@ -902,7 +993,8 @@ if __name__ == '__main__':
     # Hopper_v4_ppo2_new_test() # 2024-04-19 
     # Humanoid_v4_ppo2_test() # 2024-05-27 - beta / 2024-05-30 - norm 
     # Ant_v4_ppo2_test() # 2024-05-28
-    Swimmer_v4_ppo2_test() # 2024-08-27
+    # Swimmer_v4_ppo2_test() # 2024-08-27
     # Walker2d_v4_ppo2_test() # 2024-07-01 
     # HumanoidStandup_v4_ppo2_test() # 2024-07-05
+    Reacher_v4_ppo2_test() # 2024-10-11
 

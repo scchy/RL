@@ -16,8 +16,8 @@ if len(dir_) == 0:
 print(dir_)
 sys.path.append(dir_)
 from RLAlgo.PPO2 import PPO2
-from RLUtils import play, Config, gym_env_desc, ppo2_train
-from RLUtils import make_atari_env
+from RLUtils import play, Config, gym_env_desc, ppo2_train, ppo2_play
+from RLUtils import make_atari_env, make_envpool_atria, spSyncVectorEnv
 
 
 def DemonAttack_v5_ppo2_test():
@@ -299,56 +299,81 @@ def Breakout_v5_ppo2_test():
     """
     env_name = 'ALE/Breakout-v5' 
     env_name_str = env_name.replace('/', '-')
-    num_envs = 24
     gym_env_desc(env_name)
     print("gym.__version__ = ", gym.__version__ )
     path_ = os.path.dirname(__file__)
-    episod_life = False
-    clip_reward = False
-    envs = gym.vector.SyncVectorEnv(
-        [make_atari_env(env_name, episod_life=episod_life, clip_reward=clip_reward) for _ in range(num_envs)]
-    )
-    dist_type = 'beta'
+    num_envs = 12 #16 # 20 # 10
+    episod_life = True
+    clip_reward = True
+    resize_inner_area = True # True
+    env_pool_flag = False # True
+    seed = 202404
+    if env_pool_flag:
+        envs = make_envpool_atria(env_name.split('/')[-1], num_envs, seed=seed, episodic_life=episod_life, reward_clip=clip_reward, max_no_reward_count=200)
+        ply_env = make_envpool_atria(env_name.split('/')[-1], 1, seed=seed, episodic_life=False, reward_clip=False, max_no_reward_count=200)
+    else: 
+        envs = spSyncVectorEnv(
+            [make_atari_env(env_name, skip=4, episod_life=episod_life, clip_reward=clip_reward, ppo_train=True, 
+                            max_no_reward_count=120, resize_inner_area=resize_inner_area) for _ in range(num_envs)],
+            random_reset=False,
+            seed=202404
+        )
+        ply_env = None 
+        # make_atari_env(env_name, skip=4, episod_life=episod_life, clip_reward=False, ppo_train=True, max_no_reward_count=120, resize_inner_area=resize_inner_area)()
+    dist_type = 'norm'
+    # beta [1:01:35<00:00,  3.70s/it, lastMeanRewards=28.90, BEST=34.30, bestTestReward=25.70] Get reward 18.0.
     cfg = Config(
-        envs, 
+        ply_env if env_pool_flag else envs, 
         # 环境参数
-        save_path=os.path.join(path_, "test_models" ,f'PPO2_{env_name_str}-1'), 
+        # 1- PPO2__AtariEnv instance__20241030__0204  reward=407
+        # 2- PPO2__AtariEnv instance__20241029__2217  reward=416
+        save_path=os.path.join(path_, "test_models" ,f'PPO2_{env_name_str}-2'),  
         seed=202404,
+        num_envs=num_envs,
+        episod_life=episod_life,
+        clip_reward=clip_reward,
+        resize_inner_area=resize_inner_area,
+        env_pool_flag=env_pool_flag,
         # 网络参数 Atria-CNN + MLP
-        actor_hidden_layers_dim=[512, 512], 
-        critic_hidden_layers_dim=[512, 512], 
+        actor_hidden_layers_dim=[512, 256], 
+        critic_hidden_layers_dim=[512, 128], 
         # agent参数
-        actor_lr=5.5e-4,  # 5.5e-4, 
+        actor_lr=4.5e-4,  # 5.5e-4,  # low lr - slow  # high 1e-3 not work 
         gamma=0.99,
         # 训练参数
-        num_episode=1200, 
-        off_buffer_size=120, # batch_size = off_buffer_size * num_env
-        max_episode_steps=120,
+        num_episode=3600,  
+        off_buffer_size=128, # 128, # 128, #120, # batch_size = off_buffer_size * num_env
+        max_episode_steps=128, 
         PPO_kwargs={
             'cnn_flag': True,
+            'clean_rl_cnn': True,
+            'share_cnn_flag': True,
             'continue_action_flag': False,
 
             'lmbda': 0.95,
-            'eps': 0.105,
-            'k_epochs': 3,  # 2 update_epochs
-            'sgd_batch_size': 512,
-            'minibatch_size': 256, # 128, # 256, 
-            'act_type': 'tanh', # 'relu',
+            'eps':  0.165,  # 0.165
+            'k_epochs': 4,  #  update_epochs
+            'sgd_batch_size': 512,  
+            'minibatch_size': 256, 
+            'act_type': 'relu',
             'dist_type': dist_type,
-            'critic_coef': 1.0,
-            'max_grad_norm': 0.5, 
+            'critic_coef': 1.0, # 1.0
+            'ent_coef': 0.05, 
+            # 0.015 & 256+128batch 陡降-回升慢  
+            # 0.025 & 256          陡降回升-311
+            # Best 0.05 & 256 354-383 
+            # 0.05 & 256+128
+            # 0.1 & 256            提升过于平缓
+            'max_grad_norm': 0.5,  
             'clip_vloss': True,
-            'max_pooling': False,
             'mini_adv_norm': True,
 
-            'anneal_lr': True,
-            'num_episode': 1200,
-            'third_cnn_flag': True
+            'anneal_lr': False,
+            'num_episode': 3600,
+            # "avg_pooling": False, 
+            # "max_pooling": True
         }
     )
-    cfg.num_envs = num_envs
-    cfg.episod_life = episod_life
-    cfg.clip_reward = clip_reward
     minibatch_size = cfg.PPO_kwargs['minibatch_size']
     max_grad_norm = cfg.PPO_kwargs['max_grad_norm']
     cfg.trail_desc = f"actor_lr={cfg.actor_lr},minibatch_size={minibatch_size},max_grad_norm={max_grad_norm},hidden_layers={cfg.actor_hidden_layers_dim}",
@@ -365,19 +390,23 @@ def Breakout_v5_ppo2_test():
         reward_func=None
     )
     agent.train()
-    ppo2_train(envs, agent, cfg, wandb_flag=True, wandb_project_name=f"PPO2-{env_name_str}",
+    ppo2_train(envs, agent, cfg, wandb_flag=True, wandb_project_name=f"PPO2-{env_name_str}-NEW",
                     train_without_seed=False, test_ep_freq=cfg.off_buffer_size * 10, 
                     online_collect_nums=cfg.off_buffer_size,
                     test_episode_count=10, 
-                    add_max_step_reward_flag=True,
-                    play_func='ppo2_play'
+                    add_max_step_reward_flag=False,
+                    play_func='ppo2_play',
+                    ply_env=ply_env
     )
     # print(agent.grad_collector.describe())
     agent.load_model(cfg.save_path)
     agent.eval()
-    env = make_atari_env(env_name, episod_life=episod_life, clip_reward=False)() # , render_mode='human')()
+    # env = make_envpool_atria(env_name.split('/')[-1], 1, seed=seed, episodic_life=False, reward_clip=False, max_no_reward_count=200)
+    env = make_atari_env(env_name, skip=4, episod_life=episod_life, clip_reward=clip_reward, ppo_train=True, 
+                        max_no_reward_count=120, resize_inner_area=resize_inner_area, render_mode='human')()
+
     cfg.max_episode_steps = 1620 
-    play(env, agent, cfg, episode_count=2, play_without_seed=False, render=False, ppo_train=True)
+    ppo2_play(env, agent, cfg, episode_count=2, play_without_seed=False, render=True, ppo_train=True)
 
 
 
