@@ -513,7 +513,7 @@ def ppo2_train(envs, agent, cfg,
 
         tq_bar.set_description(f'Episode [ {i+1} / {cfg.num_episode} ](minibatch={mini_b})')    
         step_rewards = np.zeros(envs.num_envs)
-        step_reward_mean = 0.0
+        step_reward_mean = -float('inf')
         for step_i in range(cfg.off_buffer_size):
             max_step_flag = False
             add_reward = False
@@ -565,7 +565,7 @@ def ppo2_train(envs, agent, cfg,
                 # print(rewards_list[-10:])  0: in buffer_size step not get any point
                 now_reward = np.mean(rewards_list)
                 if max_step_flag:
-                    step_reward_mean = 0.0
+                    step_reward_mean = -float('inf')
 
                 if (now_reward > recent_best_reward):
                     # best 时也进行测试
