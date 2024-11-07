@@ -57,6 +57,9 @@ src
 |torch | 2.1.1|
 |torchvision | 0.16.1|
 |gymnasium | 0.29.1|
+|cloudpickle | 2.2.1|
+|envpool | 0.8.4|
+
 
 ## 运行示例
 ```python
@@ -125,6 +128,7 @@ env_ = gym.make(env_name,
                 )
 play(env_, agent, cfg, episode_count=3, play_without_seed=True, render=False)
 ```
+
 ## 训练结果展示
 
 |环境与描述 | 参数函数链接| 效果|
@@ -148,3 +152,5 @@ play(env_, agent, cfg, episode_count=3, play_without_seed=True, render=False)
 |[ CarRacing-v2 ](state: (96, 96, 3),action: (3,)(连续 <-1.0 -> 1.0>))| [CarRacing_TD3_test](./src/test/test_TD3.py) | ![TD3-car](./docs/pic/TD3_CarRacing-v2.gif) |
 |[ InvertedPendulum-v4 ](state: (4,),action: (1,)(连续 <-3.0 -> 3.0>))| [InvertedPendulum_TD3_test](./src/test/test_TD3.py) | ![TD3-InvertedPendulum](./docs/pic/TD3_InvertedPendulum-v4.gif) |
 |[ HalfCheetah-v4 ](state: (17,),action: (6,)(连续 <-1.0 -> 1.0>))| [HalfCheetah_v4_ppo_test](./src/test/test_ppo.py)  | ![PPO-PPO_HalfCheetah-v4](./docs/pic/PPO_HalfCheetah-v4.gif) |
+|[ ALE/Breakout-v5 ](state: (210, 160, 3),action: 4(离散 ))| [Breakout_v5_ppo2_test](../../src/test/test_ppo_atari.py)  |![Breakout](./docs/pic/PPO2_Breakout_v5.gif) |
+

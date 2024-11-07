@@ -389,15 +389,15 @@ def Breakout_v5_ppo2_test():
         device=cfg.device,
         reward_func=None
     )
-    agent.train()
-    ppo2_train(envs, agent, cfg, wandb_flag=True, wandb_project_name=f"PPO2-{env_name_str}-NEW",
-                    train_without_seed=False, test_ep_freq=cfg.off_buffer_size * 10, 
-                    online_collect_nums=cfg.off_buffer_size,
-                    test_episode_count=10, 
-                    add_max_step_reward_flag=False,
-                    play_func='ppo2_play',
-                    ply_env=ply_env
-    )
+    # agent.train()
+    # ppo2_train(envs, agent, cfg, wandb_flag=True, wandb_project_name=f"PPO2-{env_name_str}-NEW",
+    #                 train_without_seed=False, test_ep_freq=cfg.off_buffer_size * 10, 
+    #                 online_collect_nums=cfg.off_buffer_size,
+    #                 test_episode_count=10, 
+    #                 add_max_step_reward_flag=False,
+    #                 play_func='ppo2_play',
+    #                 ply_env=ply_env
+    # )
     # print(agent.grad_collector.describe())
     agent.load_model(cfg.save_path)
     agent.eval()
@@ -563,6 +563,6 @@ if __name__ == '__main__':
     # DemonAttack_v5_ppo2_test() # 2024-04-25
     # AirRaid_v5_ppo2_test()
     # Alien_v5_ppo2_test()
-    # Breakout_v5_ppo2_test() # 2024-10-30
-    DoubleDunk_v5_ppo2_test()
+    Breakout_v5_ppo2_test() # 2024-10-30
+    # DoubleDunk_v5_ppo2_test()
 
