@@ -852,20 +852,39 @@ class PPOSharedCNN(nn.Module):
                  dist_type='beta', 
                  act_type='relu',
                  continue_action_flag=False, 
+                 large_cnn=False,
+                 stack_num=4,
                  **kwargs):
         super(PPOSharedCNN, self).__init__()
         self.continue_action_flag = continue_action_flag
         self.state_dim = 84 # reshape 84， 84
+        self.grey_flag = kwargs.get('grey_flag', False)
+        self.base_c = base_c = 1 if  self.grey_flag  else 3
+        self.stack_num = stack_num
         # Atria-CNN
-        self.cnn_feature = nn.Sequential(
-            nn.Conv2d(4, 32, 8, stride=4),
-            nn.ReLU(),
-            nn.Conv2d(32, 64, 4, stride=2),
-            nn.ReLU(),
-            nn.Conv2d(64, 64, 3, stride=1),
-            nn.ReLU(),
-            nn.Flatten()
-        )
+        if large_cnn:
+            self.cnn_feature = nn.Sequential(
+                nn.Conv2d(self.stack_num * base_c, self.stack_num * 16, 8, stride=3),
+                nn.ReLU(),
+                nn.MaxPool2d(2, 2, 0),
+                nn.Conv2d(self.stack_num * 16, self.stack_num * 32, 4, stride=2),
+                nn.ReLU(),
+                nn.Conv2d(self.stack_num * 32, self.stack_num * 64, 3, stride=2),
+                nn.ReLU(),
+                nn.Conv2d(self.stack_num * 64, self.stack_num * 64, 2, stride=1),
+                nn.ReLU(),
+                nn.Flatten()
+            )
+        else:
+            self.cnn_feature = nn.Sequential(
+                nn.Conv2d(self.stack_num * base_c, self.stack_num * 8, 8, stride=4),
+                nn.ReLU(),
+                nn.Conv2d(self.stack_num * 8, self.stack_num * 16, 4, stride=2),
+                nn.ReLU(),
+                nn.Conv2d(self.stack_num * 16, self.stack_num * 16, 3, stride=1),
+                nn.ReLU(),
+                nn.Flatten()
+            )
         cnn_out_dim = self._get_cnn_out_dim()
         self.cnn_out_ln = nn.LayerNorm([cnn_out_dim])
         self.dist_type = dist_type
@@ -907,7 +926,7 @@ class PPOSharedCNN(nn.Module):
 
     @torch.no_grad
     def _get_cnn_out_dim(self):
-        pic = torch.randn((1, 4, self.state_dim, self.state_dim))
+        pic = torch.randn((1, self.stack_num * self.base_c, self.state_dim, self.state_dim))
         return self.cnn_feature(pic).shape[1]
 
     def forward(self, state):
@@ -1013,7 +1032,7 @@ class PPOSharedCNN(nn.Module):
         # cnn
         for layer in self.cnn_feature:
             classname = layer.__class__.__name__
-            if classname.find('Conv2d') != -1:
+            if (classname.find('Conv2d') != -1) and ('Pool' not in classname):
                 orthogonal_init(layer, gain=np.sqrt(2))
         # actor
         for layer in self.actor_features:

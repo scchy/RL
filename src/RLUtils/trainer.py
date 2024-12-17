@@ -8,7 +8,7 @@ import numpy as np
 import wandb
 import copy
 from torch.optim.lr_scheduler import StepLR
-from collections import deque
+from collections import deque, Counter
 from datetime import datetime 
 from pynvml import (
     nvmlDeviceGetHandleByIndex, nvmlInit, nvmlDeviceGetMemoryInfo, 
@@ -514,10 +514,14 @@ def ppo2_train(envs, agent, cfg,
         tq_bar.set_description(f'Episode [ {i+1} / {cfg.num_episode} ](minibatch={mini_b})')    
         step_rewards = np.zeros(envs.num_envs)
         step_reward_mean = -float('inf')
+        action_deque = deque(maxlen=7)
         for step_i in range(cfg.off_buffer_size):
             max_step_flag = False
             add_reward = False
             a = agent.policy(s)
+            action_deque.append(a[0])
+            if (len(action_deque) == 7) and np.std(action_deque) == 0:
+                print(f'One Action Warning: {action_deque=}')
             try:
                 zero_bool = (np.abs(a) < 0.01).sum(axis=1) == 2
                 if zero_bool.sum():
@@ -622,6 +626,7 @@ def ppo2_play(env_in, env_agent, cfg, episode_count=2, action_contiguous=False, 
         env_agent.eval()
     except Exception as e:
         pass
+    action_dq = []
     ep_reward_record = []
     for e in range(episode_count):
         final_seed = np.random.randint(0, 999999) if play_without_seed else cfg.seed
@@ -633,6 +638,7 @@ def ppo2_play(env_in, env_agent, cfg, episode_count=2, action_contiguous=False, 
             if render:
                 env.render()
             a = env_agent.policy(s)
+            action_dq.append(a[0])
             n_state, reward, terminated, truncated, info = env.step(a if envpool_env_flag else a[0])
             # print(terminated, truncated, info)
             episode_cnt += 1
@@ -642,17 +648,22 @@ def ppo2_play(env_in, env_agent, cfg, episode_count=2, action_contiguous=False, 
                 break
     
         # print(info)
-        ep_r = info.get("episode", {'r': 0})
+        
+        ep_r = info.get("episode", {'r': -999999})
+        if ep_r['r'] == -999999:
+            continue
         # print(info)
         f_reward = (ep_r['r'][0] if isinstance(ep_r['r'], np.ndarray) else ep_r['r'])
         ep_reward_record.append(f_reward)
-        print(f'[ seed={final_seed} ] Get reward {f_reward}. Last {episode_cnt} times. {final_str}')
+        action_c = Counter(action_dq)
+        print(f'[ seed={final_seed} ] Get reward {f_reward}. Last {episode_cnt} times. {final_str}') # {action_c=}
     if render:
         env.close()
     try:
         env_agent.train()
     except Exception as e:
         pass
-    print(f'[ PLAY ] Get reward {np.mean(ep_reward_record)}.')
-    return np.mean(ep_reward_record) # np.percentile(ep_reward_record, 50)
-
+    if len(ep_reward_record):
+        print(f'[ PLAY ] Get reward {np.mean(ep_reward_record)}.')
+        return np.mean(ep_reward_record) # np.percentile(ep_reward_record, 50)
+    return -float('inf')

@@ -333,7 +333,7 @@ class GrayScaleObservation(gym.ObservationWrapper):
 
 
 class ResizeObservation(gym.ObservationWrapper):
-    def __init__(self, env, shape: int, resie_inner_area: bool=False):
+    def __init__(self, env, shape: int, resie_inner_area: bool=False, gray_flag: bool=True):
         """reshape observe
         Args:
             env (_type_): _description_
@@ -342,21 +342,63 @@ class ResizeObservation(gym.ObservationWrapper):
         """
         super().__init__(env)
         self.shape = (shape, shape)
-        obs_shape = self.shape + self.observation_space.shape[2:]
+        obs_shape = self.observation_space.shape[2:] + self.shape
         self.resie_inner_area = resie_inner_area
         # change observation type for [ sync_vector_env ]
         self.observation_space = Box(low=0, high=255, shape=obs_shape, dtype=np.float32)
+        self.gray_flag = gray_flag
 
     def observation(self, observation):
         # print(f"{observation.max()=} {observation.min()=}")
+        # print(f'{observation.shape=} {self.observation_space.shape=}')
+        len_ob = len(self.observation_space.shape)
         if self.resie_inner_area:
-            return cv2.resize(
-                observation, self.shape, interpolation=cv2.INTER_AREA
-            ) / 255.0
+            out = cv2.resize(
+                    observation, self.shape, interpolation=cv2.INTER_AREA
+                ) / 255.0
+            if len_ob == 3:
+                out = np.transpose(out, (2, 0, 1)).copy()
+            return out
 
         #  Normalize -> input[channel] - mean[channel]) / std[channel]
         transformations = transforms.Compose([transforms.Resize(self.shape), transforms.Normalize(0, 255)])
         return transformations(observation).squeeze(0)
+
+
+class spFrameStack(FrameStack):
+    def __init__(
+        self,
+        env: gym.Env,
+        num_stack: int,
+        lz4_compress: bool = False,
+    ):
+        super().__init__(
+            env=env,
+            num_stack=num_stack,
+            lz4_compress=lz4_compress
+        )
+        n, self.c, w, h = self.observation_space.low.shape
+        c = self.c
+        
+        low = self.observation_space.low.reshape(n * c, w, h )
+        high = self.observation_space.high.reshape(n * c, w, h )
+        self.observation_space = Box(
+            low=low, high=high, dtype=self.observation_space.dtype
+        )
+
+    def observation(self, observation):
+        """Converts the wrappers current frames to lazy frames.
+
+        Args:
+            observation: Ignored
+
+        Returns:
+            :class:`LazyFrames` object for the wrapper's frame buffer,  :attr:`self.frames`
+        """
+        assert len(self.frames) == self.num_stack, (len(self.frames), self.num_stack)
+        # a = [self.frames[n][ci] for ci in range(self.c) for n in range(self.num_stack)]
+        # return np.stack(a)
+        return np.concatenate(self.frames, axis=0) 
 
 
 # reference: https://github.com/Stable-Baselines-Team/stable-baselines/blob/master/stable_baselines/common/atari_wrappers.py

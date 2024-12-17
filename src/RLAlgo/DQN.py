@@ -108,9 +108,12 @@ class DQN:
         Q_sa = Q_s.gather(1, actions.long())
         # 下一状态最大值
         if 'DoubleDQN' in self.dqn_type:
+            # a* = argmax Q(s_{t+1}, a; w)
             max_action = self.q(next_states).max(1)[1].view(-1, 1)
+            # doubleDQN Q(s_{t+1}, a*; w')
             max_Q1sa = Q1_s.gather(1, max_action)
         else:
+            # simple method:  avoid bootstrapping 
             max_Q1sa = Q1_s.max(1)[0].view(-1, 1)
         
         Q_target = rewards + self.gamma * max_Q1sa * (1 - done)

@@ -1,11 +1,27 @@
 
 # 基于价值的DRL方法总结
 
+DQN出现高估`action-value`, 有一以下2个情形
+1. 最大Q值 TD target: 
+   1. $y_t = r_t + \gamma argmax_a Q(s_{t+1}, a;w)$
+2. Bootstrapping:  
+   1. SGD: $w = w - \alpha(Q(s_t, a_t;w)-y_t)\frac{\partial Q(s_t, a_t;w)}{\partial w}$
+
+solve problem:
+1. doubleDQN: 
+   1. $a^* = argmax_a Q(s_{t+1}, a;w)$
+   2. <b>$y_t = r_t + \gamma  Q(s_{t+1}, a^*;\hat{w})$</b>
+   3. $w = w - \alpha(Q(s_t, a_t;w)-y_t)\frac{\partial Q(s_t, a_t;w)}{\partial w}$
+   4. Periodically update $\hat{w} $
+      1. $\hat{w} = w$
+      2. $\hat{w} = \tau w + (1 -\tau) \hat{w}$
+
 |方法| action描述 | state描述 | QNet | TagetQNet | action选取 | QTarget | loss | 备注 |
 |-|-|-|-|-|-|-|-|-|
-| DQN | 仅离散动作 | 支持连续状态 | QNet(state) -> q | deepcopy(QNet) | $a=max(TagetQNet(s_{t+1}))$| $q_{t+1}=TagetQNet(s_{t+1})[a];\\  QTarget=r + \gamma * q_{t+1}$ | MSE(QNet(state), QTarget)| 对传统Qtable状态空间有限的拓展 |
-| doubleDQN | 仅离散动作 | 支持连续状态 | QNet(state) -> q | deepcopy(QNet) | <font color=darkred>$a=max(QNet(s_{t+1}))$</font>| $q_{t+1}=TagetQNet(s_{t+1})[a];\\  QTarget=r + \gamma * q_{t+1}$ | MSE(QNet(state), QTarget)| 对DQN Qtarget高估的修正|
-| DuelingDQN | 仅离散动作 | 支持连续状态 | VNet(state) -> <font color=darkred>V + A - mean(A) </font>-> q | deepcopy(VNet) | $a=max(TagetQNet(s_{t+1}))$| $q_{t+1}=TagetQNet(s_{t+1})[a];\\ QTarget=r + \gamma * q_{t+1}$ | MSE(QNet(state), QTarget)| 拆分成价值函数和优势函数计算q,另一种修正QTagret高估方法 |
+| DQN | 仅离散动作 | 支持连续状态 | $Q(s_t)$ -> q | - | $a_{mx}=max_a(Q(s_{t+1}))$| $q_{t+1}=Q(s_{t+1})[a_{mx}];\\  Tar=r_t + \gamma * q_{t+1}$ | MSE($Q(s_t)$, Tar)| 对传统Qtable状态空间有限的拓展|
+| DQN' | 仅离散动作 | 支持连续状态 | $Q(s_t)$ -> q | $Q_{tar}$[simple method to avoid bootstrapping] | $a_{mx}=max_a(Q_{tar}(s_{t+1}))$| $q_{t+1}=Q_{tar}(s_{t+1})[a_{mx}];\\  Tar=r_t + \gamma * q_{t+1}$ | MSE($Q(s_t)$, Tar)| 对传统Qtable状态空间有限的拓展|
+| doubleDQN | 仅离散动作 | 支持连续状态 | $Q(s_t)$ -> q | $Q_{tar}$ | <font color=darkred>$a^*=max_a(Q(s_{t+1}))$</font>| $q_{t+1}=Q_{tar}(s_{t+1})[a^*];\\  Tar=r_t + \gamma * q_{t+1}$ | MSE($Q(s_t)$, Tar)| 对DQN Qtarget高估的修正|
+| DuelingDQN | 仅离散动作 | 支持连续状态 | VNet(state) -> <font color=darkred>V + A - mean(A) </font>-> q | deepcopy(VNet) | $a=max_a(Q_{tar}(s_{t+1}))$| $q_{t+1}=Q_{tar}(s_{t+1})[a];\\ Tar=r_t + \gamma * q_{t+1}$ | MSE($Q(s_t)$, Tar)| 拆分成价值函数和优势函数计算q,另一种修正QTagret高估方法 |
 
 
 ## 8.1 环境实验与调参经验

@@ -126,6 +126,7 @@ class PPO2:
         self.avg_pooling = PPO_kwargs.get('avg_pooling', True)
         self.clean_rl_cnn = PPO_kwargs.get('clean_rl_cnn', False)
         self.share_cnn_flag = PPO_kwargs.get('share_cnn_flag', False)
+        self.grey_flag = PPO_kwargs.get('grey_flag', False)
         if self.share_cnn_flag:
             self.agent = PPOSharedCNN(
                 state_dim, 
@@ -135,6 +136,9 @@ class PPO2:
                 dist_type=self.dist_type, 
                 act_type=self.act_type,
                 continue_action_flag=self.continue_action_flag, 
+                large_cnn=PPO_kwargs.get('large_cnn', False),
+                grey_flag=self.grey_flag,
+                stack_num=PPO_kwargs.get('stack_num', 4)
             ).to(device)
         elif self.cnn_flag:
             self.actor = PPOPolicyCNN(state_dim, actor_hidden_layers_dim, action_dim, dist_type=self.dist_type, act_type=self.act_type, 
@@ -390,8 +394,8 @@ class PPO2:
                 if self.share_cnn_flag:
                     self.grad_collector(self.agent.parameters())
                     cnn_g = self.agent.cnn_feature[0].weight.grad.data.detach().cpu().numpy()
-                    cnn_g2 = self.agent.cnn_feature[2].weight.grad.data.detach().cpu().numpy()
-                    cnn_g3 = self.agent.cnn_feature[4].weight.grad.data.detach().cpu().numpy()
+                    cnn_g2 = self.agent.cnn_feature[3].weight.grad.data.detach().cpu().numpy()
+                    cnn_g3 = self.agent.cnn_feature[5].weight.grad.data.detach().cpu().numpy()
                     cnn_g_sum = np.sum(np.abs(cnn_g))
                     cnn_g_sum2 = np.sum(np.abs(cnn_g2))
                     cnn_g_sum3 = np.sum(np.abs(cnn_g3))

@@ -6,7 +6,7 @@ from .env_wrapper import (
     baseSkipFrame, EpisodicLifeEnv, ClipRewardEnv, FireResetEnv, 
     ResizeObservation, GrayScaleObservation, 
     envPoolRecordEpisodeStatistics, 
-    spSyncVectorEnv
+    spSyncVectorEnv, spFrameStack
 )
 
 
@@ -44,6 +44,8 @@ def make_atari_env(env_id, episod_life=False, clip_reward=True, action_map=None,
                    resize_inner_area=False,
                    fire_flag=True,
                    max_obs=False,
+                   gray_flag=True,
+                   stack_num=4,
                    **kwargs):
     def thunk():
         env = gym.make(env_id, **kwargs)
@@ -58,8 +60,12 @@ def make_atari_env(env_id, episod_life=False, clip_reward=True, action_map=None,
             env = FireResetEnv(env)
         if clip_reward:
             env = ClipRewardEnv(env)
-        env = ResizeObservation(GrayScaleObservation(env, resie_inner_area=resize_inner_area), shape=84, resie_inner_area=resize_inner_area)
-        env = gym.wrappers.FrameStack(env, 4)
+        if gray_flag:
+            env = GrayScaleObservation(env, resie_inner_area=resize_inner_area)
+
+        env = ResizeObservation(env, shape=84, resie_inner_area=resize_inner_area, gray_flag=gray_flag)
+        stack_func = gym.wrappers.FrameStack  if gray_flag else spFrameStack
+        env = stack_func(env, stack_num)
         return env
     return thunk
 
