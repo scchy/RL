@@ -462,7 +462,7 @@ def DoubleDunk_v5_ppo2_test():
         actor_hidden_layers_dim=[1024, 512],
         critic_hidden_layers_dim=[1024, 256],
         # agent参数
-        actor_lr=2.5e-4, # 1.5e-4
+        actor_lr=5.5e-4, # 1.5e-4
         gamma=0.99,
         # 训练参数
         num_episode=1088,  
