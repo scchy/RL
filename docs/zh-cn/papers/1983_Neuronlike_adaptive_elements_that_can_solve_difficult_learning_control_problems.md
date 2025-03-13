@@ -108,23 +108,24 @@ class ACE:
 
 ### Train Test
 ```python
-import gymnasium as gym 
-from tqdm.auto import tqdm
 
+# 创建环境
+seed_ = 19831983
+np.random.seed(seed_)
 env = gym.make('CartPole-v1')
 input_dim = env.observation_space.shape[0]
 output_dim = env.action_space.n
 
+ 
 # paper 1000
-ase = ASE(input_dim, alpha=100, delta=0.9, sigma=0.01)
+ase = ASE(input_dim, alpha=580, delta=0.9, sigma=0.01) 
 ace = ACE(input_dim, beta=0.5, gamma=0.95, lmbda=0.8)
 
-
-num_episodes = 6000 # 500000
+num_episodes = 1200 # 500000
 reward_l = []
 tq_bar = tqdm(range(num_episodes))
 for episode in tq_bar:
-    s, _ = env.reset(seed=20250314)  # 有时候可以达到 500
+    s, _ = env.reset(seed=20250314)   # 500
     done = False
     r_tt = 0
     while not done:

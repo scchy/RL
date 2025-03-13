@@ -3,6 +3,9 @@ import gymnasium as gym
 import math
 from tqdm.auto import tqdm 
 
+print(np.__version__) # 1.24.4
+print(gym.__version__) # 0.29.1
+
 
 class ASE:
     def __init__(self, input_dim, alpha=0.1, delta=0.2, sigma=0.01):
@@ -68,22 +71,22 @@ class ACE:
 
 
 # 创建环境
+seed_ = 19831983
+np.random.seed(seed_)
 env = gym.make('CartPole-v1')
 input_dim = env.observation_space.shape[0]
 output_dim = env.action_space.n
 
  
 # paper 1000
-ase = ASE(input_dim, alpha=100, delta=0.9, sigma=0.01)
+ase = ASE(input_dim, alpha=580, delta=0.9, sigma=0.01) 
 ace = ACE(input_dim, beta=0.5, gamma=0.95, lmbda=0.8)
 
-
-
-num_episodes = 6000 # 500000
+num_episodes = 1200 # 500000
 reward_l = []
 tq_bar = tqdm(range(num_episodes))
 for episode in tq_bar:
-    s, _ = env.reset(seed=20250314)  # 有时候可以达到 500
+    s, _ = env.reset(seed=20250314)   # 500
     done = False
     r_tt = 0
     while not done:
@@ -106,3 +109,31 @@ for episode in tq_bar:
 
 
 
+env = gym.make('CartPole-v1', render_mode='human')
+num_test = 3
+tq_bar = tqdm(range(num_test))
+for episode in tq_bar:
+    s, _ = env.reset(seed=20250314)  # 有时候可以达到 500
+    done = False
+    r_tt = 0
+    while not done:
+        env.render()
+        a = ase.forward(s)  
+        n_s, r, terminated, truncated, infos = env.step(a) 
+        r_tt += r
+        # 更新 ACE
+        hat_r = ace.update(n_s, r, s)
+        # 更新 ASE
+        ase.update(n_s, hat_r)
+        s = n_s
+        done = terminated or truncated
+
+
+    reward_l.append(r_tt)
+    tq_bar.set_postfix({
+        'rewards': r_tt,
+        'last_mean': np.mean(reward_l[-10:]),
+        'last_std': np.std(reward_l[-10:]),
+    })
+    
+env.close()
