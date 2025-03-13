@@ -39,6 +39,7 @@ def save_env(env, file_path):
 def make_atari_env(env_id, episod_life=False, clip_reward=True, action_map=None, 
                    skip=5, 
                    start_skip=30, 
+                   cut_slices=None,
                    ppo_train=False, 
                    max_no_reward_count=None,
                    resize_inner_area=False,
@@ -46,11 +47,13 @@ def make_atari_env(env_id, episod_life=False, clip_reward=True, action_map=None,
                    max_obs=False,
                    gray_flag=True,
                    stack_num=4,
+                   shape=84,
                    **kwargs):
     def thunk():
         env = gym.make(env_id, **kwargs)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env = baseSkipFrame(env, skip=skip, start_skip=start_skip, 
+                            cut_slices=cut_slices,
                             action_map=action_map,
                             max_no_reward_count=max_no_reward_count,
                             max_obs=max_obs)
@@ -63,7 +66,7 @@ def make_atari_env(env_id, episod_life=False, clip_reward=True, action_map=None,
         if gray_flag:
             env = GrayScaleObservation(env, resie_inner_area=resize_inner_area)
 
-        env = ResizeObservation(env, shape=84, resie_inner_area=resize_inner_area, gray_flag=gray_flag)
+        env = ResizeObservation(env, shape=shape, resie_inner_area=resize_inner_area, gray_flag=gray_flag)
         stack_func = gym.wrappers.FrameStack  if gray_flag else spFrameStack
         env = stack_func(env, stack_num)
         return env

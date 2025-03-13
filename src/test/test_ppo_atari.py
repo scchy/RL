@@ -420,22 +420,25 @@ def DoubleDunk_v5_ppo2_test():
     gym_env_desc(env_name)
     print("gym.__version__ = ", gym.__version__ )
     path_ = os.path.dirname(__file__)
-    num_envs = 16
+    num_envs = 12 # 16
     episod_life = True
     clip_reward = False
     resize_inner_area = True  
     env_pool_flag = False  
-    seed = 202412
-    max_no_reward_count = 404 # 200 
+    gray_flag = True
+    start_skip = None
+    seed = 202502
+    max_no_reward_count = 688   
     stack_num = 10
+    shape = 124 # 124  bestTest -> -7.43
     if env_pool_flag:
         envs = make_envpool_atria(env_name.split('/')[-1], num_envs, seed=seed, episodic_life=episod_life, reward_clip=clip_reward, max_no_reward_count=max_no_reward_count)
         ply_env = make_envpool_atria(env_name.split('/')[-1], 1, seed=seed, episodic_life=False, reward_clip=False, max_no_reward_count=max_no_reward_count)
     else: 
         envs = spSyncVectorEnv(
-            [make_atari_env(env_name, skip=1, episod_life=episod_life, clip_reward=clip_reward, ppo_train=True, 
+            [make_atari_env(env_name, skip=1, start_skip=start_skip, cut_slices=[[30, 190]], episod_life=episod_life, clip_reward=clip_reward, ppo_train=True, 
                             max_no_reward_count=max_no_reward_count, resize_inner_area=resize_inner_area,
-                            fire_flag=False, gray_flag=False, stack_num=stack_num) for _ in range(num_envs)],
+                            fire_flag=False, gray_flag=gray_flag, stack_num=stack_num, shape=shape) for _ in range(num_envs)],
             random_reset=True,
             seed=seed
         )
@@ -444,7 +447,7 @@ def DoubleDunk_v5_ppo2_test():
     cfg = Config(
         ply_env if env_pool_flag else envs, 
         # 环境参数
-        save_path=os.path.join(path_, "test_models" ,f'PPO2_{env_name_str}-1'),  
+        save_path=os.path.join(path_, "test_models" ,f'PPO2_{env_name_str}-2'),  # 1
         seed=seed,
         num_envs=num_envs,
         stack_num=stack_num,
@@ -453,16 +456,18 @@ def DoubleDunk_v5_ppo2_test():
         resize_inner_area=resize_inner_area,
         env_pool_flag=env_pool_flag,
         max_no_reward_count=max_no_reward_count,
+        start_skip=start_skip,
+        shape=shape,
         # 网络参数 Atria-CNN + MLP
-        actor_hidden_layers_dim=[2048, 512], # [1024, 512],
-        critic_hidden_layers_dim=[2048, 256],  #[1024, 256],
+        actor_hidden_layers_dim=[1024, 512],
+        critic_hidden_layers_dim=[1024, 256],
         # agent参数
-        actor_lr=2.5e-4, # 4.5e-4  
+        actor_lr=2.5e-4, # 1.5e-4
         gamma=0.99,
         # 训练参数
-        num_episode=866,  
-        off_buffer_size=188,  # 96
-        max_episode_steps=188, 
+        num_episode=1088,  
+        off_buffer_size=288, # 256 # 360  on policy 见到更多当前策略的表现
+        max_episode_steps=288, 
         PPO_kwargs={
             'cnn_flag': True,
             'clean_rl_cnn': True,
@@ -470,23 +475,23 @@ def DoubleDunk_v5_ppo2_test():
             'stack_num': stack_num,
             'continue_action_flag': False,
             'large_cnn': True,        
-            'grey_flag': False,
+            'grey_flag': gray_flag,
 
             'lmbda': 0.95,
-            'eps': 0.185,
-            'k_epochs': 3, 
+            'eps': 0.165, # 0.165, # 0.145,
+            'k_epochs': 3, # 3, 
             'sgd_batch_size': 1024,  
             'minibatch_size': 512, 
             'act_type': 'relu',
             'dist_type': dist_type,
-            'critic_coef': 1,  
-            'ent_coef': 0.015, # 0.013, 
+            'critic_coef': 1.5, # 1.5
+            'ent_coef': 0.01, # 0.013, 
             'max_grad_norm': 0.5,  
             'clip_vloss': True,
             'mini_adv_norm': True,
 
             'anneal_lr': False,
-            'num_episode': 866,
+            'num_episode': 1688,
         }
     )
     minibatch_size = cfg.PPO_kwargs['minibatch_size']
@@ -502,10 +507,10 @@ def DoubleDunk_v5_ppo2_test():
         gamma=cfg.gamma,
         PPO_kwargs=cfg.PPO_kwargs,
         device=cfg.device,
-        reward_func=None, # lambda x: np.where(x < 0, x/10, x/10 + 1)
+        reward_func=None,  # lambda x: np.where(x < 0, x/10, x/10 + 1)
     )
     agent.train()
-    ppo2_train(envs, agent, cfg, wandb_flag=True, wandb_project_name=f"PPO2-{env_name_str}-NEW2",
+    ppo2_train(envs, agent, cfg, wandb_flag=True, wandb_project_name=f"PPO2-{env_name_str}-ImpalaCNN",
                     train_without_seed=True, test_ep_freq=cfg.off_buffer_size * 10, 
                     online_collect_nums=cfg.off_buffer_size,
                     test_episode_count=10, 
@@ -517,8 +522,8 @@ def DoubleDunk_v5_ppo2_test():
     agent.load_model(cfg.save_path)
     agent.eval()
     # env = make_envpool_atria(env_name.split('/')[-1], 1, seed=seed, episodic_life=False, reward_clip=False, max_no_reward_count=200)
-    env = make_atari_env(env_name, skip=1, episod_life=episod_life, clip_reward=clip_reward, ppo_train=True, fire_flag=False, gray_flag=False,
-                        max_no_reward_count=max_no_reward_count, resize_inner_area=resize_inner_area, stack_num=stack_num)() # , render_mode='human')()
+    env = make_atari_env(env_name, skip=1, start_skip=start_skip, cut_slices=[[30, 190]], episod_life=episod_life, clip_reward=clip_reward, ppo_train=True, fire_flag=False, gray_flag=gray_flag,
+                        max_no_reward_count=max_no_reward_count, resize_inner_area=resize_inner_area, stack_num=stack_num, shape=shape)() # , render_mode='human')()
 
     cfg.max_episode_steps = 1620 
     ppo2_play(env, agent, cfg, episode_count=3, play_without_seed=True, render=False, ppo_train=True)

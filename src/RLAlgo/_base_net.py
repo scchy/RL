@@ -102,7 +102,7 @@ class VANet(nn.Module):
         
         adv = self.adv_header(x)
         v = self.v_header(x)
-        # Q值由V值和A值计算得到
+        # Q值由V值和A值计算得到 fix Problem of  non-identifiablility
         Q = v + adv - adv.mean().view(-1, 1)  
         return Q
 
@@ -266,7 +266,7 @@ class TD3CNNPolicyNet(nn.Module):
             nn.AvgPool2d(2, 2, 0),
             nn.Flatten()
         )
-        self.cnn_out_ln = nn.LayerNorm([512])
+        self.cnn_out_ln = Identity() #  nn.LayerNorm([512])
         self.features = nn.ModuleList()
         for idx, h in enumerate(hidden_layers_dim):
             self.features.append(nn.ModuleDict({
@@ -647,7 +647,6 @@ class PPOValueCNN(nn.Module):
                  **kwargs):
         super(PPOValueCNN, self).__init__()
         self.state_dim = 84 # reshape 84， 84
-        # Atria-CNN
         self.cnn_feature = nn.Sequential(
             nn.Conv2d(in_channels=4, out_channels=16, kernel_size=4, stride=2),
             nn.ReLU(),
@@ -835,6 +834,23 @@ class PPOPolicyCNN(nn.Module):
                 orthogonal_init(layer, gain=np.sqrt(2))
 
 
+class ResidualBlock(nn.Module):
+    def __init__(self, res_dim, kernel_size=3, stride=1, dropout=0.05):
+        super(ResidualBlock, self).__init__()
+        self.b_cnn = nn.Sequential(
+            nn.Conv2d(res_dim, res_dim, kernel_size, stride=stride, padding=2),
+            # nn.BatchNorm2d(res_dim),
+            nn.ReLU(),
+            nn.Conv2d(res_dim, res_dim, kernel_size, stride=stride),
+            # nn.BatchNorm2d(res_dim),
+        )
+        self.dp = nn.Dropout2d(dropout)
+        # self.idf = nn.Conv2d(res_dim, res_dim, 1)
+        self.relu = nn.ReLU()
+    
+    def forward(self, x):
+        return self.relu(x + self.dp(self.b_cnn(x)))
+
 
 class PPOSharedCNN(nn.Module):
     """
@@ -857,11 +873,10 @@ class PPOSharedCNN(nn.Module):
                  **kwargs):
         super(PPOSharedCNN, self).__init__()
         self.continue_action_flag = continue_action_flag
-        self.state_dim = 84 # reshape 84， 84
+        self.state_dim = state_dim # reshape 84， 84
         self.grey_flag = kwargs.get('grey_flag', False)
         self.base_c = base_c = 1 if  self.grey_flag  else 3
         self.stack_num = stack_num
-        # Atria-CNN
         if large_cnn:
             self.cnn_feature = nn.Sequential(
                 nn.Conv2d(self.stack_num * base_c, self.stack_num * 16, 8, stride=3),
@@ -871,8 +886,8 @@ class PPOSharedCNN(nn.Module):
                 nn.ReLU(),
                 nn.Conv2d(self.stack_num * 32, self.stack_num * 64, 3, stride=2),
                 nn.ReLU(),
-                nn.Conv2d(self.stack_num * 64, self.stack_num * 64, 2, stride=1),
-                nn.ReLU(),
+                # nn.Conv2d(self.stack_num * 64, self.stack_num * 64, 2, stride=1),
+                # nn.ReLU(),
                 nn.Flatten()
             )
         else:

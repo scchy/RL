@@ -21,7 +21,7 @@ solve problem:
 | DQN | 仅离散动作 | 支持连续状态 | $Q(s_t)$ -> q | - | $a_{mx}=max_a(Q(s_{t+1}))$| $q_{t+1}=Q(s_{t+1})[a_{mx}];\\  Tar=r_t + \gamma * q_{t+1}$ | MSE($Q(s_t)$, Tar)| 对传统Qtable状态空间有限的拓展|
 | DQN' | 仅离散动作 | 支持连续状态 | $Q(s_t)$ -> q | $Q_{tar}$[simple method to avoid bootstrapping] | $a_{mx}=max_a(Q_{tar}(s_{t+1}))$| $q_{t+1}=Q_{tar}(s_{t+1})[a_{mx}];\\  Tar=r_t + \gamma * q_{t+1}$ | MSE($Q(s_t)$, Tar)| 对传统Qtable状态空间有限的拓展|
 | doubleDQN | 仅离散动作 | 支持连续状态 | $Q(s_t)$ -> q | $Q_{tar}$ | <font color=darkred>$a^*=max_a(Q(s_{t+1}))$</font>| $q_{t+1}=Q_{tar}(s_{t+1})[a^*];\\  Tar=r_t + \gamma * q_{t+1}$ | MSE($Q(s_t)$, Tar)| 对DQN Qtarget高估的修正|
-| DuelingDQN | 仅离散动作 | 支持连续状态 | VNet(state) -> <font color=darkred>V + A - mean(A) </font>-> q | deepcopy(VNet) | $a=max_a(Q_{tar}(s_{t+1}))$| $q_{t+1}=Q_{tar}(s_{t+1})[a];\\ Tar=r_t + \gamma * q_{t+1}$ | MSE($Q(s_t)$, Tar)| 拆分成价值函数和优势函数计算q,另一种修正QTagret高估方法 |
+| DuelingDQN | 仅离散动作 | 支持连续状态 | $V(s_t)$ -> <font color=darkred>V + A - mean(A) </font>-> q | deepcopy(V) | $a=max_a(V_{tar}(s_{t+1}))$| $q_{t+1}=V_{tar}(s_{t+1})[a];\\ Tar=r_t + \gamma * q_{t+1}$ | MSE($Q(s_t)$, Tar)| 拆分成价值函数和优势函数计算q,另一种修正QTagret高估方法 |
 
 
 ## 8.1 环境实验与调参经验

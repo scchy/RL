@@ -515,6 +515,7 @@ def ppo2_train(envs, agent, cfg,
         step_rewards = np.zeros(envs.num_envs)
         step_reward_mean = -float('inf')
         action_deque = deque(maxlen=7)
+        lr_up_flag = True
         for step_i in range(cfg.off_buffer_size):
             max_step_flag = False
             add_reward = False
@@ -539,6 +540,7 @@ def ppo2_train(envs, agent, cfg,
                 freq_ep_reward = play_func_(test_env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False, ppo_train=True)
                 
                 if freq_ep_reward > best_ep_reward:
+                    lr_up_flag = False
                     best_ep_reward = freq_ep_reward
                     # 模型保存
                     save_agent_model(agent, cfg, f"[ ep={i+1} ](freqBest) bestTestReward={best_ep_reward:.2f}")
@@ -572,6 +574,7 @@ def ppo2_train(envs, agent, cfg,
                     step_reward_mean = -float('inf')
 
                 if (now_reward > recent_best_reward):
+                    lr_up_flag = False
                     # best 时也进行测试
                     test_env = copy.deepcopy(envs.envs[0]) if ply_env is None else ply_env
                     test_ep_reward = play_func_(test_env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False, ppo_train=True)
@@ -597,7 +600,7 @@ def ppo2_train(envs, agent, cfg,
                         log_dict['actor_lr'] = opt.param_groups[0]['lr']
                     wandb.log(log_dict)
 
-        update_flag = agent.update(buffer_.buffer, wandb=wandb if wandb_flag else None)
+        update_flag = agent.update(buffer_.buffer, wandb=wandb if wandb_flag else None, update_lr=lr_up_flag)
         if step_lr_flag:
             schedule.step()
 

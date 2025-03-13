@@ -127,6 +127,7 @@ class PPO2:
         self.clean_rl_cnn = PPO_kwargs.get('clean_rl_cnn', False)
         self.share_cnn_flag = PPO_kwargs.get('share_cnn_flag', False)
         self.grey_flag = PPO_kwargs.get('grey_flag', False)
+        print(f'{state_dim=}')
         if self.share_cnn_flag:
             self.agent = PPOSharedCNN(
                 state_dim, 
@@ -318,8 +319,9 @@ class PPO2:
             opt.param_groups[0]["lr"] = frac * lr
             opt.param_groups[1]["lr"] = frac * lr
 
-    def update(self, samples_buffer: deque, wandb = None):
-        self.update_cnt += 1
+    def update(self, samples_buffer: deque, wandb = None, update_lr=True):
+        if update_lr:
+            self.update_cnt += 1
         state, action, old_log_probs, advantage, td_target, b_values = self.data_prepare(samples_buffer)
         # print(f"update old_log_probs={old_log_probs.shape}")
         # print(f'{state.shape=} {action.shape=} {advantage.shape=} {td_target.shape=} {b_values.shape=}')
@@ -393,14 +395,14 @@ class PPO2:
                 total_loss.backward()
                 if self.share_cnn_flag:
                     self.grad_collector(self.agent.parameters())
-                    cnn_g = self.agent.cnn_feature[0].weight.grad.data.detach().cpu().numpy()
-                    cnn_g2 = self.agent.cnn_feature[3].weight.grad.data.detach().cpu().numpy()
-                    cnn_g3 = self.agent.cnn_feature[5].weight.grad.data.detach().cpu().numpy()
-                    cnn_g_sum = np.sum(np.abs(cnn_g))
-                    cnn_g_sum2 = np.sum(np.abs(cnn_g2))
-                    cnn_g_sum3 = np.sum(np.abs(cnn_g3))
-                    if  cnn_g_sum < 0.1 or cnn_g_sum2 < 0.1 or cnn_g_sum3 < 0.1:
-                        print(f"zero grad {cnn_g_sum=:.5f} {cnn_g_sum2=:.5f} {cnn_g_sum3=:.5f}")
+                    # cnn_g = self.agent.cnn_feature[0].weight.grad.data.detach().cpu().numpy()
+                    # cnn_g2 = self.agent.cnn_feature[3].weight.grad.data.detach().cpu().numpy()
+                    # cnn_g3 = self.agent.cnn_feature[5].weight.grad.data.detach().cpu().numpy()
+                    # cnn_g_sum = np.sum(np.abs(cnn_g))
+                    # cnn_g_sum2 = np.sum(np.abs(cnn_g2))
+                    # cnn_g_sum3 = np.sum(np.abs(cnn_g3))
+                    # if  cnn_g_sum < 0.1 or cnn_g_sum2 < 0.1 or cnn_g_sum3 < 0.1:
+                    #     print(f"zero grad {cnn_g_sum=:.5f} {cnn_g_sum2=:.5f} {cnn_g_sum3=:.5f}")
                 else:
                     self.grad_collector(self.actor.parameters())
                     self.grad_collector(self.critic.parameters())
@@ -422,7 +424,7 @@ class PPO2:
                         torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.max_grad_norm ) 
                 self.opt.step()
         
-        if self.anneal_lr:
+        if self.anneal_lr and update_lr:
             self.lr_update(self.opt, self.actor_lr, self.update_cnt)
         return True
 
