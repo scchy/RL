@@ -462,12 +462,12 @@ def DoubleDunk_v5_ppo2_test():
         actor_hidden_layers_dim=[1024, 512],
         critic_hidden_layers_dim=[1024, 256],
         # agent参数
-        actor_lr=5.5e-4, # 1.5e-4
+        actor_lr=7.25e-4, # 1.5e-4
         gamma=0.99,
         # 训练参数
-        num_episode=1088,  
-        off_buffer_size=288, # 256 # 360  on policy 见到更多当前策略的表现
-        max_episode_steps=288, 
+        num_episode=1688,  
+        off_buffer_size=256, # 256 # 360  on policy 见到更多当前策略的表现
+        max_episode_steps=256, 
         PPO_kwargs={
             'cnn_flag': True,
             'clean_rl_cnn': True,
@@ -490,7 +490,7 @@ def DoubleDunk_v5_ppo2_test():
             'clip_vloss': True,
             'mini_adv_norm': True,
 
-            'anneal_lr': False,
+            'anneal_lr': True,
             'num_episode': 1688,
         }
     )
