@@ -41,6 +41,7 @@ update: $w^i_{t+1} = w^i_t + \alpha \hat r_t e^i_t$ ... (2)
 - 近似Q: $minimun\_mse = 0.5(y_{tar} - Q(s, a))^2$
   - $\frac{\partial l}{\partial w}=\frac{\partial l}{\partial Q}\frac{\partial Q}{\partial wx}x=\begin{cases} -(y_{tar} - Q(s, a))x; \ if \ wx \lt 0 ;\\ (y_{tar} - Q(s, a))x; \ if \ wx \ge 0  \end{cases}$
     - $y_{tar} - Q(s, a) \simeq \hat r; \ y=\begin{cases} -1 \ if \ wx \lt 0 ; \\ 1; \ if \ wx \ge 0  \end{cases}$
+      - 因为产出$y_t$的函数直接输出动作，无法评估state的价值
     - $=\hat r yx=\hat r e_t$
 
 
@@ -104,6 +105,8 @@ update: $v^i_{t+1} = v^i_t + \beta \hat r_t \overline{x}^i_t$
   - like TDError
 - $\overline{x}^i_{t+1} = \lambda \overline{x}^i_t + ( 1 - \lambda) x^i_t$
 - - 收敛的时候 $\hat r_t~=0$ ACE和ASE都停止迭代
+
+![hat-r](../../pic/hat_r.png)
 
 > algo Prove: 
 > - (1982) Simulation of anticipatory responses in classical conditioning by a neuron-like adaptive element

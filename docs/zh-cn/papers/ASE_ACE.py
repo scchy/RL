@@ -2,6 +2,7 @@ import numpy as np
 import gymnasium as gym 
 import math
 from tqdm.auto import tqdm 
+import matplotlib.pyplot as plt
 
 print(np.__version__) # 1.24.4
 print(gym.__version__) # 0.29.1
@@ -85,29 +86,37 @@ ace = ACE(input_dim, beta=0.5, gamma=0.95, lmbda=0.8)
 
 num_episodes = 1200 # 500000
 reward_l = []
+hat_r_list = []
 tq_bar = tqdm(range(num_episodes))
 for episode in tq_bar:
     s, _ = env.reset(seed=20250314)   # 500
     done = False
     r_tt = 0
+    hat_r_ep_list = []
     while not done:
         a = ase.forward(s)  
         n_s, r, terminated, truncated, infos = env.step(a) 
         r_tt += r
         # 更新 ACE
         hat_r = ace.update(n_s, r, s)
+        hat_r_ep_list.append(hat_r)
         # 更新 ASE
         ase.update(n_s, hat_r)
         s = n_s
         done = terminated or truncated
 
     reward_l.append(r_tt)
+    hat_r_list.append(np.mean(hat_r_ep_list))
     tq_bar.set_postfix({
         'rewards': r_tt,
         'last_mean': np.mean(reward_l[-10:]),
         'last_std': np.std(reward_l[-10:]),
+        'hat_r_mean': np.mean(hat_r_list[-10:]),
     })
 
+plt.plot(range(len(hat_r_list[750:])), hat_r_list[750:])
+plt.title('hat_r\nepsiode 750~1200')
+plt.savefig('hat_r.png')
 
 
 env = gym.make('CartPole-v1', render_mode='human')
