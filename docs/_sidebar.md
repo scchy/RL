@@ -17,5 +17,5 @@
 * [13. 基于策略的离线算法SAC](zh-cn/13-基于策略的离线算法SAC.md)
 * [<font color=darkred>14. 基于策略的DRL方法总结</font>](zh-cn/14-基于策略的方法总结.md)
 * [15. paper](zh-cn/15-paper.md)
-    * [1983: **Neuronlike adaptive elements that can solve difficult learning control problems**](zh-cn/papers/1983_Neuronlike_adaptive_elements_that_can_solve_difficult_learning_control_problems)
-
+    * [1983: **Neuronlike adaptive elements that can solve difficult learning control problems**](zh-cn/papers/1983_Neuronlike_adaptive_elements_that_can_solve_difficult_learning_control_problems.md)
+    * [1988: **Learning to predict by the methods of temporal differences**](zh-cn/papers/1988_Learning_to_predict_by_the_methods_of_temporal_differences.md)
