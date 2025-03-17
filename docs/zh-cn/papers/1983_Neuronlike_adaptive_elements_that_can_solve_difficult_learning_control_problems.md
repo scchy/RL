@@ -17,6 +17,8 @@ paper Link: [sci-hub: Neuronlike adaptive elements that can solve difficult lear
 
 ### 核心算法
 
+笔者会从现在RL的一些做法角度回看
+
 ![fig3](../../pic/paper_1983_ACE_ASE.png)
 
 #### ASE
@@ -36,6 +38,11 @@ update: $w^i_{t+1} = w^i_t + \alpha \hat r_t e^i_t$ ... (2)
 - $\alpha$: 学习率
 - $\hat r_t$: 强化值 Fig-3
 - $e^i_t$: eligibility $e^i_{t+1} = \delta e^i_{t} + (1-\delta)y_t^ix_t^i$
+- 近似Q: $minimun\_mse = 0.5(y_{tar} - Q(s, a))^2$
+  - $\frac{\partial l}{\partial w}=\frac{\partial l}{\partial Q}\frac{\partial Q}{\partial wx}x=\begin{cases} -(y_{tar} - Q(s, a))x; \ if \ wx \lt 0 ;\\ (y_{tar} - Q(s, a))x; \ if \ wx \ge 0  \end{cases}$
+    - $y_{tar} - Q(s, a) \simeq \hat r; \ y=\begin{cases} -1 \ if \ wx \lt 0 ; \\ 1; \ if \ wx \ge 0  \end{cases}$
+    - $=\hat r yx=\hat r e_t$
+
 
 <font color=red>The basic idea expressed by (2) is that whenever certain conditions (to be discussed later) hold for input pathway i,
 then that pathway becomes eligible to have its weight modified, 
@@ -43,12 +50,13 @@ and it remains eligible for some period of time after the conditions cease to ho
 
 
 If the reinforcement indicates improved performance, then the weights of the eligible pathways are changed so as to make the element more likely to do whatever it did that made those pathways eligible. 
+- 即$\hat{r}$更大，即新状态下预估的$U_t$更大
 
-If reinforcement indicates decreased performance, then the weights of the eligible pathways are changed to make the element more likely to
-do something else
+If reinforcement indicates decreased performance, then the weights of the eligible pathways are changed to make the element more likely to do something else
+- 即$\hat{r}$更小，即新状态下预估的$U_t$更小
+
 
 ```python
-
 class ASE:
     def __init__(self, input_dim, alpha=0.1, delta=0.2, sigma=0.01):
         """associative search element"""
@@ -74,13 +82,12 @@ class ASE:
 
     def update(self, s, hat_r):
         # 1- conditions of action: becomes eligible to have its weight modified
-        # e^i_{t+1} = \delta e^i_{t} + (1-\delta)y_t^ix_t^i
         e_t = self.action_postfix(self.forward(s)) * s
-        # 2- it remains eligible for some period of time after the conditions cease to hold
-        self.et = self.delta * self.et + (1 - self.delta) * e_t
         # w^i_{t+1} = w^i_t + \alpha r_t e^i_t
         self.w += (self.lr * hat_r * e_t).reshape(self.w.shape)
-
+        # 2- it remains eligible for some period of time after the conditions cease to hold
+        # e^i_{t+1} = \delta e^i_{t} + (1-\delta)y_t^ix_t^i
+        self.et = self.delta * self.et + (1 - self.delta) * e_t
 ```
 
 #### ACE
@@ -91,10 +98,12 @@ predict: $p_t=\sum_i^n v^i_t x^i_t$
 
 update: $v^i_{t+1} = v^i_t + \beta \hat r_t \overline{x}^i_t$
 - $r_t \in \{0, -1\}$
-- like partial of mse: $\frac{\partial 0.5\hat r_t^2 }{\partial v}=\frac{\partial 0.5\hat r_t^2 }{\partial p_t}\frac{\partial p_t}{\partial v}=\hat r_t x_t$
+- 近似V: $u_t=E[\sum_a^AQ(s, a)]=E[V(s)]=r+v_{t+1}=v_{t}$ TDError MSE: 
+  -  $\frac{\partial 0.5\hat r_t^2 }{\partial v}=\frac{\partial 0.5\hat r_t^2 }{\partial p_t}\frac{\partial p_t}{\partial v}=\hat r_t x_t$
 - reinforcement signal: $\hat r_t=r_t + \gamma p_t - p_{t-1}$
   - like TDError
 - $\overline{x}^i_{t+1} = \lambda \overline{x}^i_t + ( 1 - \lambda) x^i_t$
+- - 收敛的时候 $\hat r_t~=0$ ACE和ASE都停止迭代
 
 > algo Prove: 
 > - (1982) Simulation of anticipatory responses in classical conditioning by a neuron-like adaptive element

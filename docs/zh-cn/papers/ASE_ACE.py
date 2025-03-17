@@ -31,12 +31,13 @@ class ASE:
         return 1      
 
     def update(self, s, hat_r):
-        # e^i_{t+1} = \delta e^i_{t} + (1-\delta)y_t^ix_t^i
+        # 1- conditions of action: becomes eligible to have its weight modified
         e_t = self.action_postfix(self.forward(s)) * s
-        self.et = self.delta * self.et + (1 - self.delta) * e_t
         # w^i_{t+1} = w^i_t + \alpha r_t e^i_t
         self.w += (self.lr * hat_r * e_t).reshape(self.w.shape)
-        
+        # 2- it remains eligible for some period of time after the conditions cease to hold
+        # e^i_{t+1} = \delta e^i_{t} + (1-\delta)y_t^ix_t^i
+        self.et = self.delta * self.et + (1 - self.delta) * e_t
 
 
 class ACE:
@@ -113,7 +114,7 @@ env = gym.make('CartPole-v1', render_mode='human')
 num_test = 3
 tq_bar = tqdm(range(num_test))
 for episode in tq_bar:
-    s, _ = env.reset(seed=20250314)  # 有时候可以达到 500
+    s, _ = env.reset(seed=20250314)
     done = False
     r_tt = 0
     while not done:
@@ -121,10 +122,6 @@ for episode in tq_bar:
         a = ase.forward(s)  
         n_s, r, terminated, truncated, infos = env.step(a) 
         r_tt += r
-        # 更新 ACE
-        hat_r = ace.update(n_s, r, s)
-        # 更新 ASE
-        ase.update(n_s, hat_r)
         s = n_s
         done = terminated or truncated
 

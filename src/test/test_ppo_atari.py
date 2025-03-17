@@ -420,7 +420,7 @@ def DoubleDunk_v5_ppo2_test():
     gym_env_desc(env_name)
     print("gym.__version__ = ", gym.__version__ )
     path_ = os.path.dirname(__file__)
-    num_envs = 12 # 16
+    num_envs = 8 # 12 # 16
     episod_life = True
     clip_reward = False
     resize_inner_area = True  
@@ -462,12 +462,12 @@ def DoubleDunk_v5_ppo2_test():
         actor_hidden_layers_dim=[1024, 512],
         critic_hidden_layers_dim=[1024, 256],
         # agent参数
-        actor_lr=7.25e-4, # 1.5e-4
+        actor_lr=3.25e-4, #7.25e-4, # 1.5e-4
         gamma=0.99,
         # 训练参数
-        num_episode=1688,  
-        off_buffer_size=256, # 256 # 360  on policy 见到更多当前策略的表现
-        max_episode_steps=256, 
+        num_episode=1088,  
+        off_buffer_size=360, # 256 # 360  on policy 见到更多当前策略的表现
+        max_episode_steps=360, 
         PPO_kwargs={
             'cnn_flag': True,
             'clean_rl_cnn': True,
@@ -490,8 +490,8 @@ def DoubleDunk_v5_ppo2_test():
             'clip_vloss': True,
             'mini_adv_norm': True,
 
-            'anneal_lr': True,
-            'num_episode': 1688,
+            'anneal_lr': False,
+            'num_episode': 1088,
         }
     )
     minibatch_size = cfg.PPO_kwargs['minibatch_size']
@@ -509,6 +509,7 @@ def DoubleDunk_v5_ppo2_test():
         device=cfg.device,
         reward_func=None,  # lambda x: np.where(x < 0, x/10, x/10 + 1)
     )
+    # agent.load_model(cfg.save_path)
     agent.train()
     ppo2_train(envs, agent, cfg, wandb_flag=True, wandb_project_name=f"PPO2-{env_name_str}-ImpalaCNN",
                     train_without_seed=True, test_ep_freq=cfg.off_buffer_size * 10, 
