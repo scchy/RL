@@ -918,11 +918,14 @@ class PPOSharedCNN(nn.Module):
         share_dim_ = actor_hidden_layers_dim[hid_idx - 1] if hid_idx >= 1 else cnn_out_dim
         # actor
         self.actor_features = nn.ModuleList()
-        for idx, h in enumerate(actor_hidden_layers_dim[hid_idx:]):
-            self.actor_features.append(nn.ModuleDict({
-                'linear': nn.Linear(actor_hidden_layers_dim[idx-1] if idx else share_dim_, h),
-                'linear_action': nn.ReLU(inplace=True) if act_type == 'relu' else nn.Tanh()
-            }))
+        actor_hidden_layers_dim_f = actor_hidden_layers_dim[hid_idx:]
+        if len(actor_hidden_layers_dim_f) >= 1:
+            for idx, h in enumerate(actor_hidden_layers_dim_f):
+                self.actor_features.append(nn.ModuleDict({
+                    'linear': nn.Linear(actor_hidden_layers_dim_f[idx-1] if idx else share_dim_, h),
+                    'linear_action': nn.ReLU(inplace=True) if act_type == 'relu' else nn.Tanh()
+                }))
+
         self.alpha_layer = nn.Linear(actor_hidden_layers_dim[-1], action_dim)
         self.beta_layer = nn.Linear(actor_hidden_layers_dim[-1], action_dim)
         self.norm_out_layer = nn.Linear(actor_hidden_layers_dim[-1], action_dim)
@@ -930,11 +933,13 @@ class PPOSharedCNN(nn.Module):
 
         # critic 
         self.critic_features = nn.ModuleList()
-        for idx, h in enumerate(critic_hidden_layers_dim[hid_idx:]):
-            self.critic_features.append(nn.ModuleDict({
-                'linear': nn.Linear(critic_hidden_layers_dim[idx-1] if idx else share_dim_, h),
-                'linear_activation': nn.ReLU(inplace=True) if act_type == 'relu' else nn.Tanh()
-            }))
+        critic_hidden_layers_dim_f = critic_hidden_layers_dim[hid_idx:]
+        if len(critic_hidden_layers_dim_f) >= 1:
+            for idx, h in enumerate(critic_hidden_layers_dim_f):
+                self.critic_features.append(nn.ModuleDict({
+                    'linear': nn.Linear(critic_hidden_layers_dim_f[idx-1] if idx else share_dim_, h),
+                    'linear_activation': nn.ReLU(inplace=True) if act_type == 'relu' else nn.Tanh()
+                }))
         self.head = nn.Linear(critic_hidden_layers_dim[-1] , 1)
         self.__init()
         # print(self.share_mlp, self.actor_features, self.critic_features)

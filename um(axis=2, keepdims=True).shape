@@ -1,0 +1,12 @@
+Help on built-in function sum:
+
+ssuumm(...) method of numpy.ndarray instance
+    a.sum(axis=None, dtype=None, out=None, keepdims=False, initial=0, where=True)
+    
+    Return the sum of the array elements over the given axis.
+    
+    Refer to `numpy.sum` for full documentation.
+    
+    See Also
+    --------
+    numpy.sum : equivalent function
