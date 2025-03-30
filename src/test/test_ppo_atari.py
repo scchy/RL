@@ -689,5 +689,5 @@ if __name__ == '__main__':
     # Alien_v5_ppo2_test()
     # Breakout_v5_ppo2_test() # 2024-10-30 
     # DoubleDunk_v5_ppo2_test()
-    Bowling_v5_ppo2_test()
+    Bowling_v5_ppo2_test() # 2025-03-30
 
