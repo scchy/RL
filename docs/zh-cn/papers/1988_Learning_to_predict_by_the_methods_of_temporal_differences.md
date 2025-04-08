@@ -188,10 +188,8 @@ Learning result : TD-Reg is mush more easy to learn
 
 
 
-### 4. Theory of temporal-difference methods
+### 总结
 
-
-总结
 Richard S. Sutton 的这篇论文为时间差分方法奠定了理论基础，并展示了其在多步预测问题中的优势。
 TD 方法不仅在理论上具有收敛性和最优性，而且在实际应用中也表现出了更高的效率和更快的收敛速
 

@@ -4,7 +4,6 @@
 1988: **Learning to predict by the methods of temporal differences**
 
 ## 1990年代
-1990: First results with Dyna, an integrated architecture for learning, planning, and reacting
 1990: Time-derivative models of Pavlovian reinforcement
 1991: Dyna, an integrated architecture for learning, planning, and reacting
 1992: Adapting bias by gradient descent: An incremental version of delta-bar-delta

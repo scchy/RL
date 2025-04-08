@@ -19,3 +19,4 @@
 * [15. paper](zh-cn/15-paper.md)
     * [1983: **Neuronlike adaptive elements that can solve difficult learning control problems**](zh-cn/papers/1983_Neuronlike_adaptive_elements_that_can_solve_difficult_learning_control_problems.md)
     * [1988: **Learning to predict by the methods of temporal differences**](zh-cn/papers/1988_Learning_to_predict_by_the_methods_of_temporal_differences.md)
+    * [1990: **Time-derivative models of Pavlovian reinforcement**](zh-cn/papers/1990_Time-derivative_models_of_Pavlovian_reinforcement.md)

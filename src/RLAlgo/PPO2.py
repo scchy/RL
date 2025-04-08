@@ -382,6 +382,8 @@ class PPO2:
                     critic_loss = 0.5 * torch.mean((new_v - td_v).pow(2))
                 
                 total_loss = actor_loss + self.critic_coef * critic_loss
+                critic_loss_item = critic_loss.cpu().detach().numpy()
+                actor_loss_item = actor_loss.cpu().detach().numpy()
                 loss_item = total_loss.cpu().detach().numpy()
                 if np.isnan(loss_item):
                     print(f'>>>>>>>>>> nan loss=', loss_item)
@@ -409,6 +411,8 @@ class PPO2:
                 if wandb is not None:
                     wandb.log({
                         'total_loss': loss_item,
+                        'actor_loss': actor_loss_item,
+                        'critic_loss': critic_loss_item,
                         'agent_gard_norm': self.grad_collector.collected_grad[-1]
                         } if self.share_cnn_flag else {
                         'total_loss': loss_item,
