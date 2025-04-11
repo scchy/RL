@@ -430,7 +430,7 @@ def DoubleDunk_v5_ppo2_test():
     start_skip = None
     seed = 202502
     max_no_reward_count = 1088 # 888   
-    stack_num = 12
+    stack_num = 10
     shape = 96 # 124  bestTest -> -7.43
     if env_pool_flag:
         envs = make_envpool_atria(env_name.split('/')[-1], num_envs, seed=seed, episodic_life=episod_life, reward_clip=clip_reward, max_no_reward_count=max_no_reward_count)
@@ -461,15 +461,15 @@ def DoubleDunk_v5_ppo2_test():
         start_skip=start_skip,
         shape=shape,
         # 网络参数 Atria-CNN + MLP
-        actor_hidden_layers_dim=[512, 256, 128],
-        critic_hidden_layers_dim=[512, 128, 64],
+        actor_hidden_layers_dim=[512], # , 256, 128],
+        critic_hidden_layers_dim=[512, 256, 128],
         # agent参数
-        actor_lr=5.5e-4, #7.25e-4, # 1.5e-4
+        actor_lr=2.5e-4, #7.25e-4, # 1.5e-4
         gamma=0.99,
         # 训练参数
-        num_episode=1088,  
-        off_buffer_size=360, # 256 # 360  on policy 见到更多当前策略的表现
-        max_episode_steps=360, 
+        num_episode=1288,  
+        off_buffer_size=240, # 256 # 360  on policy 见到更多当前策略的表现
+        max_episode_steps=240, 
         PPO_kwargs={
             'cnn_flag': True,
             'clean_rl_cnn': True,
@@ -487,7 +487,7 @@ def DoubleDunk_v5_ppo2_test():
             'act_type': 'relu',
             'dist_type': dist_type,
             'critic_coef': 1.5, # 1.5
-            'ent_coef': 0.015, #225, # 0.013, 
+            'ent_coef': 0.0225, #225, # 0.013, 
             'max_grad_norm': 1.5, # 0.5,  
             'clip_vloss': True,
             'mini_adv_norm': True,
@@ -509,11 +509,11 @@ def DoubleDunk_v5_ppo2_test():
         gamma=cfg.gamma,
         PPO_kwargs=cfg.PPO_kwargs,
         device=cfg.device,
-        reward_func=lambda x: x * 2.0
+        reward_func=lambda x: x * 2.0 
     )
     # agent.load_model(cfg.save_path)
     agent.train()
-    ppo2_train(envs, agent, cfg, wandb_flag=True, wandb_project_name=f"PPO2-{env_name_str}-ImpalaCNN",
+    ppo2_train(envs, agent, cfg, wandb_flag=True, wandb_project_name=f"PPO2-{env_name_str}-F",
                     train_without_seed=True, test_ep_freq=cfg.off_buffer_size * 10, 
                     online_collect_nums=cfg.off_buffer_size,
                     test_episode_count=10, 

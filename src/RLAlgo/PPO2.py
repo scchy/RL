@@ -361,7 +361,7 @@ class PPO2:
                 ratio = torch.exp(new_log_prob - old_log_prob.detach())
                 surr1 = ratio * adv
                 surr2 = torch.clamp(ratio, 1 - self.eps, 1 + self.eps) * adv
-                actor_loss = -torch.min(surr1, surr2).mean().float() - self.ent_coef * entropy_loss
+                actor_loss = -torch.min(surr1, surr2).mean().float()
                 if self.share_cnn_flag:
                     new_v = critic_out.float()
                 else:
@@ -381,7 +381,7 @@ class PPO2:
                 else:
                     critic_loss = 0.5 * torch.mean((new_v - td_v).pow(2))
                 
-                total_loss = actor_loss + self.critic_coef * critic_loss
+                total_loss = actor_loss + self.critic_coef * critic_loss - self.ent_coef * entropy_loss
                 critic_loss_item = critic_loss.cpu().detach().numpy()
                 actor_loss_item = actor_loss.cpu().detach().numpy()
                 loss_item = total_loss.cpu().detach().numpy()

@@ -3,7 +3,50 @@
 paper Link: [Time-derivative models of Pavlovian reinforcement](https://www.researchgate.net/publication/235419082_Time-Derivative_Models_of_Pavlovian_Reinforcement)
 
 ### 简介
-关于经典条件反射（Pavlovian conditioning）中强化（reinforcement）机制的理论研究，主要探讨了如何通过时间导数模型来解释和预测经典条件反射中的学习现象。
+
+文章提出了一个假设：经典条件反射中的强化（reinforcement）是先天（US-无条件刺激）和习得（CS-条件刺激）关联的复合体的时间导数。这种假设认为，强化信号是基于当前刺激与预期之间的差异，而不是单纯的刺激出现。
+文章将时间导数模型与Rescorla-Wagner模型进行了对比。Rescorla-Wagner模型假设学习发生在事件违背预期时，即实际的US水平与预期水平之间的差异。时间导数模型则进一步将这种差异形式化为时间导。
+本文从动物学习理论的角度对这一理论进行了激励和解释，并表明TD模型用更简单的时间导数模型解决了ISI问题（先天US-习得CS期间的刺激）和其他问题。
+
+
+### 理论框架
+
+> discuss time-derivative theories. A learning theory should predict how the associations between CSs and USs change.
+> 经典条件反射是动物试图根据CS提供的线索预测US的表现。
+
+$\Delta V = (\text{level of US processing}) \times (\text{level of CS processing}) \ \ .... (1)$
+$\Delta V = (\text{Reinforcement}) \times (\text{Eligibility}) \ \ .... (2)$
+- $\text{Reinforcement} \in \mathbf{R}$
+- $\text{Eligibility} \ge 0$
+
+>  Models that treat entire trials as wholes are called **trial-level models**
+>  Models that apply continuously, on a moment by moment basis, are called **real-time models**
+
+#### Time-Derivative Theories of Reinforcement
+
+Rescorla-Wagner 模型通过引入预测误差的概念，强调了学习是一个动态的、基于预期的过程，这使得它在心理学和行为科学中具有重要的理论和实践价值
+$\Delta V = \beta (\lambda - \hat{V}) \times \alpha X$
+其中：
+- $\Delta V$：条件刺激与非条件刺激之间关联强度的变化。
+- $\beta \ge 0$：非条件刺激(UC)的显著性。
+- $\lambda \ge 0$：关联强度的最大可能值（渐近线），表示对非条件刺激的完全预期。
+- $\hat{V}$：当前条件刺激与非条件刺激之间的关联强度的期望或是预测值
+- $\alpha \ge 0$：条件刺激(CS)的显著性（或注意力）。
+- $X = 1$: 
+
+关键概念
+- 预测误差（Prediction Error）：模型的核心概念是预测误差，即预期结果与实际结果之间的差异。如果实际结果出乎意料，学习速度会加快；如果结果符合预期，学习速度则会减慢。
+- 阻断效应（Blocking Effect）：当一个已经与非条件刺激建立强关联的条件刺激存在时，新加入的条件刺激很难再与非条件刺激建立关联。
+- 学习曲线（Learning Curve）：学习初期进展迅速，随着时间推移，学习速度逐渐减慢，直到接近最大关联强度。
+- 遮蔽效应（Overshadowing Effect）：当两个条件刺激同时出现时，较强的刺激会“遮蔽”较弱的刺激，限制其与非条件刺激建立关联。
+
+
+Ẏ 理论: 在任何时间点的强化信号等于当前刺激与反应之间关联的净时间导数
+$Ẏ(t) = Y(t) - Y(t-\Delta t)$ 能够完全解释 Rescorla-Wagner 模型的所有预测。
+
+#### Real-Time Theories of Eligibility
+
+
 
 1. 强化与时间导数的关系
    - 文章提出了一个核心观点：Pavlovian 强化可以被视为刺激与反应之间关联的净时间导数。
