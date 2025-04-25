@@ -6,7 +6,7 @@ from .env_wrapper import (
     baseSkipFrame, EpisodicLifeEnv, ClipRewardEnv, FireResetEnv, 
     ResizeObservation, GrayScaleObservation, 
     envPoolRecordEpisodeStatistics, 
-    spSyncVectorEnv, spFrameStack
+    spSyncVectorEnv, spFrameStack, doubleDunckSkipFrame
 )
 
 
@@ -52,11 +52,18 @@ def make_atari_env(env_id, episod_life=False, clip_reward=True, action_map=None,
     def thunk():
         env = gym.make(env_id, **kwargs)
         env = gym.wrappers.RecordEpisodeStatistics(env)
-        env = baseSkipFrame(env, skip=skip, start_skip=start_skip, 
-                            cut_slices=cut_slices,
-                            action_map=action_map,
-                            max_no_reward_count=max_no_reward_count,
-                            max_obs=max_obs)
+        if 'DoubleDunk-v5' in env_id: 
+            env = doubleDunckSkipFrame(env, skip=skip, start_skip=start_skip, 
+                                        cut_slices=cut_slices,
+                                        action_map=action_map,
+                                        max_no_reward_count=max_no_reward_count,
+                                        max_obs=max_obs)
+        else:
+            env = baseSkipFrame(env, skip=skip, start_skip=start_skip, 
+                                cut_slices=cut_slices,
+                                action_map=action_map,
+                                max_no_reward_count=max_no_reward_count,
+                                max_obs=max_obs)
         if episod_life:
             env = EpisodicLifeEnv(env)
         if ("FIRE" in env.unwrapped.get_action_meanings()) and fire_flag:

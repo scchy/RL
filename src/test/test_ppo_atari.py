@@ -420,7 +420,7 @@ def DoubleDunk_v5_ppo2_test():
     gym_env_desc(env_name)
     print("gym.__version__ = ", gym.__version__ )
     path_ = os.path.dirname(__file__)
-    num_envs = 12 # 12 # 16
+    num_envs = 12 
     episod_life = True
     clip_reward = False
     resize_inner_area = True  
@@ -448,8 +448,9 @@ def DoubleDunk_v5_ppo2_test():
     cfg = Config(
         ply_env if env_pool_flag else envs, 
         # 环境参数
-        save_path=os.path.join(path_, "test_models" ,f'PPO2_{env_name_str}-2'),  # 1
+        save_path=os.path.join(path_, "test_models" ,f'PPO2_{env_name_str}-1'),   #-2   lastMeanRewards=-5.20, BEST=1.80, bestTestReward=-0.67
         seed=seed,
+        add_entroy_bonus_coef=0, #0.002,
         num_envs=num_envs,
         stack_num=stack_num,
         fire_flag=fire_flag,
@@ -464,12 +465,13 @@ def DoubleDunk_v5_ppo2_test():
         actor_hidden_layers_dim=[512], # , 256, 128],
         critic_hidden_layers_dim=[512, 256, 128],
         # agent参数
-        actor_lr=2.5e-4, #7.25e-4, # 1.5e-4
+        actor_lr=1.5e-4, # 4.5e-4 learn shot
+        # 1.5e-4, # step2 lastMeanRewards=0.00, BEST=1.20, bestTestReward=0.29] 
         gamma=0.99,
         # 训练参数
-        num_episode=1288,  
-        off_buffer_size=240, # 256 # 360  on policy 见到更多当前策略的表现
-        max_episode_steps=240, 
+        num_episode=888,  # 1288 learn shot  688 step2
+        off_buffer_size=360, # 256 # 360  on policy 见到更多当前策略的表现
+        max_episode_steps=360, 
         PPO_kwargs={
             'cnn_flag': True,
             'clean_rl_cnn': True,
@@ -480,20 +482,20 @@ def DoubleDunk_v5_ppo2_test():
             'grey_flag': gray_flag,
 
             'lmbda': 0.95,
-            'eps': 0.175, # 0.165, # 0.145,
+            'eps': 0.175,  # 0.175, learn shot
             'k_epochs': 3, # 3, 
             'sgd_batch_size': 1024,  
             'minibatch_size': 512, 
             'act_type': 'relu',
             'dist_type': dist_type,
-            'critic_coef': 1.5, # 1.5
-            'ent_coef': 0.0225, #225, # 0.013, 
-            'max_grad_norm': 1.5, # 0.5,  
+            'critic_coef': 1.5,  
+            'ent_coef': 0.0125,  # 0.0125 learn shot
+            'max_grad_norm': 1.5,  #  learn shot
             'clip_vloss': True,
-            'mini_adv_norm': True,
+            'mini_adv_norm': False,
 
             'anneal_lr': False,
-            'num_episode': 1088,
+            'num_episode': 888,
         }
     )
     minibatch_size = cfg.PPO_kwargs['minibatch_size']
@@ -509,9 +511,10 @@ def DoubleDunk_v5_ppo2_test():
         gamma=cfg.gamma,
         PPO_kwargs=cfg.PPO_kwargs,
         device=cfg.device,
-        reward_func=lambda x: x * 2.0 
+        reward_func=lambda x: x * 2.0 # learn to shoot
     )
-    # agent.load_model(cfg.save_path)
+    # 'PPO2_{env_name_str}-2'  lastMeanRewards=-5.20, BEST=1.80, bestTestReward=-0.67
+    agent.load_model(cfg.save_path.replace('-1', '-2'))
     agent.train()
     ppo2_train(envs, agent, cfg, wandb_flag=True, wandb_project_name=f"PPO2-{env_name_str}-F",
                     train_without_seed=True, test_ep_freq=cfg.off_buffer_size * 10, 
@@ -519,7 +522,9 @@ def DoubleDunk_v5_ppo2_test():
                     test_episode_count=10, 
                     add_max_step_reward_flag=False,
                     play_func='ppo2_play',
-                    ply_env=ply_env
+                    ply_env=ply_env,
+                    add_entroy_bonus=False,
+                    add_entroy_bonus_coef=cfg.add_entroy_bonus_coef
     )
     print(agent.grad_collector.describe())
     agent.load_model(cfg.save_path)

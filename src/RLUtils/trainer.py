@@ -467,7 +467,9 @@ def ppo2_train(envs, agent, cfg,
                     batch_reset_env=False,
                     play_func="play",
                     buffer_np_save=False,
-                    ply_env=None
+                    ply_env=None,
+                    add_entroy_bonus=False,
+                    add_entroy_bonus_coef=0.01
                 ):
     play_func_ = play if play_func == "play" else ppo2_play
     test_env = copy.deepcopy(envs.envs[0]) if ply_env is None else ply_env
@@ -519,7 +521,12 @@ def ppo2_train(envs, agent, cfg,
         for step_i in range(cfg.off_buffer_size):
             max_step_flag = False
             add_reward = False
-            a = agent.policy(s)
+            ent_b = 0
+            if add_entroy_bonus:
+                a, ent_b = agent.policy(s, add_entroy_bonus)
+            else:
+                ent_b = 0
+                a = agent.policy(s)
             action_deque.append(a[0])
             if (len(action_deque) == 7) and np.std(action_deque) == 0:
                 print(f'One Action Warning: {action_deque=}')
@@ -532,7 +539,7 @@ def ppo2_train(envs, agent, cfg,
             n_s, r, terminated, truncated, infos = envs.step(a)
             done = np.logical_or(terminated, truncated)
             steps += 1
-            buffer_.add(s, a, r, n_s, done)
+            buffer_.add(s, a, r + ent_b * add_entroy_bonus_coef, n_s, done)
             s = n_s
             step_rewards += r
             if (steps % test_ep_freq == 0) and (steps > cfg.off_buffer_size):

@@ -41,10 +41,12 @@ $\Delta V = \beta (\lambda - \hat{V}) \times \alpha X$
 - 遮蔽效应（Overshadowing Effect）：当两个条件刺激同时出现时，较强的刺激会“遮蔽”较弱的刺激，限制其与非条件刺激建立关联。
 
 
-Ẏ 理论: 在任何时间点的强化信号等于当前刺激与反应之间关联的净时间导数
+Ẏ 理论: 在任何时间点的强化信号等于当前刺激与反应之间关联的净时间导数 c 
 $Ẏ(t) = Y(t) - Y(t-\Delta t)$ 能够完全解释 Rescorla-Wagner 模型的所有预测。
 
-#### Real-Time Theories of Eligibility
+#### TD method
+
+$\Delta V_i = \beta (\lambda _{t+1} + \gamma \overline{V}_{t+1} - \overline{V}_t) \times \alpha _i \overline{X}_i$
 
 
 

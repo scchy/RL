@@ -248,6 +248,207 @@ class baseSkipFrame(gym.Wrapper):
         return obs, info
 
 
+
+class doubleDunckSkipFrame(gym.Wrapper):
+    def __init__(
+            self, 
+            env, 
+            skip: int, 
+            cut_slices: List[List[int]]=None,
+            start_skip: int=None,
+            neg_action_kwargs: Dict=None,
+            action_map: Dict = None,
+            max_no_reward_count: Optional[int] = None,
+            max_obs: bool = False
+        ):
+        """_summary_
+
+        Args:
+            env (_type_): _description_
+            skip (int): skip frames
+            cut_slices (List[List[int]], optional): pic observation cut. Defaults to None.
+            start_skip (int, optional): skip several frames to start. Defaults to None.
+            neg_action_kwargs (Dict): {action: neg_reward} 对某些动作予以负分
+        """
+        super().__init__(env)
+        self._skip = skip
+        self.pic_cut_slices = cut_slices
+        self.start_skip = start_skip
+        self.neg_action_kwargs = neg_action_kwargs
+        self.action_map = action_map
+        self.max_no_reward_count = max_no_reward_count
+        self.no_reward_count = 0
+        self.max_obs = max_obs
+        self._obs_buffer = np.zeros((2,) + env.observation_space.shape, dtype=np.uint8)
+        height, width = 210, 160
+        self.org_arr = np.zeros((height, width), dtype=np.uint8)
+        self.polygon_vertices = np.array([
+            [29, 74],
+            [29, 139],
+            [46, 167],
+            [114, 167],
+            [130, 139],
+            [130, 74]
+        ], dtype=np.int32)
+        inner_step = 8
+        self.polygon_vertices_small = np.array([
+            [29+inner_step, 74],
+            [29+inner_step, 139],
+            [46+inner_step, 145],
+            [114-inner_step, 145],
+            [130-inner_step, 139],
+            [130-inner_step, 74]
+        ], dtype=np.int32)
+        self.image = cv2.fillPoly(deepcopy(self.org_arr), [self.polygon_vertices], color=(1, 0, 0))
+        self.image_small = cv2.fillPoly(deepcopy(self.org_arr), [self.polygon_vertices_small], color=(1, 0, 0))
+        self.owner_now = 'green'
+        self.before_res = 'green'
+    
+    def _get_need_action(self, action):
+        if self.action_map is None:
+            return action 
+        return self.action_map[action]
+    
+    def _cut_slice(self, obs):
+        if self.pic_cut_slices is None:
+            return obs
+        slice_list = []
+        for idx, dim_i_slice in enumerate(self.pic_cut_slices):
+            slice_list.append(eval('np.s_[{st}:{ed}]'.format(st=dim_i_slice[0], ed=dim_i_slice[1])))
+    
+        obs = obs[tuple(i for i in slice_list)]
+        return obs
+
+    def step(self, action):
+        neg_r = 0.0
+        if self.neg_action_kwargs is not None:
+            try:
+                a_ = action[0]
+            except Exception as e:
+                a_ = int(action)
+            neg_r = self.neg_action_kwargs.get(a_, 0.0)
+        
+        action = self._get_need_action(action)
+        total_reward = 0
+        for i in range(self._skip):
+            obs, reward, terminated, truncated, info = self.env.step(action)
+            r_f = self.obs_reward(obs, action)
+            reward += r_f
+            # now_ = self.ball_owner_now(obs)
+            if i == self._skip - 2: self._obs_buffer[0] = obs
+            if i == self._skip - 1: self._obs_buffer[1] = obs
+            reward += neg_r
+            done_f = terminated or truncated
+            total_reward += reward
+            if done_f:
+                obs = self._obs_buffer.max(axis=0) if self.max_obs else obs
+                obs = self._cut_slice(obs)  if self.pic_cut_slices is not None else obs
+                # add_arr = np.zeros((5,) + obs.shape[1:]) + (45 if now_ == 'green' else 125)
+                # obs[-5:, :, :] = add_arr
+                return obs, total_reward, terminated, truncated, info
+
+        # no reward max reset
+        self.no_reward_count += 1
+        if total_reward != 0:
+            self.no_reward_count = 0
+        if self.max_no_reward_count is not None and self.no_reward_count >= self.max_no_reward_count:
+            print(f"Rest {self.max_no_reward_count=} {self.no_reward_count=}")
+            self.no_reward_count = 0
+            terminated = True
+
+        obs = self._obs_buffer.max(axis=0) if self.max_obs else obs
+        obs = self._cut_slice(obs)  if self.pic_cut_slices is not None else obs
+        return obs, total_reward, terminated, truncated, info
+    
+    def _start_skip(self, seed=0, options=None, **kwargs):
+        a = np.array([0.0, 0.0, 0.0]) if hasattr(self.env.action_space, 'low') else np.array(0) 
+        for i in range(self.start_skip):
+            obs, reward, terminated, truncated, info = self.env.step(a)
+            if terminated or truncated:
+                obs, info = self.env.reset(seed=seed, options=options, **kwargs)
+        return obs, info
+
+    def reset(self, seed=0, options=None, **kwargs):
+        obs, info = self.env.reset(seed=seed, options=options, **kwargs)
+        if self.start_skip is not None:
+            obs, info = self._start_skip(seed, options, **kwargs)
+        obs = self._cut_slice(obs)  if self.pic_cut_slices is not None else obs
+        self.no_reward_count = 0
+        self.image = cv2.fillPoly(deepcopy(self.org_arr), [self.polygon_vertices], color=(1, 0, 0))
+        self.image_small = cv2.fillPoly(deepcopy(self.org_arr), [self.polygon_vertices_small], color=(1, 0, 0))
+        # self.owner_now = 'green'
+        # self.before_res = 'green'
+        # add_arr = np.zeros((5,) + obs.shape[1:]) + 45
+        # obs[-5:, :, :] = add_arr
+        return obs, info
+    
+    def obs_reward(self, s, a):
+        fire_a = a in [1] + list(range(10, 18))
+        T_sum = (s[180:190, 75:80, 0] == 45).sum() # CLEAR THE BALL
+        clear_ball_obs = (T_sum >= 7) and (T_sum <= 9)
+        trun_over_obs = (s[180:190, 55:105, 0] == 45).sum() >= 165
+        r_fix = 0
+        if trun_over_obs:
+            r_fix -= 0.1
+        if clear_ball_obs:
+            r_fix += ( -0.1 if fire_a else 0.01)
+        return r_fix
+
+    def ball_owner_now(self, s):
+        g_b, w_b, g_one, w_one = self.ball_owner_judge(s)
+        if (g_b and self.before_res == 'green') or (g_b and g_one):
+            self.owner_now = 'green'
+        if (w_b and self.before_res == 'white') or (w_b and w_one):
+            self.owner_now = 'white'
+
+        if g_b: 
+            self.before_res = 'green' 
+        if w_b: 
+            self.before_res = 'white' 
+        return self.owner_now
+ 
+    def ball_owner_judge(self, state):
+        a = deepcopy(state[:, :, 0])
+        a[self.image==1] = 255 # mask
+        
+        a_small = deepcopy(state[:, :, 0])
+        a_small[self.image_small==1] = 255 # mask
+        
+        # person green 45 white 236
+        green_socker = 45
+        white_socker = 236
+        ball = [144]
+        bool_ = (a_small[76:175, :] == ball[0]) 
+        ball_out_3 = bool_.sum() >= 1
+        out_3_bool = ((a[76:175, :] == green_socker) | (a[76:175, :] == white_socker)).sum() >= 1
+        if not (ball_out_3 & out_3_bool):
+            return False, False, False, False
+        
+        green_out_3 = (a[76:175, :]==green_socker).sum() >= 1
+        green_judge_one = (a[168:175, :]==green_socker).sum() >= 1
+        white_out_3 = (a[76:175, :]==white_socker).sum() >= 1  
+        white_judge_one = (a[168:175, :]==white_socker).sum() >= 1
+        if not (green_out_3 & white_out_3):
+            green_ball = (out_3_bool and green_out_3) #or ((not see_ball) and (not ball_out_3) and green_out_3)
+            white_ball = (out_3_bool and white_out_3) #or ((not see_ball) and (not ball_out_3) and white_out_3)
+            return green_ball, white_ball  and (not green_ball), green_judge_one, white_judge_one
+        # near_pic
+        col_ = np.arange(160)
+        row_ = np.arange(175-76)
+
+        col_min, col_max = col_[bool_.sum(axis=0) > 0].min(), col_[bool_.sum(axis=0) > 0].max()
+        row_min, row_max = row_[bool_.sum(axis=1) > 0].min(), row_[bool_.sum(axis=1) > 0].max()
+
+        ball_near_pic = ball_near_pic = a_small[76:175, :][
+            max(row_min-10, 0):min(row_max+10, 159), 
+            max(col_min-6, 0):min(col_max+6, 175-76-1)
+        ]
+        green_cnt = (ball_near_pic == green_socker).sum()
+        white_cnt = (ball_near_pic == white_socker).sum()
+
+        return green_cnt > white_cnt, white_cnt > green_cnt, False, False
+
+
 class CarV2SkipFrame(gym.Wrapper):
     def __init__(self, env, skip: int):
         """skip frame

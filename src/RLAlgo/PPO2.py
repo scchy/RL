@@ -217,7 +217,7 @@ class PPO2:
             return (act_out * 1 + 0).clip(1e-4, 9.999)
         return act
 
-    def policy(self, state):
+    def policy(self, state, return_entroy=False):
         state = torch.FloatTensor(np.array([state])).to(self.device)
         if self.share_cnn_flag:
             action_dist, _ = self.agent.get_dist(state, self.action_bound)
@@ -228,7 +228,11 @@ class PPO2:
         # print(f"action.cpu().detach().numpy()={action.cpu().detach().numpy()}")
         out = action.cpu().detach().numpy()
         if len(out.shape) == 3:
+            if return_entroy:
+                return out[0], action_dist.entropy().sum().cpu().detach().item()
             return out[0]
+        if return_entroy:
+            return out, action_dist.entropy().sum().cpu().detach().item()
         return out
 
     @torch.no_grad()
