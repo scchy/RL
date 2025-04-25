@@ -1,16 +1,17 @@
 ## Dyna, an integrated architecture for learning, planning, and reacting
 
 paper Link: [Dyna, an integrated architecture for learning, planning, and reacting](https://dl.acm.org/doi/10.1145/122344.122377)
+- [pdf](https://dl.acm.org/doi/pdf/10.1145/122344.122377)
 - Richard S. Sutton于1991年发表, 提出了一种结合了学习、规划和反应的集成架构
 
 ### 1. 简介
-
+![alt text](../../pic/paper_1991_p1.png)
 主要介绍Dyna框架的优缺点。
 Dyna框架旨在将模型学习（model-based learning）与无模型学习（model-free learning）相结合，以提高强化学习算法的效率和效果。
 
 
 ### 2. Dyna框架简介
-[Figure_2]
+![alt text](../../pic/paper_1991_p2.png)
 
 > Dyna架构是专门为agent不完全准确地了解其行为对世界的影响以及这些影响可能是不确定的情况而设计的。
 > <font color=darkred>并假设agent的任务可以建模成奖励最大化问题（reward maximization）</font>

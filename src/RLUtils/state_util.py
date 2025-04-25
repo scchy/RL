@@ -48,16 +48,19 @@ def make_atari_env(env_id, episod_life=False, clip_reward=True, action_map=None,
                    gray_flag=True,
                    stack_num=4,
                    shape=84,
+                   double_dunk=False,
+                   double_dunk_clear_ball_reward=0.01,
                    **kwargs):
     def thunk():
         env = gym.make(env_id, **kwargs)
         env = gym.wrappers.RecordEpisodeStatistics(env)
-        if 'DoubleDunk-v5' in env_id: 
+        if 'DoubleDunk-v5' in env_id and double_dunk: 
             env = doubleDunckSkipFrame(env, skip=skip, start_skip=start_skip, 
                                         cut_slices=cut_slices,
                                         action_map=action_map,
                                         max_no_reward_count=max_no_reward_count,
-                                        max_obs=max_obs)
+                                        max_obs=max_obs,
+                                        clear_ball_reward=double_dunk_clear_ball_reward)
         else:
             env = baseSkipFrame(env, skip=skip, start_skip=start_skip, 
                                 cut_slices=cut_slices,

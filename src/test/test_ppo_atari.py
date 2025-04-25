@@ -431,6 +431,7 @@ def DoubleDunk_v5_ppo2_test():
     seed = 202502
     max_no_reward_count = 1088 # 888   
     stack_num = 10
+    clear_ball_reward = 0.01 # step1 & step2-try1
     shape = 96 # 124  bestTest -> -7.43
     if env_pool_flag:
         envs = make_envpool_atria(env_name.split('/')[-1], num_envs, seed=seed, episodic_life=episod_life, reward_clip=clip_reward, max_no_reward_count=max_no_reward_count)
@@ -439,7 +440,9 @@ def DoubleDunk_v5_ppo2_test():
         envs = spSyncVectorEnv(
             [make_atari_env(env_name, skip=1, start_skip=start_skip, cut_slices=[[30, 190]], episod_life=episod_life, clip_reward=clip_reward, ppo_train=True, 
                             max_no_reward_count=max_no_reward_count, resize_inner_area=resize_inner_area,
-                            fire_flag=fire_flag, gray_flag=gray_flag, stack_num=stack_num, shape=shape) for _ in range(num_envs)],
+                            fire_flag=fire_flag, gray_flag=gray_flag, stack_num=stack_num, shape=shape, 
+                            double_dunk=True, double_dunk_clear_ball_reward=clear_ball_reward
+                            ) for _ in range(num_envs)],
             random_reset=True,
             seed=seed
         )
@@ -460,16 +463,17 @@ def DoubleDunk_v5_ppo2_test():
         env_pool_flag=env_pool_flag,
         max_no_reward_count=max_no_reward_count,
         start_skip=start_skip,
+        clear_ball_reward=clear_ball_reward,
         shape=shape,
         # 网络参数 Atria-CNN + MLP
         actor_hidden_layers_dim=[512], # , 256, 128],
         critic_hidden_layers_dim=[512, 256, 128],
         # agent参数
-        actor_lr=1.5e-4, # 4.5e-4 learn shot
-        # 1.5e-4, # step2 lastMeanRewards=0.00, BEST=1.20, bestTestReward=0.29] 
+        actor_lr=1.5e-4, # 4.5e-4 learn shot  & clear ball += 0.01
+        # 1.5e-4, # step2-try1 lastMeanRewards=0.00, BEST=1.20, bestTestReward=0.29] 
         gamma=0.99,
         # 训练参数
-        num_episode=888,  # 1288 learn shot  688 step2
+        num_episode=888,  # 1288 learn shot  & clear ball += 0.01
         off_buffer_size=360, # 256 # 360  on policy 见到更多当前策略的表现
         max_episode_steps=360, 
         PPO_kwargs={
@@ -489,7 +493,7 @@ def DoubleDunk_v5_ppo2_test():
             'act_type': 'relu',
             'dist_type': dist_type,
             'critic_coef': 1.5,  
-            'ent_coef': 0.0125,  # 0.0125 learn shot
+            'ent_coef': 0.0125,  # 0.0125 learn shot & clear ball += 0.01
             'max_grad_norm': 1.5,  #  learn shot
             'clip_vloss': True,
             'mini_adv_norm': False,
@@ -514,24 +518,26 @@ def DoubleDunk_v5_ppo2_test():
         reward_func=lambda x: x * 2.0 # learn to shoot
     )
     # 'PPO2_{env_name_str}-2'  lastMeanRewards=-5.20, BEST=1.80, bestTestReward=-0.67
-    agent.load_model(cfg.save_path.replace('-1', '-2'))
-    agent.train()
-    ppo2_train(envs, agent, cfg, wandb_flag=True, wandb_project_name=f"PPO2-{env_name_str}-F",
-                    train_without_seed=True, test_ep_freq=cfg.off_buffer_size * 10, 
-                    online_collect_nums=cfg.off_buffer_size,
-                    test_episode_count=10, 
-                    add_max_step_reward_flag=False,
-                    play_func='ppo2_play',
-                    ply_env=ply_env,
-                    add_entroy_bonus=False,
-                    add_entroy_bonus_coef=cfg.add_entroy_bonus_coef
-    )
-    print(agent.grad_collector.describe())
+    # step2  clear_ball_reward=0.01  &  reduce lr -> 1.5e-4
+    # agent.load_model(cfg.save_path.replace('-1', '-2'))
+    # agent.train()
+    # ppo2_train(envs, agent, cfg, wandb_flag=True, wandb_project_name=f"PPO2-{env_name_str}-F",
+    #                 train_without_seed=True, test_ep_freq=cfg.off_buffer_size * 10, 
+    #                 online_collect_nums=cfg.off_buffer_size,
+    #                 test_episode_count=10, 
+    #                 add_max_step_reward_flag=False,
+    #                 play_func='ppo2_play',
+    #                 ply_env=ply_env,
+    #                 add_entroy_bonus=False,
+    #                 add_entroy_bonus_coef=cfg.add_entroy_bonus_coef
+    # )
+    # print(agent.grad_collector.describe())
     agent.load_model(cfg.save_path)
     agent.eval()
     # env = make_envpool_atria(env_name.split('/')[-1], 1, seed=seed, episodic_life=False, reward_clip=False, max_no_reward_count=200)
     env = make_atari_env(env_name, skip=1, start_skip=start_skip, cut_slices=[[30, 190]], episod_life=episod_life, clip_reward=clip_reward, ppo_train=True, 
-                         fire_flag=fire_flag, gray_flag=gray_flag, max_no_reward_count=max_no_reward_count, resize_inner_area=resize_inner_area, stack_num=stack_num, shape=shape
+                         fire_flag=fire_flag, gray_flag=gray_flag, max_no_reward_count=max_no_reward_count, resize_inner_area=resize_inner_area, stack_num=stack_num, 
+                         shape=shape, double_dunk=True, double_dunk_clear_ball_reward=clear_ball_reward
                         , render_mode='human')()
                         # )() 
 

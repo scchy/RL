@@ -259,7 +259,8 @@ class doubleDunckSkipFrame(gym.Wrapper):
             neg_action_kwargs: Dict=None,
             action_map: Dict = None,
             max_no_reward_count: Optional[int] = None,
-            max_obs: bool = False
+            max_obs: bool = False,
+            clear_ball_reward: float = 0.01
         ):
         """_summary_
 
@@ -279,6 +280,7 @@ class doubleDunckSkipFrame(gym.Wrapper):
         self.max_no_reward_count = max_no_reward_count
         self.no_reward_count = 0
         self.max_obs = max_obs
+        self.clear_ball_reward = clear_ball_reward
         self._obs_buffer = np.zeros((2,) + env.observation_space.shape, dtype=np.uint8)
         height, width = 210, 160
         self.org_arr = np.zeros((height, width), dtype=np.uint8)
@@ -391,7 +393,7 @@ class doubleDunckSkipFrame(gym.Wrapper):
         if trun_over_obs:
             r_fix -= 0.1
         if clear_ball_obs:
-            r_fix += ( -0.1 if fire_a else 0.01)
+            r_fix += ( -0.1 if fire_a else self.clear_ball_reward)
         return r_fix
 
     def ball_owner_now(self, s):
