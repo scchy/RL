@@ -546,43 +546,6 @@ def DoubleDunk_v5_ppo2_test():
 
 
 
-opt_info_ = """
-    ********************************************
-    num_episode=50 | org + buffer_np_save=True  mini_adv_norm=False
-    Episode [ 50 / 50 ](minibatch=128): 100%|████| 50/50 [06:00<00:00,  7.21s/it, lastMeanRewards=3.51, BEST=4.50, bestTestReward=8.30]
-    [ seed=202404 ] Get reward 10.0. Last 100 times
-    [ seed=202404 ] Get reward 13.0. Last 121 times
-    [ PLAY ] Get reward 11.5.
-
-    num_episode=100
-    Episode [ 100 / 100 ](minibatch=128): 100%|███| 100/100 [11:17<00:00,  6.78s/it, lastMeanRewards=3.02, BEST=5.91, bestTestReward=13.10]
-    [ seed=202404 ] Get reward 15.0. Last 128 times
-    [ seed=202404 ] Get reward 10.0. Last 119 times
-    [ PLAY ] Get reward 12.5.
-
-    -----------------------------------------------------------------------------
-    ********************************************
-    num_episode=50 | jit + buffer_np_save=True mini_adv_norm=False
-    Episode [ 50 / 50 ](minibatch=128): 100%|███| 50/50 [05:57<00:00,  7.15s/it, lastMeanRewards=3.51, BEST=4.50, bestTestReward=8.30]
-    [ seed=202404 ] Get reward 10.0. Last 100 times
-    [ seed=202404 ] Get reward 13.0. Last 121 times
-    [ PLAY ] Get reward 11.5.
-
-    num_episode=100
-    Episode [ 100 / 100 ](minibatch=128): 100%|██| 100/100 [11:13<00:00,  6.74s/it, lastMeanRewards=3.02, BEST=5.91, bestTestReward=13.10]
-    [ seed=202404 ] Get reward 15.0. Last 128 times
-    [ seed=202404 ] Get reward 10.0. Last 119 times
-    [ PLAY ] Get reward 12.5.
-
-    ********************************************
-    num_episode=50 | jit + buffer_np_save=False  mini_adv_norm=False
-    Episode [ 50 / 50 ](minibatch=128): 100%|███| 50/50 [05:56<00:00,  7.12s/it, lastMeanRewards=3.51, BEST=4.50, bestTestReward=8.30]
-    [ seed=202404 ] Get reward 10.0. Last 100 times
-    [ seed=202404 ] Get reward 13.0. Last 121 times
-    [ PLAY ] Get reward 11.5.
-"""
-
-
 def Bowling_v5_ppo2_test():
     """
     policyNet: 
@@ -698,11 +661,13 @@ def Bowling_v5_ppo2_test():
     ppo2_play(env, agent, cfg, episode_count=3, play_without_seed=True, render=True, ppo_train=True)
 
 
+
 if __name__ == '__main__':
     # DemonAttack_v5_ppo2_test() # 2024-04-25
     # AirRaid_v5_ppo2_test()
     # Alien_v5_ppo2_test()
     # Breakout_v5_ppo2_test() # 2024-10-30 
-    DoubleDunk_v5_ppo2_test()
+    # todo: Document of DoubleDunk_v5 & Bowling_v5
+    DoubleDunk_v5_ppo2_test() # 2025-04-25 
     # Bowling_v5_ppo2_test() # 2025-03-30
 
