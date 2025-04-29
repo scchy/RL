@@ -9,4 +9,4 @@
   * [《蘑菇书EasyRL》](https://datawhalechina.github.io/easy-rl/#/)
   * [《动手强化学习》](https://hrl.boyuai.com/)
   * [《李宏毅深度强化学习》](http://speech.ee.ntu.edu.tw/~tlkagk/courses_MLDS18.html)
-
+  * [Reinforcement Learning: Theory and Algorithms](https://rltheorybook.github.io/)
