@@ -752,17 +752,17 @@ def Galaxian_v5_ppo2_test():
         device=cfg.device,
         reward_func=None,  
     )
-    agent.load_model(cfg.save_path) # continue learning
-    agent.train()
-    ppo2_train(envs, agent, cfg, wandb_flag=True, wandb_project_name=f"PPO2-{env_name_str}",
-                    train_without_seed=True, test_ep_freq=cfg.off_buffer_size * 10, 
-                    online_collect_nums=cfg.off_buffer_size,
-                    test_episode_count=10, 
-                    add_max_step_reward_flag=False,
-                    play_func='ppo2_play',
-                    ply_env=None
-    )
-    print(agent.grad_collector.describe())
+    # agent.load_model(cfg.save_path) # continue learning
+    # agent.train()
+    # ppo2_train(envs, agent, cfg, wandb_flag=True, wandb_project_name=f"PPO2-{env_name_str}",
+    #                 train_without_seed=True, test_ep_freq=cfg.off_buffer_size * 10, 
+    #                 online_collect_nums=cfg.off_buffer_size,
+    #                 test_episode_count=10, 
+    #                 add_max_step_reward_flag=False,
+    #                 play_func='ppo2_play',
+    #                 ply_env=None
+    # )
+    # print(agent.grad_collector.describe())
     agent.load_model(cfg.save_path)
     agent.eval()
     env = make_atari_env(env_name, skip=4, start_skip=start_skip, cut_slices=None, 
@@ -787,5 +787,5 @@ if __name__ == '__main__':
     # todo:  DoubleDunk_v5 & Bowling_v5 gif
     # DoubleDunk_v5_ppo2_test() # 2025-04-25 
     # Bowling_v5_ppo2_test() # 2025-03-30
-    Galaxian_v5_ppo2_test()
+    Galaxian_v5_ppo2_test() # 2025-04-30
 
