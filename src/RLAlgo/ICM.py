@@ -44,7 +44,8 @@ class cnnICM(nn.Module):
         self.inverse_model = nn.Sequential(
                nn.Linear(512 + 512, 256),
                nn.ReLU(),
-               nn.Linear(256, action_dim)
+               nn.Linear(256, action_dim),
+               nn.Softmax()
         )
     
     @torch.no_grad

@@ -859,7 +859,7 @@ def DoubleDunk_v5_ICM_ppo2_test():
             'act_type': 'relu',
             'dist_type': dist_type,
             'critic_coef': 1.5,  
-            'ent_coef': 0.0125,  # 0.0125 learn shot & clear ball += 0.01
+            'ent_coef': 0.01,
             'max_grad_norm': 1.5,  #  learn shot
             'clip_vloss': True,
             'mini_adv_norm': False,
@@ -868,9 +868,9 @@ def DoubleDunk_v5_ICM_ppo2_test():
             'num_episode': 888,
             # ICM
             "icm_epochs": 1,
-            "icm_batch_size": 256,
+            "icm_batch_size": 1024,
+            'icm_minibatch_size': 512, 
             "icm_intr_reward_strength": 0.01
-
         }
     )
     minibatch_size = cfg.PPO_kwargs['minibatch_size']

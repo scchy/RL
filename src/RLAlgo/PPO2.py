@@ -96,6 +96,13 @@ class icmDataset(Dataset):
         return states, next_states, actions, mask
 
 
+def icm_mini_batch(batch, mini_batch_size, device='cuda'):
+    states, next_states, actions, mask = zip(*batch)
+    rand_ids = np.random.randint(0, len(states), mini_batch_size)
+    return torch.stack(states)[rand_ids, ...], torch.stack(next_states)[rand_ids, ...], \
+            torch.stack(actions)[rand_ids, :], torch.stack(mask)[rand_ids, :]
+
+
 @numba.jit(nopython=True)
 def reversed_comp(gamma, lbd, reward, done, last_v, old_v, advantage, gae, env_idx, td_target, old_v_arr):
     for t in list(range(len(reward)))[::-1]:
@@ -572,7 +579,8 @@ class cnnICMPPO2:
 
         icm_lr = actor_lr
         self.icm_epochs = PPO_kwargs.get('icm_epochs', 1)
-        self.icm_batch_size = PPO_kwargs.get('icm_batch_size', 16)
+        self.icm_batch_size = PPO_kwargs.get('icm_batch_size', 256)
+        self.icm_minibatch_size = PPO_kwargs.get('icm_minibatch_size', 128)
         self.intr_reward_strength = PPO_kwargs.get('icm_intr_reward_strength', 0.02)
         self.icm = cnnICM(PPO_kwargs.get('stack_num', 4), state_dim, action_dim).to(device)
         self.icm_opt = torch.optim.Adam(self.icm.parameters(), lr=icm_lr)
@@ -609,6 +617,11 @@ class cnnICMPPO2:
             mini_batch, 
             mini_batch_size=self.minibatch_size,
             adv_norm=self.mini_adv_norm,
+            device=device
+        )
+        self.icm_min_batch_collate_func = partial(
+            icm_mini_batch,
+            mini_batch_size=self.icm_minibatch_size,
             device=device
         )
         self.update_cnt = 0
@@ -675,8 +688,8 @@ class cnnICMPPO2:
         for env_idx in range(state.size(1)):
             mask = torch.tensor(~done[:, env_idx, ...], dtype=torch.long).to(self.device)
             intr_reward, _, _ = self.icm(state[:, env_idx, ...], next_state[:, env_idx, ...], action[:, env_idx, ...], mask)
-            intr_reward = torch.clamp(self.intr_reward_strength * intr_reward, 0, 1)
-            reward[:, env_idx] = 0.5 * (reward[:, env_idx] + intr_reward.cpu().numpy())
+            intr_reward = torch.clamp(self.intr_reward_strength * intr_reward, -1, 1) # PREDICTION_BETA REWARD_CLIP
+            reward[:, env_idx] = reward[:, env_idx] + intr_reward.cpu().numpy() 
             
             # compute adv 
             if self.share_cnn_flag:
@@ -851,13 +864,14 @@ class cnnICMPPO2:
                 self.opt.step()
         
         
-        self._icm_update(self.icm_epochs, self.icm_batch_size, state, next_state, action, torch.tensor(~done, dtype=torch.long, device=state.device), wandb_f=wandb)
+        self._icm_update(state, next_state, action, torch.tensor(~done, dtype=torch.long, device=state.device), wandb_f=wandb)
         if self.anneal_lr and update_lr:
             self.lr_update(self.opt, self.actor_lr, self.update_cnt)
         return True
 
 
-    def _icm_update(self, epochs, batch_size, curr_states, next_states, actions, mask, wandb_f=None):
+    def _icm_update(self, curr_states, next_states, actions, mask, wandb_f=None):
+        epochs, batch_size = self.icm_epochs, self.icm_batch_size
         epoch_forw_loss = 0
         epoch_inv_loss = 0
         icm_set = icmDataset(curr_states, next_states, actions, mask)
@@ -865,24 +879,29 @@ class cnnICMPPO2:
             icm_set,
             batch_size=batch_size,
             shuffle=True,
-            drop_last=True
+            drop_last=True,
+            collate_fn=self.icm_min_batch_collate_func
         )
+        up_cnt = 0
         for ep in range(epochs):
             for state_, n_state_, action_, mask_ in icm_tr_loader:
                 _, inv_loss, forw_loss = self.icm(state_, n_state_, action_, mask_)
                 epoch_forw_loss += forw_loss.item()
                 epoch_inv_loss += inv_loss.item()
+                # https://github.com/pathak22/noreward-rl/blob/master/src/constants.py
+                #  predloss = ( (1-FORWARD_LOSS_WT) * inv_loss + FORWARD_LOSS_WT * forward_loss) * PREDICTION_LR_SCALE
                 unclip_intr_loss = 10 * (0.2 * forw_loss + 0.8 * inv_loss)
 
                 # take gradient step
                 self.icm_opt.zero_grad()
                 unclip_intr_loss.backward()
                 self.icm_opt.step()
-        
+                up_cnt += 1
+
         if wandb_f is not None:
             wandb_f.log({
-                'Forward_loss': epoch_forw_loss / (epochs * (len(indexes) // batch_size + 1)),
-                'Inv_loss': epoch_inv_loss / (epochs * (len(indexes) // batch_size + 1)),
+                'Forward_loss': epoch_forw_loss / up_cnt,
+                'Inv_loss': epoch_inv_loss / up_cnt,
             })
 
     def save_model(self, file_path):
