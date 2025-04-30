@@ -79,7 +79,7 @@ class memDataset(Dataset):
 
 class icmDataset(Dataset):
     def __init__(self, states: tensor, next_states: tensor, actions: tensor, mask: tensor):
-        super(memDataset, self).__init__()
+        super(icmDataset, self).__init__()
         self.states = states
         self.next_states = next_states
         self.actions = actions
@@ -212,7 +212,7 @@ class PPO2:
             device=device
         )
         self.update_cnt = 0
-        self.anneal_lr = PPO_kwargs.get('act_type', False)
+        self.anneal_lr = PPO_kwargs.get('anneal_lr', False)
         self.max_grad_norm = PPO_kwargs.get('max_grad_norm', 0)
         if self.anneal_lr:
             self.num_iters = PPO_kwargs['num_episode']
@@ -574,7 +574,7 @@ class cnnICMPPO2:
         self.icm_epochs = PPO_kwargs.get('icm_epochs', 1)
         self.icm_batch_size = PPO_kwargs.get('icm_batch_size', 16)
         self.intr_reward_strength = PPO_kwargs.get('icm_intr_reward_strength', 0.02)
-        self.icm = cnnICM(PPO_kwargs.get('stack_num', 4), state_dim, action_dim)
+        self.icm = cnnICM(PPO_kwargs.get('stack_num', 4), state_dim, action_dim).to(device)
         self.icm_opt = torch.optim.Adam(self.icm.parameters(), lr=icm_lr)
         
         if self.share_cnn_flag:
@@ -612,7 +612,7 @@ class cnnICMPPO2:
             device=device
         )
         self.update_cnt = 0
-        self.anneal_lr = PPO_kwargs.get('act_type', False)
+        self.anneal_lr = PPO_kwargs.get('anneal_lr', False)
         self.max_grad_norm = PPO_kwargs.get('max_grad_norm', 0)
         if self.anneal_lr:
             self.num_iters = PPO_kwargs['num_episode']
@@ -673,10 +673,10 @@ class cnnICMPPO2:
         advantage = np.zeros_like(reward) 
         old_v_arr = np.zeros_like(reward) 
         for env_idx in range(state.size(1)):
-            mask = (~done[:, env_idx, ...].detach()).type(torch.long)
-            intr_reward, _, _ = self.icm(action[:, env_idx, ...], state[:, env_idx, ...], next_state[:, env_idx, ...], mask)
+            mask = torch.tensor(~done[:, env_idx, ...], dtype=torch.long).to(self.device)
+            intr_reward, _, _ = self.icm(state[:, env_idx, ...], next_state[:, env_idx, ...], action[:, env_idx, ...], mask)
             intr_reward = torch.clamp(self.intr_reward_strength * intr_reward, 0, 1)
-            reward[:, env_idx] = 0.5 * (reward[:, env_idx] + intr_reward)
+            reward[:, env_idx] = 0.5 * (reward[:, env_idx] + intr_reward.cpu().numpy())
             
             # compute adv 
             if self.share_cnn_flag:
@@ -747,11 +747,11 @@ class cnnICMPPO2:
         frac = max(1e-8, 1.0 - (iteration - 1.0) / self.num_iters)
         if self.share_cnn_flag:
             opt.param_groups[0]["lr"] = frac * lr
-            self.icm_opt[0]['lr'] = frac * lr
+            self.icm_opt.param_groups[0]['lr'] = frac * lr
         else: 
             opt.param_groups[0]["lr"] = frac * lr
             opt.param_groups[1]["lr"] = frac * lr
-            self.icm_opt[0]['lr'] = frac * lr
+            self.icm_opt.param_groups[0]['lr'] = frac * lr
 
     def update(self, samples_buffer: deque, wandb = None, update_lr=True):
         if update_lr:
@@ -851,13 +851,13 @@ class cnnICMPPO2:
                 self.opt.step()
         
         
-        self._icm_update(self.icm_epochs, self.icm_batch_size, state, next_state, action, (~done.detach()).type(torch.long))
+        self._icm_update(self.icm_epochs, self.icm_batch_size, state, next_state, action, torch.tensor(~done, dtype=torch.long, device=state.device), wandb_f=wandb)
         if self.anneal_lr and update_lr:
             self.lr_update(self.opt, self.actor_lr, self.update_cnt)
         return True
 
 
-    def _icm_update(self, epochs, batch_size, curr_states, next_states, actions, mask, wandb=None):
+    def _icm_update(self, epochs, batch_size, curr_states, next_states, actions, mask, wandb_f=None):
         epoch_forw_loss = 0
         epoch_inv_loss = 0
         icm_set = icmDataset(curr_states, next_states, actions, mask)
@@ -879,8 +879,8 @@ class cnnICMPPO2:
                 unclip_intr_loss.backward()
                 self.icm_opt.step()
         
-        if wandb is not None:
-            wandb.log({
+        if wandb_f is not None:
+            wandb_f.log({
                 'Forward_loss': epoch_forw_loss / (epochs * (len(indexes) // batch_size + 1)),
                 'Inv_loss': epoch_inv_loss / (epochs * (len(indexes) // batch_size + 1)),
             })
@@ -888,53 +888,73 @@ class cnnICMPPO2:
     def save_model(self, file_path):
         if not os.path.exists(file_path):
             os.makedirs(file_path)
+            
+        icm_f = os.path.join(file_path, 'PPO_icm.ckpt')
         if self.share_cnn_flag:
             file_path = os.path.join(file_path, 'PPO_shared_agent.ckpt')
             torch.save(self.agent.state_dict(), file_path)
+            torch.save(self.icm.state_dict(), icm_f)
             return 
         act_f = os.path.join(file_path, 'PPO_actor.ckpt')
         critic_f = os.path.join(file_path, 'PPO_critic.ckpt')
         torch.save(self.actor.state_dict(), act_f)
         torch.save(self.critic.state_dict(), critic_f)
+        torch.save(self.icm.state_dict(), icm_f)
 
     def load_model(self, file_path):
+        icm_f = os.path.join(file_path, 'PPO_icm.ckpt')
         if self.share_cnn_flag:
             file_path = os.path.join(file_path, 'PPO_shared_agent.ckpt')
             try:
                 self.agent.load_state_dict(torch.load(file_path))
+                self.icm.load_state_dict(torch.load(icm_f))
             except Exception as e:
                 self.agent.load_state_dict(torch.load(file_path, map_location='cpu'))
+                self.icm.load_state_dict(torch.load(icm_f, map_location='cpu'))
+            
+            self.icm.to(self.device)
+            self.agent.to(self.device)
+            self.icm_opt = torch.optim.Adam(self.icm.parameters(), lr=self.actor_lr)
+            self.opt = torch.optim.Adam(self.agent.parameters(), lr=self.actor_lr, eps=1e-5)
             return 
         act_f = os.path.join(file_path, 'PPO_actor.ckpt')
         critic_f = os.path.join(file_path, 'PPO_critic.ckpt')
         try:
             self.actor.load_state_dict(torch.load(act_f))
             self.critic.load_state_dict(torch.load(critic_f))
+            self.icm.load_state_dict(torch.load(icm_f))
         except Exception as e:
             self.actor.load_state_dict(torch.load(act_f, map_location='cpu'))
             self.critic.load_state_dict(torch.load(critic_f, map_location='cpu'))
+            self.icm.load_state_dict(torch.load(icm_f, map_location='cpu'))
 
         self.actor.to(self.device)
         self.critic.to(self.device)
+        self.icm.to(self.device)
         self.opt = torch.optim.Adam([
             {'params': self.actor.parameters(), 'lr': self.actor_lr, "eps": 1e-5}, 
             {'params': self.critic.parameters(), 'lr': self.actor_lr, "eps": 1e-5}
         ])
+        self.icm_opt = torch.optim.Adam(self.icm.parameters(), lr=self.actor_lr)
         self.update_cnt = 0
 
     def train(self):
         self.training = True
         if self.share_cnn_flag:
             self.agent.train() 
+            self.icm.train()
             return 
         self.actor.train()
         self.critic.train()
+        self.icm.train()
 
     def eval(self):
         self.training = False
         if self.share_cnn_flag:
             self.agent.eval() 
+            self.icm.eval()
             return 
         self.actor.eval()
         self.critic.eval()
+        self.icm.eval()
 

@@ -6,6 +6,7 @@
 # ============================================================================
 from  torch import nn 
 import torch 
+import torch.nn.functional as F
 
 
 class cnnICM(nn.Module):
@@ -18,6 +19,7 @@ class cnnICM(nn.Module):
         super(cnnICM, self).__init__()
         self.state_dim = state_dim
         self.channel_dim = channel_dim
+        self.action_dim = action_dim
         self.cnn_encoder_feature = nn.Sequential(
             nn.Conv2d(channel_dim, 32, kernel_size=8, stride=4),
             nn.ReLU(),
@@ -32,7 +34,8 @@ class cnnICM(nn.Module):
             nn.Linear(cnn_out_dim, 512),
             nn.ReLU()
         )
-        
+        # 离散动作
+        self.action_emb = nn.Embedding(self.action_dim, self.action_dim)
         self.forward_model = nn.Sequential(
             nn.Linear(512 + action_dim, 256),
             nn.ReLU(),
@@ -41,7 +44,7 @@ class cnnICM(nn.Module):
         self.inverse_model = nn.Sequential(
                nn.Linear(512 + 512, 256),
                nn.ReLU(),
-               nn.Linear(256, num_actions)
+               nn.Linear(256, action_dim)
         )
     
     @torch.no_grad
@@ -53,12 +56,14 @@ class cnnICM(nn.Module):
         return self.cnn_encoder_header(self.cnn_encoder_feature(state))
     
     def forward_pred(self, phi_s, action):
-        return self.forward_model(phi_s, action)
-    
+        return self.forward_model(torch.concat([phi_s, self.action_emb(action)], dim=1))
+
     def inverse_pred(self, phi_s, phi_s_next):
-        return self.inverse_model(phi_s, phi_s_next)
-    
+        return self.inverse_model(torch.concat([phi_s, phi_s_next], dim=1))
+
     def forward(self, state, n_state, action, mask):
+        # 离散动作
+        action = action.type(torch.LongTensor).reshape(-1).to(state.device)
         # encode
         phi_s = self.encode_pred(state)
         phi_s_next = self.encode_pred(n_state)
@@ -67,7 +72,7 @@ class cnnICM(nn.Module):
         hat_phi_s_next = self.forward_pred(phi_s.detach(), action)
         # intrinisc reward & forward_loss  
         r_i = 0.5 * nn.MSELoss(reduction='none')(hat_phi_s_next, phi_s_next.detach())
-        r_i = r_i.mean(dim=2) * mask 
+        r_i = r_i.mean(dim=1) * mask 
         forward_loss = r_i.mean()
         
         # inverse 同时用于训练Encoder
