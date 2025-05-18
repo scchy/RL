@@ -799,7 +799,7 @@ def DoubleDunk_v5_ICM_ppo2_test():
     max_no_reward_count = 1088 # 888   
     stack_num = 10
     clear_ball_reward = 0.01 # step1 & step2-try1
-    shape = 96 # 124  bestTest -> -7.43
+    shape = 96  
     if env_pool_flag:
         envs = make_envpool_atria(env_name.split('/')[-1], num_envs, seed=seed, episodic_life=episod_life, reward_clip=clip_reward, max_no_reward_count=max_no_reward_count)
         ply_env = make_envpool_atria(env_name.split('/')[-1], 1, seed=seed, episodic_life=False, reward_clip=False, max_no_reward_count=max_no_reward_count)
@@ -818,7 +818,7 @@ def DoubleDunk_v5_ICM_ppo2_test():
     cfg = Config(
         ply_env if env_pool_flag else envs, 
         # 环境参数
-        save_path=os.path.join(path_, "test_models" ,f'ICM_PPO2_{env_name_str}-1'),   #-2   lastMeanRewards=-5.20, BEST=1.80, bestTestReward=-0.67
+        save_path=os.path.join(path_, "test_models" ,f'ICM_PPO2_{env_name_str}-1'),  
         seed=seed,
         add_entroy_bonus_coef=0,  
         num_envs=num_envs,
@@ -836,10 +836,10 @@ def DoubleDunk_v5_ICM_ppo2_test():
         actor_hidden_layers_dim=[512], 
         critic_hidden_layers_dim=[512, 256, 128],
         # agent参数
-        actor_lr=4.5e-4, # 4.5e-4 learn shot  & clear ball += 0.01
+        actor_lr=4.5e-4, 
         gamma=0.99,
         # 训练参数
-        num_episode=888,
+        num_episode=1088,
         off_buffer_size=360,
         max_episode_steps=360, 
         PPO_kwargs={
@@ -859,18 +859,18 @@ def DoubleDunk_v5_ICM_ppo2_test():
             'act_type': 'relu',
             'dist_type': dist_type,
             'critic_coef': 1.5,  
-            'ent_coef': 0.01,
+            'ent_coef': 0.005,
             'max_grad_norm': 1.5,  #  learn shot
             'clip_vloss': True,
             'mini_adv_norm': False,
 
-            'anneal_lr': False,
-            'num_episode': 888,
+            'anneal_lr': True,
+            'num_episode': 1088,
             # ICM
             "icm_epochs": 1,
             "icm_batch_size": 1024,
             'icm_minibatch_size': 512, 
-            "icm_intr_reward_strength": 0.01
+            "icm_intr_reward_strength": 0.0125
         }
     )
     minibatch_size = cfg.PPO_kwargs['minibatch_size']
@@ -888,7 +888,6 @@ def DoubleDunk_v5_ICM_ppo2_test():
         device=cfg.device,
         reward_func=lambda x: x * 2.0 # learn to shoot
     )
-    # step2  clear_ball_reward=0.01  &  reduce lr -> 1.5e-4
     agent.train()
     ppo2_train(envs, agent, cfg, wandb_flag=True, wandb_project_name=f"ICM_PPO2-{env_name_str}",
                     train_without_seed=True, test_ep_freq=cfg.off_buffer_size * 10, 

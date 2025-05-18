@@ -688,8 +688,9 @@ class cnnICMPPO2:
         for env_idx in range(state.size(1)):
             mask = torch.tensor(~done[:, env_idx, ...], dtype=torch.long).to(self.device)
             intr_reward, _, _ = self.icm(state[:, env_idx, ...], next_state[:, env_idx, ...], action[:, env_idx, ...], mask)
-            intr_reward = torch.clamp(self.intr_reward_strength * intr_reward, -1, 1) # PREDICTION_BETA REWARD_CLIP
-            reward[:, env_idx] = reward[:, env_idx] + intr_reward.cpu().numpy() 
+            intr_reward = torch.clamp(self.intr_reward_strength * intr_reward, 0, 1) # PREDICTION_BETA REWARD_CLIP
+            # print(f"{intr_reward.mean()} {intr_reward.max()}")
+            reward[:, env_idx] = reward[:, env_idx] + intr_reward.cpu().numpy()
             
             # compute adv 
             if self.share_cnn_flag:
