@@ -11,39 +11,49 @@ Reinforcement learning
 目录
 ```text
 src
+├── LLMRL
+│   ├── DataWhale-R1.yaml
+│   ├── train_DataWhale-R1.py
+│   └── train_DataWhale-R1.sh
+├── RAGRL
+│   ├── api_chat_test.py
+│   ├── data
+│   ├── rag.md
+│   ├── rag_utils.py
+│   └── simple_rl_rag.py
 ├── requestment.txt
 ├── RLAlgo
-│   ├── _base_net.py
-│   ├── DDPG.py
-│   ├── DQN.py
-│   ├── grad_ana.py
-│   ├── PPO2_old.py
-│   ├── PPO2.py
-│   ├── PPO.py
-│   ├── __pycache__
-│   ├── SAC.py
-│   └── TD3.py
+│   ├── _base_net.py
+│   ├── DDPG.py
+│   ├── DQN.py
+│   ├── grad_ana.py
+│   ├── ICM.py
+│   ├── PPO2_old.py
+│   ├── PPO2.py
+│   ├── PPO.py
+│   ├── SAC.py
+│   └── TD3.py
 ├── RLUtils
-│   ├── config.py
-│   ├── env_wrapper.py
-│   ├── __init__.py
-│   ├── memory.py
-│   ├── __pycache__
-│   ├── state_util.py
-│   └── trainer.py
+│   ├── config.py
+│   ├── env_wrapper.py
+│   ├── __init__.py
+│   ├── memory.py
+│   ├── state_util.py
+│   └── trainer.py
 ├── setup.py
 ├── test
-│   ├── border_detector.py
-│   ├── test_ddpg.py
-│   ├── test_dqn.py
-│   ├── test_env_explore.ipynb
-│   ├── README.md
-│   ├── test_models
-│   ├── test_ppo_atari.py
-│   ├── test_ppo_new.py
-│   ├── test_ppo.py
-│   ├── test_sac.py
-│   └── test_TD3.py
+│   ├── border_detector.py
+│   ├── README.md
+│   ├── test_ddpg.py
+│   ├── test_dqn.py
+│   ├── test_env_explore.ipynb
+│   ├── test_models
+│   ├── test_ppo_atari.py
+│   ├── test_ppo_new.py
+│   ├── test_ppo.py
+│   ├── test_sac.py
+│   ├── test_TD3.py
+│   └── wandb
 └── TODO.md
 ```
 
@@ -152,5 +162,6 @@ play(env_, agent, cfg, episode_count=3, play_without_seed=True, render=False)
 |[ CarRacing-v2 ](state: (96, 96, 3),action: (3,)(连续 <-1.0 -> 1.0>))| [CarRacing_TD3_test](./src/test/test_TD3.py) | ![TD3-car](./docs/pic/TD3_CarRacing-v2.gif) |
 |[ InvertedPendulum-v4 ](state: (4,),action: (1,)(连续 <-3.0 -> 3.0>))| [InvertedPendulum_TD3_test](./src/test/test_TD3.py) | ![TD3-InvertedPendulum](./docs/pic/TD3_InvertedPendulum-v4.gif) |
 |[ HalfCheetah-v4 ](state: (17,),action: (6,)(连续 <-1.0 -> 1.0>))| [HalfCheetah_v4_ppo_test](./src/test/test_ppo.py)  | ![PPO-PPO_HalfCheetah-v4](./docs/pic/PPO_HalfCheetah-v4.gif) |
-|[ ALE/Breakout-v5 ](state: (210, 160, 3),action: 4(离散 ))| [Breakout_v5_ppo2_test](../../src/test/test_ppo_atari.py)  |![Breakout](./docs/pic/PPO2_Breakout_v5.gif) |
-
+|[ ALE/Breakout-v5 ](state: (210, 160, 3),action: 4(离散 ))| [Breakout_v5_ppo2_test](./src/test/test_ppo_atari.py)  |![Breakout](./docs/pic/PPO2_Breakout_v5.gif) |
+|[ ALE/DoubleDunk-v5 ](state: (210, 160, 3),action: 18(离散 ))| [DoubleDunk_v5_ppo2_test](./src/test/test_ppo_atari.py) | ![DoubleDunk](./docs/pic/PPO2_DoubleDunk_v5.gif)|
+|[ ALE/Galaxian-v5 ](state: (210, 160, 3),action: 6(离散 ))| [Galaxian_v5_ppo2_test](./src/test/test_ppo_atari.py)  |![Galaxian](./docs/pic/PPO2_Galaxian_v5.gif) |

@@ -451,6 +451,7 @@ def DoubleDunk_v5_ppo2_test():
     cfg = Config(
         ply_env if env_pool_flag else envs, 
         # 环境参数
+        # -2: https://wandb.ai/296294812/PPO2-ALE-DoubleDunk-v5-F/runs/qs8ltiws/workspace?nw=nwuser296294812
         save_path=os.path.join(path_, "test_models" ,f'PPO2_{env_name_str}-1'),   #-2   lastMeanRewards=-5.20, BEST=1.80, bestTestReward=-0.67
         seed=seed,
         add_entroy_bonus_coef=0, #0.002,
@@ -839,7 +840,7 @@ def DoubleDunk_v5_ICM_ppo2_test():
         actor_lr=4.5e-4, 
         gamma=0.99,
         # 训练参数
-        num_episode=1088,
+        num_episode=1688,
         off_buffer_size=360,
         max_episode_steps=360, 
         PPO_kwargs={
@@ -859,7 +860,7 @@ def DoubleDunk_v5_ICM_ppo2_test():
             'act_type': 'relu',
             'dist_type': dist_type,
             'critic_coef': 1.5,  
-            'ent_coef': 0.005,
+            'ent_coef': 0.0125,
             'max_grad_norm': 1.5,  #  learn shot
             'clip_vloss': True,
             'mini_adv_norm': False,
@@ -870,13 +871,15 @@ def DoubleDunk_v5_ICM_ppo2_test():
             "icm_epochs": 1,
             "icm_batch_size": 1024,
             'icm_minibatch_size': 512, 
-            "icm_intr_reward_strength": 0.0125
+            "icm_intr_reward_strength": 0.0125,
+            "icm_max_grad_norm": 1.5
         }
     )
     minibatch_size = cfg.PPO_kwargs['minibatch_size']
     max_grad_norm = cfg.PPO_kwargs['max_grad_norm']
     cfg.trail_desc = f"actor_lr={cfg.actor_lr},minibatch_size={minibatch_size},max_grad_norm={max_grad_norm},hidden_layers={cfg.actor_hidden_layers_dim}",
     agent = cnnICMPPO2(
+    # agent = PPO2(
         state_dim=cfg.state_dim,
         actor_hidden_layers_dim=cfg.actor_hidden_layers_dim,
         critic_hidden_layers_dim=cfg.critic_hidden_layers_dim,

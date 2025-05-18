@@ -607,7 +607,7 @@ def ppo2_train(envs, agent, cfg,
                         log_dict['actor_lr'] = opt.param_groups[0]['lr']
                     wandb.log(log_dict)
 
-        update_flag = agent.update(buffer_.buffer, wandb=wandb if wandb_flag else None, update_lr=lr_up_flag)
+        update_flag = agent.update(buffer_.buffer, wandb=wandb if wandb_flag else None) #, update_lr=lr_up_flag)
         if step_lr_flag:
             schedule.step()
 

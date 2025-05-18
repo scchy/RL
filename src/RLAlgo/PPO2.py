@@ -627,6 +627,7 @@ class cnnICMPPO2:
         self.update_cnt = 0
         self.anneal_lr = PPO_kwargs.get('anneal_lr', False)
         self.max_grad_norm = PPO_kwargs.get('max_grad_norm', 0)
+        self.icm_max_grad_norm = PPO_kwargs.get('icm_max_grad_norm', self.max_grad_norm )
         if self.anneal_lr:
             self.num_iters = PPO_kwargs['num_episode']
 
@@ -896,6 +897,7 @@ class cnnICMPPO2:
                 # take gradient step
                 self.icm_opt.zero_grad()
                 unclip_intr_loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.icm.parameters(), self.icm_max_grad_norm) 
                 self.icm_opt.step()
                 up_cnt += 1
 
