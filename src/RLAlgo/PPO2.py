@@ -785,8 +785,10 @@ class cnnICMPPO2:
             drop_last=True,
             collate_fn=self.min_batch_collate_func
         )
-        for _ in range(self.k_epochs):
+        for k_ei in range(self.k_epochs):
+            idx = 0
             for state_, action_, old_log_prob, adv, td_v, before_v in train_loader:
+                idx += 1
                 self.opt.zero_grad()
                 if self.share_cnn_flag:
                     action_dists, critic_out = self.agent.get_dist(state_, self.action_bound)
@@ -804,6 +806,8 @@ class cnnICMPPO2:
                     entropy_loss = action_dists.entropy().mean()
                 # e(log(a/b))
                 ratio = torch.exp(new_log_prob - old_log_prob.detach())
+                # if (idx == 1 and k_ei == 0):
+                #     print(f"{ratio=}")
                 surr1 = ratio * adv
                 surr2 = torch.clamp(ratio, 1 - self.eps, 1 + self.eps) * adv
                 actor_loss = -torch.min(surr1, surr2).mean().float()

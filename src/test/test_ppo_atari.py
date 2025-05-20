@@ -871,8 +871,8 @@ def DoubleDunk_v5_ICM_ppo2_test():
             "icm_epochs": 1,
             "icm_batch_size": 1024,
             'icm_minibatch_size': 512, 
-            "icm_intr_reward_strength": 0.0125,
-            "icm_max_grad_norm": 1.5
+            "icm_intr_reward_strength": 0.01,
+            "icm_max_grad_norm": 3.5
         }
     )
     minibatch_size = cfg.PPO_kwargs['minibatch_size']

@@ -10,6 +10,7 @@
 * [x 6. 基于价值的策略梯度](zh-cn/06-基于价值的策略梯度.md)
 * [7. 基于价值的DQN、DoubleDQN、DuelingDQN](zh-cn/07-基于价值的DQN_DoubleDQN_DuelingDQN.md)
 * [<font color=darkred>8. 基于价值的DRL方法总结</font>](zh-cn/08-基于价值的DRL方法总结.md)
+* [9pre. 置信域算法&RL](zh-cn/09_1_置信域算法.md)
 * [9. 基于策略的PPO(Actor-Critic)](zh-cn/09-基于策略的PPO.md)
 * [<font color=darkred>10. 基于策略的PPO2</font>](zh-cn/10-基于策略的PPO2.md)
 * [11. 基于策略的离线算法DDPG](zh-cn/11-基于策略的离线算法DDPG.md)
@@ -22,6 +23,7 @@
     * [1990: **Time-derivative models of Pavlovian reinforcement**](zh-cn/papers/1990_Time-derivative_models_of_Pavlovian_reinforcement.md)
     * [1991: **Dyna, an integrated architecture for learning, planning, and reacting**](zh-cn/papers/1991_Dyna_an_integrated_architecture_for_learning_planning_and_reacting.md)
     * [1992: **Adapting bias by gradient descent: An incremental version of delta-bar-delta**](zh-cn/papers/1992_Adapting_bias_by_gradient_descent:An_incremental_version_of_delta-bar-delta.md)
+    * [1992: **Gain adaptation beats least squares**](zh-cn/papers/1992_Gain_adaptation_beats_least_squares.md)
     * [2017: **ICM: Curiosity-driven Exploration by Self-supervised Prediction**](zh-cn/papers/2017_ICM.md)
 
 
