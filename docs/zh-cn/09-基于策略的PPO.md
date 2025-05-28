@@ -306,3 +306,63 @@ ac_agent.actor.load_state_dict(torch.load(cfg.save_path))
 play(gym.make('Pendulum-v1', render_mode="human"), ac_agent, cfg)
 ```
 ![在这里插入图片描述](https://img-blog.csdnimg.cn/808516fa3c054a5eb8cea1b57331cc93.gif#pic_center)
+
+
+
+## 9.4 GAE
+
+$A_i=Q(s_i, a_i) -  V(s_i)$为优势函数
+- $Q(s_t, a_t) \simeq r + \gamma  V(s_{t+1})$
+- $A_t  \simeq r + \gamma  V(s_{t+1}) -  V(s_t)$
+
+
+
+$A_t^{2} = r_t + \gamma  [r_{t+1}+\gamma V(s_{t+2})] -  V(s_t)=r_t + \gamma r_{t+1} + \gamma^2 V(s_{t+2})-  V(s_t)$
+
+$A_t^{3} = r_t + \gamma r_{t+1} + \gamma^2 [r_{t+2}+\gamma V(s_{t+3})]-  V(s_t)=r_t + \gamma r_{t+1} + \gamma^2 r_{t+2} + \gamma^3 V(s_{t+3})-  V(s_t)$
+
+
+令$\delta_t = r_{t} + \gamma V(s_{t+1})-  V(s_t)$则
+
+$A_t^{2}=r_t + \gamma \delta_{t+1} + \gamma  V(s_{t+1} -  V(s_t)= \delta_{t}+ \gamma \delta_{t+1}$
+$A_t^{3}= \delta_{t} + \gamma \delta_{t+1} + \gamma^2 \delta_{t+2}$
+$A_t^{n}=\sum_i^{n}\gamma^i \delta_i$
+
+
+##  3.1 GAE化简
+$A_{GAE}(t)=\sum_{i}^T \lambda^i A_t^i = \sum_{i}^T \lambda^i \sum_j^{i}\gamma^j \delta_j$
+
+展开如下
+
+$A_{GAE}(t)= \delta _t + \lambda (\delta _t + \gamma \delta_{t+1})+ \lambda^2 (\delta _t + \gamma \delta_{t+1} + \gamma^2 \delta_{t+2}) + ...=\delta_t (1 + \lambda + \lambda ^ 2 + ...) + \gamma \delta_{t+1}(\lambda + \lambda ^ 2 + ...)+ \gamma^2 \delta_{t+2}(\lambda ^ 2 + ...)$
+
+通过等比数列求和公式，我们得到
+
+
+$A_{GAE}(t) = \delta_t \frac{1*(1-\lambda^n)}{1-\lambda} + \gamma \delta_{t+1} \frac{\lambda*(1-\lambda^{n-1})}{1-\lambda} + \gamma^2 \delta_{t+2} \frac{\lambda^2*(1-\lambda^{n-2})}{1-\lambda}$
+
+
+$\lim_{n\rightarrow \infin} (1-\lambda)A_{GAE}(t) =\lim_{n\rightarrow \infin}  \delta_t 1*(1-\lambda^n) + \gamma \delta_{t+1} \lambda*(1-\lambda^{n-1}) + \gamma^2 \delta_{t+2} \lambda^2*(1-\lambda^{n-2})= \delta_t 1*1+ \gamma \delta_{t+1} \lambda*1 + \gamma^2 \delta_{t+2} \lambda^2*1= \delta_t + \gamma \delta_{t+1} \lambda + \gamma^2 \delta_{t+2} \lambda^2 + ... =\sum_i^n (\gamma  \lambda)^i \delta_{t+i}$
+
+用$(1-\lambda)A_{GAE}(t)$作为广义优势估计$A_{GAE}(t)= \sum_i^n (\gamma  \lambda)^i \delta_{t+i}$
+- $\lambda = 0$: $A_{GAE}(t) =A_t^{1}$
+- $\lambda = 1$: $A_{GAE}(t) =\sum_i^n \gamma^i \delta_{t+i}=\sum A_t^{i}$ 整个轨迹的采样都会对GAE有贡献。
+
+
+所以可以用它来平衡方差-偏差trade-off问题:
+- 当$\lambda$较大时，GAE会更多利用轨迹采样历史信息，<font color=darkred>从而减小偏差，但是可能会增加方差</font>。
+- 而$\lambda$较小时，GAE利用更少的轨迹采样历史信息，而更偏向于使用短期的TD估计，所以<font color=darkred>可以减小方差，但是可能会增大偏差</font>。
+
+
+$A_{GAE}(t)= \sum_i^n (\gamma  \lambda)^i \delta_{t+i}$ Python简单实现
+```python
+def compute_GAE(gamma, lmbda, td_delta):
+    td_delta = td_delta.detach().numpy()
+    advantage_list = []
+    advantage = 0.0
+    for delta in td_delta[::-1]:
+        advantage = gamma * lmbda * advantage + delta
+        advantage_list.append(advantage)
+    advantage_list.reverse()
+    return torch.tensor(advantage_list, dtype=torch.float)
+```

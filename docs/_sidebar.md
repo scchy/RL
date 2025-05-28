@@ -22,8 +22,8 @@
     * [1988: **Learning to predict by the methods of temporal differences**](zh-cn/papers/1988_Learning_to_predict_by_the_methods_of_temporal_differences.md)
     * [1990: **Time-derivative models of Pavlovian reinforcement**](zh-cn/papers/1990_Time-derivative_models_of_Pavlovian_reinforcement.md)
     * [1991: **Dyna, an integrated architecture for learning, planning, and reacting**](zh-cn/papers/1991_Dyna_an_integrated_architecture_for_learning_planning_and_reacting.md)
-    * [1992: **Adapting bias by gradient descent: An incremental version of delta-bar-delta**](zh-cn/papers/1992_Adapting_bias_by_gradient_descent:An_incremental_version_of_delta-bar-delta.md)
+    * [1992: **Adapting bias by gradient descent: An incremental version of delta-bar-delta**](zh-cn/papers/1992_Adapting_bias_by_gradient_descent_An_incremental_version_of_delta-bar-delta.md)
     * [1992: **Gain adaptation beats least squares**](zh-cn/papers/1992_Gain_adaptation_beats_least_squares.md)
     * [2017: **ICM: Curiosity-driven Exploration by Self-supervised Prediction**](zh-cn/papers/2017_ICM.md)
-
+* [16. RLHF VS deepseek-r1.md](zh-cn/16-RLHF_VS_deepseek-r1.md)
 
