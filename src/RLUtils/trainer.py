@@ -1,5 +1,5 @@
 
-from .memory import replayBuffer
+from .memory import replayBuffer, rolloutReplayBuffer
 from .state_util import Pendulum_dis_to_con
 import torch
 from tqdm.auto import tqdm
@@ -323,7 +323,7 @@ def train_on_policy(env, agent, cfg,
     policy_idx = 0
     for i in tq_bar:
         if update_flag:
-            buffer_ = replayBuffer(cfg.off_buffer_size)
+            buffer_ = replayBuffer(cfg.off_buffer_size, gamma=cgf.gamma)
             
         if (1 + i) % test_ep_freq == 0 and policy_idx > 0:
             freq_ep_reward = play(env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False)
@@ -693,7 +693,7 @@ def acer_train_off_policy(
         test_episode_count=3,
         done_fix_flag=False
     ):
-    buffer = replayBuffer(cfg.off_buffer_size)
+    buffer = rolloutReplayBuffer(cfg.off_buffer_size)
     tq_bar = tqdm(range(cfg.num_episode))
     rewards_list = deque(maxlen=10)
     now_reward = -np.inf

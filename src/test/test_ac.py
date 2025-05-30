@@ -37,7 +37,6 @@ def A2CER_test():
     action_contiguous_ = False # 是否将连续动作离散化
     print("gym.__version__ = ", gym.__version__ )
     path_ = os.path.dirname(__file__)
-    dist_type = 'norm'
     cfg = Config(
         env, 
         # 环境参数
@@ -46,19 +45,20 @@ def A2CER_test():
         actor_hidden_layers_dim=[200, 200], 
         critic_hidden_layers_dim=[200, 200],
         # agent参数
-        actor_lr=2.5e-4, 
-        critic_lr=4.5e-4, 
+        seed=202505,
+        actor_lr=4.5e-3, 
+        critic_lr=5.5e-3, 
         gamma=0.99,
         # 训练参数
-        num_episode=300,
-        off_minimal_size=2048,
-        off_buffer_size=4096,
-        max_episode_steps=200, 
+        num_episode=100,
+        off_minimal_size=3*50,
+        off_buffer_size=3*50,
+        max_episode_steps=300, 
         A2C_kwargs={
             'k_epochs': 3, # 3, 
-            'minibatch_size': 512, 
+            'minibatch_size': 20, 
             'act_type': 'relu',
-            'dist_type': dist_type,
+            'dist_type': 'norm',
             'max_grad_norm': 1.5
         }
     )

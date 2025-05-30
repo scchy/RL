@@ -94,7 +94,7 @@ class A2CER:
         self.q_opt = optim.RMSprop(self.q_net.parameters(), lr=critic_lr)
         self.q_cost_func = nn.MSELoss()
         
-        self.critic = valueNet(state_dim, critic_hidden_layers_dim, action_dim).to(device)
+        self.critic = valueNet(state_dim, critic_hidden_layers_dim, act_type=A2C_kwargs.get('act_type', 'relu')).to(device)
         self.v_opt = optim.RMSprop(self.critic.parameters(), lr=critic_lr)
         
         self.actor = policyNet(state_dim, actor_hidden_layers_dim, action_dim, continue_action_flag=A2C_kwargs.get('continue_action_flag', False)).to(device)
@@ -172,13 +172,14 @@ class A2CER:
         return q_retraces[:-1]
 
     def update(self, samples_buffer, wandb = None, update_lr=True):
-        state, action, reward, next_state, done, actor_log_prob = zip(*samples_buffer)
+        state, action, reward, next_state, done, actor_log_prob, R = zip(*samples_buffer)
         state = torch.FloatTensor(np.stack(state)).to(self.device)
         action = torch.FloatTensor(np.stack(action)).to(self.device)
         reward = torch.LongTensor(np.stack(reward)).to(self.device)
         next_state = torch.FloatTensor(np.stack(next_state)).to(self.device)
+        actor_log_prob = torch.FloatTensor(np.stack(actor_log_prob)).to(self.device)
         done = np.stack(done) # .to(self.device)
-        R = self.trajectory_advantage(reward, state, done, action)
+        R = torch.LongTensor(np.stack(R)).to(self.device)
         d_set = memDataset(state, action, actor_log_prob, R)
         train_loader = DataLoader(
             d_set,
@@ -204,16 +205,6 @@ class A2CER:
                 self.a_opt.zero_grad()
                 actor_loss.backward()
                 self.a_opt.step()
-                
-    def trajectory_advantage(self, reward, state, done, actions):
-        k_step = len(reward) - 1
-        R = torch.zeros_like(reward)
-        r = 0
-        for t in reversed(range(k_step)):
-            r = reward[t] + self.gamma * r * (1 - done[t])
-            R[t] = r
-        # adv = R - self.critic(state[0])
-        return R 
 
 
 
