@@ -231,7 +231,10 @@ def play(env_in, env_agent, cfg, episode_count=2, action_contiguous=False, play_
         while not done:
             if render:
                 env.render()
-            a = env_agent.policy(s)
+            try:
+                a = env_agent.policy(s)
+            except Exception as e:
+                a, _ = env_agent.policy(s)
             if action_contiguous:
                 c_a = Pendulum_dis_to_con(a, env, cfg.action_dim)
                 n_state, reward, terminated, truncated, info = env.step([c_a])
@@ -677,3 +680,68 @@ def ppo2_play(env_in, env_agent, cfg, episode_count=2, action_contiguous=False, 
         print(f'[ PLAY ] Get reward {np.mean(ep_reward_record)}.')
         return np.mean(ep_reward_record) # np.percentile(ep_reward_record, 50)
     return -float('inf')
+
+
+def acer_train_off_policy(
+        env, agent ,cfg, 
+        action_contiguous=False, 
+        reward_func=None, train_without_seed=False,
+        wandb_flag=False,
+        wandb_project_name="RL-acer_train_off_policy",
+        update_every=1,
+        test_ep_freq=100,
+        test_episode_count=3,
+        done_fix_flag=False
+    ):
+    buffer = replayBuffer(cfg.off_buffer_size)
+    tq_bar = tqdm(range(cfg.num_episode))
+    rewards_list = deque(maxlen=10)
+    now_reward = -np.inf
+    recent_best_reward = -np.inf
+    best_ep_reward = -np.inf
+    policy_idx = 0
+    tt_steps = 0
+    for i in tq_bar:
+        rand_seed = np.random.randint(0, 999999)
+        final_seed = rand_seed if train_without_seed else cfg.seed
+        s, _ = env.reset(seed=final_seed)
+        tq_bar.set_description(f'Episode [ {i+1} / {cfg.num_episode}|(seed={final_seed}) ]')
+        done = False
+        episode_rewards = 0
+        steps = 0
+        while not done:
+            a, log_prob = agent.policy(s)
+            n_s, r, terminated, truncated, _ = env.step(a)
+            done = np.logical_or(terminated, truncated)
+            steps += 1
+            tt_steps += 1
+            ep_r = r
+            buffer.add_more(s, a, r, n_s, done, log_prob)
+            s = n_s
+            episode_rewards += ep_r
+            # buffer update
+            if (len(buffer) >= cfg.off_minimal_size) and (tt_steps % update_every == 0):
+                samples = buffer.sample(cfg.sample_size)
+                agent.update(samples, wandb=wandb if wandb_flag else None)
+
+            if (episode_rewards >= cfg.max_episode_rewards) or (steps >= cfg.max_episode_steps):
+                break
+
+        if (len(buffer) >= cfg.off_minimal_size) and (i >= 10):
+            rewards_list.append(episode_rewards)
+            now_reward = np.mean(rewards_list)
+        if (now_reward > recent_best_reward) and (i >= 10) and (len(buffer) >= cfg.off_minimal_size):
+            # best 时也进行测试
+            test_ep_reward = play(env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False)
+
+            if test_ep_reward > best_ep_reward:
+                best_ep_reward = test_ep_reward
+            
+            recent_best_reward = now_reward
+
+        tq_bar.set_postfix({
+            "steps": steps,
+            'lastMeanRewards': f'{now_reward:.2f}',
+            'BEST': f'{recent_best_reward:.2f}',
+            "bestTestReward": f'{best_ep_reward:.2f}'
+        })

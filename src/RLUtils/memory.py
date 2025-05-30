@@ -18,6 +18,9 @@ class replayBuffer:
         else:
             self.buffer.append( (state, action, reward, next_state, done) )
 
+    def add_more(self, *args):
+        self.buffer.append( args )
+
     def __len__(self):
         return len(self.buffer)
     

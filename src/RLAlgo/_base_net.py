@@ -328,10 +328,12 @@ class PPOPolicyBetaNet(nn.Module):
                  state_feature_share: bool=False,
                  dist_type='beta', 
                  act_type='relu',
-                 act_attention_flag=False):
+                 act_attention_flag=False,
+                 continue_action_flag=True):
         super(PPOPolicyBetaNet, self).__init__()
         if state_feature_share:
             state_dim = 512
+        self.continue_action_flag = continue_action_flag
         self.act_attention_flag = act_attention_flag
         print(f'PPOPolicyBetaNet.act_attention_flag={self.act_attention_flag}')
         self.dist_type = dist_type
@@ -375,8 +377,13 @@ class PPOPolicyBetaNet(nn.Module):
         if self.dist_type == 'beta':
             mean = alpha / (alpha + beta)  # The mean of the beta distribution
         return mean
-    
+
     def get_dist(self, x, max_action=1.0):
+        if self.continue_action_flag:
+            return self.get_continue_dist(x, max_action)
+        return self.get_sperate_dist(x)
+
+    def get_continue_dist(self, x, max_action=1.0):
         alpha, beta, mean = self.forward(x)
         if self.dist_type == "beta":
             dist = torch.distributions.Beta(alpha, beta)
@@ -386,6 +393,11 @@ class PPOPolicyBetaNet(nn.Module):
         log_std = self.log_std.expand_as(mean) 
         std = torch.exp(log_std)  # The reason we train the 'log_std' is to ensure std=exp(log_std)>0
         dist = torch.distributions.Normal(mean, std)
+        return dist
+
+    def get_sperate_dist(self, x):
+        _, _, mean = self.forward(x)
+        dist = torch.distributions.Categorical(logits=mean)
         return dist
 
     def __init(self):
