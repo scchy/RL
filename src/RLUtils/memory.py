@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from collections import deque
 import random
+import copy
 
 
 class replayBuffer:
@@ -30,20 +31,24 @@ class replayBuffer:
     
 
 class rolloutReplayBuffer(replayBuffer):
-    def __init__(self, capacity: int, np_save: bool=False, gamma=0.99):
+    def __init__(self, capacity: int, step_chunk_size: int, np_save: bool=False, gamma=0.99, T=1.2, weight_sample=True):
         super().__init__(capacity, np_save)
+        self.capacity = capacity
         self.one_traj = []
         self.traj_weight = []
+        self.step_chunk_size = step_chunk_size
         self.gamma = gamma 
-        
+        self.T = T
+        self.weight_sample = weight_sample
+
     def add_more(self, *args):
         # s, a, r, n_s, done, log_prob, R
         self.one_traj.append([*args, 0])
-        if args[4]:
+        if (len(self.one_traj) == self.step_chunk_size) or args[4]:
             self.trajectory_advantage()
             self.buffer.append( self.one_traj )
             self.one_traj = []
-        
+
     def __len__(self):
         return sum(len(tj) for tj in self.buffer)
 
@@ -53,12 +58,13 @@ class rolloutReplayBuffer(replayBuffer):
         for idx, tj in enumerate(self.buffer):
             buffer_.extend(tj)
             w.extend([self.traj_weight[idx]] * len(tj))
-            
+        
+        # print(f'{len(buffer_)=} {len(self.buffer)=}')
         samples = np.random.choice(np.arange(len(buffer_)), batch_size, p=self.softmax_w(w))
         return [buffer_[i] for i in samples]
     
     def softmax_w(self, w):
-        p_ = np.array(w)
+        p_ = np.array(w) / self.T
         return np.exp(p_) / np.exp(p_).sum()
 
     def trajectory_advantage(self):
@@ -69,4 +75,4 @@ class rolloutReplayBuffer(replayBuffer):
             self.one_traj[t][-1] = r
         # adv = R - self.critic(state[0])
         
-        self.traj_weight.append(r)
+        self.traj_weight.append(r if self.weight_sample else 1.0)

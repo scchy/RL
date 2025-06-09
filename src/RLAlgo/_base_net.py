@@ -1079,3 +1079,92 @@ class PPOSharedCNN(nn.Module):
             orthogonal_init(layer['linear'], gain=np.sqrt(2))
         # critic head
         orthogonal_init(self.head, gain=1.0)
+
+
+class ActorCriticorMLP(nn.Module):
+    def __init__(
+        self, 
+        action_dim, 
+        state_dim, 
+        hidden_layers_dim, 
+        crtic_hidden_layer_dim=None, 
+        actor_hidden_layer_dim=None, 
+        act_type='relu',
+        action_type='Cat'
+    ):
+        super(ActorCriticorMLP, self).__init__()
+        self.act_type = act_type
+        self.action_type = action_type
+        if crtic_hidden_layer_dim is None:
+            crtic_hidden_layer_dim = []
+        if actor_hidden_layer_dim is None:
+            actor_hidden_layer_dim = []
+
+        self.features = nn.ModuleList()
+        for idx, h in enumerate(hidden_layers_dim):
+            self.features.append(nn.ModuleDict({
+                'linear': nn.Linear(hidden_layers_dim[idx-1] if idx else state_dim, h),
+                'linear_activation': nn.ReLU(inplace=True) if act_type == 'relu' else nn.Tanh()
+            }))
+        # critic 
+        out_feature_dim = hidden_layers_dim[-1]
+        self.critic_features = nn.ModuleList()
+        for idx, h in enumerate(crtic_hidden_layer_dim):
+            self.critic_features.append(nn.ModuleDict({
+                'linear': nn.Linear(crtic_hidden_layer_dim[idx-1] if idx else out_feature_dim, h),
+                'linear_activation': nn.ReLU(inplace=True) if act_type == 'relu' else nn.Tanh()
+            }))
+        critic_head_dim = crtic_hidden_layer_dim[-1] if len(crtic_hidden_layer_dim) else out_feature_dim
+        self.critic = nn.Linear(critic_head_dim, 1)
+        
+        self.actor_features = nn.ModuleList()
+        for idx, h in enumerate(actor_hidden_layer_dim):
+            self.actor_features.append(nn.ModuleDict({
+                'linear': nn.Linear(actor_hidden_layer_dim[idx-1] if idx else out_feature_dim, h),
+                'linear_activation': nn.ReLU(inplace=True) if act_type == 'relu' else nn.Tanh()
+            }))
+        actor_head_dim = actor_hidden_layer_dim[-1] if len(actor_hidden_layer_dim) else out_feature_dim
+        self.actor_v = nn.Linear(actor_head_dim, action_dim)
+        self.log_std = nn.Parameter(torch.zeros(1, action_dim))
+        self.__init()
+
+    def __init(self):
+        for feature_l in [self.actor_features, self.critic_features, self.features]:
+            for layer in feature_l:
+                orthogonal_init(layer['linear'], gain=np.sqrt(2))
+        orthogonal_init(self.critic, gain=1.0)
+        orthogonal_init(self.actor_v, gain=0.01)
+
+    def get_model_list_feature(self, x, list_layer):
+        for layer in list_layer:
+            x_lin = layer['linear'](x)
+            if self.act_type.lower() == 'tanh':
+                x = layer['linear_activation'](x_lin.clip(-200.0, 200.0))
+                continue
+            x = layer['linear_activation'](x_lin)
+        return x
+
+    def get_value_with_fearure(self, x):
+        x = self.get_model_list_feature(x, self.critic_features)
+        return self.critic(x) 
+    
+    def get_dist_with_fearure(self, x):
+        x = self.get_model_list_feature(x, self.actor_features)
+        mean = self.actor_v(x)
+        if self.action_type.lower() == 'cat':
+            dist = torch.distributions.Categorical(logits=mean)
+        else:
+            log_std = self.log_std.expand_as(mean) 
+            std = torch.exp(log_std)  
+            dist = torch.distributions.Normal(mean, std)
+        return dist
+    
+    def forward(self, x, tp=None):
+        x = self.get_model_list_feature(x, self.features)
+        dist = self.get_dist_with_fearure(x)
+        if tp == 'get_dist':
+            return dist 
+        
+        c = self.get_value_with_fearure(x) 
+        return dist, c
+

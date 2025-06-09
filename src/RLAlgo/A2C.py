@@ -2,7 +2,7 @@
 # Author: Scc_hy
 # Create Date: 2025-05-26
 # Func: A2C
-# reference: https://chihhuiho.github.io/project/ucsd_ece_276/report.pdf
+# reference: Main Paper https://chihhuiho.github.io/project/ucsd_ece_276/report.pdf
 #            OpenAI Baselines: ACKTR & A2C https://openai.com/index/openai-baselines-acktr-a2c/
 #            Sample Efficient Actor-Critic with Experience Replay https://arxiv.org/abs/1611.01224 
 #            baselines3 https://github.com/DLR-RM/stable-baselines3/blob/master/stable_baselines3/common/buffers.py 
@@ -11,24 +11,24 @@
 import typing as typ
 import numpy as np
 import torch 
+import os
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import torch.multiprocessing as mp
 from torch.utils.data import Dataset, DataLoader
 from torch import tensor
-from ._base_net import QNet  
-from ._base_net import PPOValueNet as valueNet
-from ._base_net import PPOPolicyBetaNet as policyNet
+from ._base_net import ActorCriticorMLP
 
  
 class memDataset(Dataset):
-    def __init__(self, states: tensor, actions: tensor, old_log_probs: tensor, ut: tensor):
+    def __init__(self, states: tensor, actions: tensor, old_log_probs: tensor, ut: tensor, done: tensor):
         super(memDataset, self).__init__()
         self.states = states
         self.actions = actions
         self.old_log_probs = old_log_probs
         self.ut = ut
+        self.done = done
 
     def __len__(self):
         return len(self.states)
@@ -38,11 +38,13 @@ class memDataset(Dataset):
         actions = self.actions[index]
         old_log_probs = self.old_log_probs[index]
         ut = self.ut[index]
-        return states, actions, old_log_probs, ut 
+        done = self.done[index]
+        return states, actions, old_log_probs, ut, done
     
 
-class A2CER:
+class SEA2CER:
     """ 
+    Sample Efficient Actor-Critic with Experience Replay : adding experience replay to original A2C algrithm
     
     PaperIdea: A3C + ACER (Actor-Critic with Expirence Reply); on-policy -> off-policy
     problem: 
@@ -59,6 +61,11 @@ class A2CER:
     policyLoss = \frac{\partial log(\pi(a|s, \theta))}{\partial \theta} A
     Advantage: A = r+\gamma V(s_{t+1}) - V(s_t)
     
+    A3C: 3个核idea
+    1. operates on fixed-length segments of experience (say, 20 timesteps) and uses these segments to compute estimators of the returns and advantage function.
+    2. architectures that 【share layers】 between the policy and value function. 
+    3. the networks are updated asynchronously.
+    
     Sample Efficient Actor-Critic with Experience Replay https://arxiv.org/abs/1611.01224 
     $Q^{ret}(x_t, a_t) = r_t + \gamma \hat{\rho}_{t+1}[Q^{ret}(x_{t+1}, a_{t+1}) - Q(x_{t+1}, a_{t+1})] + \gamma V(x_{t+1})$
     - consider only \lambda = 1
@@ -70,106 +77,56 @@ class A2CER:
     def __init__(
         self,
         state_dim: int,
+        action_dim: int,
+        hidden_layers_dim: typ.List[int],
         actor_hidden_layers_dim: typ.List[int],
         critic_hidden_layers_dim: typ.List[int],
-        action_dim: int,
-        actor_lr: float,
-        critic_lr: float,
+        learning_rate: float,
         gamma: float,
         A2C_kwargs: typ.Dict,
         device: torch.device   
     ):
         self.state_dim = state_dim
+        self.hidden_layers_dim = hidden_layers_dim
         self.actor_hidden_layers_dim = actor_hidden_layers_dim
         self.critic_hidden_layers_dim = critic_hidden_layers_dim
         self.action_dim = action_dim
-        self.actor_lr = actor_lr
-        self.critic_lr = critic_lr
         self.gamma = gamma
         self.device = device
         self.clip = A2C_kwargs.get('clip', 0.5)
+        self.entroy_coef = A2C_kwargs.get('entroy_coef', None)
+        self.entroy_org = self.entroy_coef
+        self.critic_coef = A2C_kwargs.get('critic_coef', 1.0)
+        self.max_grad_norm = A2C_kwargs.get('max_grad_norm', 0)
         self.k_epochs = A2C_kwargs.get('k_epochs', 3)
+        self.normalize_adv = A2C_kwargs.get('normalize_adv', False)
         self.minibatch_size = A2C_kwargs.get('minibatch_size', 256)
-        self.q_net = QNet(state_dim, critic_hidden_layers_dim, action_dim).to(device)
-        self.q_opt = optim.RMSprop(self.q_net.parameters(), lr=critic_lr)
-        self.q_cost_func = nn.MSELoss()
-        
-        self.critic = valueNet(state_dim, critic_hidden_layers_dim, act_type=A2C_kwargs.get('act_type', 'relu')).to(device)
-        self.v_opt = optim.RMSprop(self.critic.parameters(), lr=critic_lr)
-        
-        self.actor = policyNet(state_dim, actor_hidden_layers_dim, action_dim, continue_action_flag=A2C_kwargs.get('continue_action_flag', False)).to(device)
-        self.a_opt = optim.RMSprop(self.actor.parameters(), lr=actor_lr)
+        self.learning_rate = learning_rate
+        self.actor_critic = ActorCriticorMLP(
+            action_dim, 
+            state_dim, 
+            hidden_layers_dim, 
+            critic_hidden_layers_dim, 
+            actor_hidden_layers_dim, 
+            act_type=A2C_kwargs.get('act_type', 'relu'), 
+            action_type=A2C_kwargs.get('env_action_type', 'Cat')
+        ).to(device)
+        self.ac_opt = optim.RMSprop(self.actor_critic.parameters(), lr=learning_rate)
     
     def train(self):
-        self.q_net.train()
-        self.critic.train()
-        self.actor.train()
-    
+        self.actor_critic.train()
+
     def eval(self):
-        self.q_net.eval()
-        self.critic.eval()
-        self.actor.eval()
+        self.actor_critic.eval()
+    
+    def update_entroy_coef(self, ep, num_episode):
+        self.entroy_coef = max(self.entroy_org * (1 - ep/num_episode/10), 0.01)
     
     def policy(self, state):
         state = torch.FloatTensor(np.array([state])).to(self.device)
-        ac_dist = self.actor.get_dist(state)
+        ac_dist = self.actor_critic(state, 'get_dist')
         a = ac_dist.sample()
         return a.detach().cpu().numpy()[0], ac_dist.log_prob(a).detach().cpu().numpy()
-
-    def get_value(self, state, a=None):
-        q_t = self.q_net(state)
-        ac_dist = self.actor.get_dist(state)
-        if a is None:
-            return (q_t * ac_dist.probs).sum(1, keepdim=True)
-        return ac_dist.probs, q_t, (q_t * ac_dist.probs).sum(1, keepdim=True), ac_dist.log_prob(a), ac_dist.entropy().mean()
-
-    def acer_update(self, samples_buffer, wandb = None, update_lr=True):
-        state, action, reward, next_state, done, sample_log_p = zip(*samples)
-        state = torch.FloatTensor(np.stack(state)).to(self.device)
-        action = torch.FloatTensor(np.stack(action)).to(self.device)
-        reward = np.stack(reward).to(self.device)
-        next_state = torch.FloatTensor(np.stack(next_state)).to(self.device)
-        done = np.stack(done).to(self.device)
-        
-        act_prob, q_t, v_t, log_prob, ac_entropy = self.get_value(state, action)
-        rho = act_prob/(sample_log_p + 1e-10) 
-        q_i = q_t.gather(1, action)
-        rho_i = rho.gather(1, action)
-        with torch.no_grad():
-            next_v = get_value(next_state)
-        q_retraces = self.compute_q_ret(reward, done, v_t, q_i, rho_i.clamp(max=self.clip), next_v)
-        adv = q_retraces - v_t
-        
-        # value net loss 
-        self.q_opt.zero_grad()
-        loss = self.q_cost_func(q_retraces.float(), q_t.float())
-        loss.backward()
-        self.q_opt.step()
-        
-        # \partial log(\pi(a|s, \theta))}{\partial \theta} A
-        a, log_prob = self.actor(state)
-        actor_loss = -( (rho_i.clamp(max=self.clip) * adv).detach() * log_prob ).mean()
-        
-        # Bias correction for truncation
-        adv_bc = (q_t - v_t)
-        logf_bc = (act_prob + 1e-10).log()
-        gain_bc = logf_bc * ((adv_bc * (1.0 - (self.clip / (rho + 1e-10))).clamp(min=0) * act_prob).detach())
-        actor_loss = actor_loss - gain_bc.sum(-1).mean() - ac_entropy
-        
-        self.a_opt.zero_grad()
-        actor_loss.backward()
-        self.a_opt.step()
-
-    def compute_q_ret(self, r, masks, values, q_i, rho_i, next_v):
-        num_steps, num_processes = r.shape[:2]
-        q_ret_list = r.new(num_steps + 1, num_processes, 1).zero_()
-        q_ret_list[-1] = next_v
-        for st in reversed(range(r.size(0))):
-            # r_t + \gamma \hat{\rho}_{t+1}[Q^{ret}(x_{t+1}, a_{t+1}) - Q(x_{t+1}, a_{t+1})] + \gamma V(x_{t+1})
-            q_ret_ = r[st] + self.gamma * q_ret_list[step + 1] * masks[step+1]
-            q_ret_list[st] = q_ret_
-            q_ret_ = rho_i[st] * (q_ret_list[st] - q_i[st]) + values[st]
-        return q_retraces[:-1]
 
     def update(self, samples_buffer, wandb = None, update_lr=True):
         state, action, reward, next_state, done, actor_log_prob, R = zip(*samples_buffer)
@@ -180,7 +137,7 @@ class A2CER:
         actor_log_prob = torch.FloatTensor(np.stack(actor_log_prob)).to(self.device)
         done = np.stack(done) # .to(self.device)
         R = torch.LongTensor(np.stack(R)).to(self.device)
-        d_set = memDataset(state, action, actor_log_prob, R)
+        d_set = memDataset(state, action, actor_log_prob, R, torch.Tensor(done).to(self.device))
         train_loader = DataLoader(
             d_set,
             batch_size=self.minibatch_size,
@@ -189,121 +146,48 @@ class A2CER:
         )
 
         for mini_ep in range(self.k_epochs):
-            for state_, action_, old_log_prob, R_ in train_loader:
-                new_dist = self.actor.get_dist(state_)
+            # 梯度累积
+            self.ac_opt.zero_grad()
+            for state_, action_, old_log_prob, R_, d_ in train_loader:
+                new_dist, new_v = self.actor_critic(state_)
+                entropy_loss = new_dist.entropy().mean()
                 new_log_prob = new_dist.log_prob(action_)
+                try:
+                    new_log_prob = new_log_prob.sum(1)
+                    old_log_prob = old_log_prob.sum(1).sum(1)
+                except Exception as e:
+                    pass
                 imp = torch.exp(new_log_prob - old_log_prob.detach())
+
+                adv = (R_ - new_v.view(-1)) * (1 - d_)
                 
-                adv = R_ - self.critic(state_)
+                critic_loss = 0.5 * (adv ** 2).mean() 
+                if self.normalize_adv:
+                    adv = (adv - adv.mean()) / (adv.std() + 1e-8) 
+
                 actor_loss = -((imp * adv).detach() * new_log_prob).mean()
+                if self.entroy_coef is not None:
+                    actor_loss -= self.entroy_coef * entropy_loss
+                total_loss = actor_loss + self.critic_coef * critic_loss
+                total_loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm) 
+            
+            self.ac_opt.step()
 
-                self.v_opt.zero_grad()
-                loss = 0.5 * (adv ** 2).mean()
-                loss.backward()
-                self.v_opt.step()
+    def save_model(self, file_path):
+        if not os.path.exists(file_path):
+            os.makedirs(file_path)
 
-                self.a_opt.zero_grad()
-                actor_loss.backward()
-                self.a_opt.step()
+        ac_f = os.path.join(file_path, 'SEA2CER_ac.ckpt')
+        torch.save(self.actor_critic.state_dict(), ac_f)
 
-
-
-class A2C:
-    def __init__(
-        self,
-        state_dim: int,
-        actor_hidden_layers_dim: typ.List[int],
-        critic_hidden_layers_dim: typ.List[int],
-        action_dim: int,
-        actor_lr: float,
-        critic_lr: float,
-        gamma: float,
-        A2C_kwargs: typ.Dict,
-        device: torch.device   
-    ):
-        self.state_dim = state_dim
-        self.actor_hidden_layers_dim = actor_hidden_layers_dim
-        self.critic_hidden_layers_dim = critic_hidden_layers_dim
-        self.action_dim = action_dim
-        self.actor_lr = actor_lr
-        self.critic_lr = critic_lr
-        self.gamma = gamma
-        self.device = device
-        self.ent_coef = A2C_kwargs.get('ent_coef', 0.0)
-        self.critic = valueNet(state_dim, critic_hidden_layers_dim, action_dim).to(device)
-        self.v_opt = optim.RMSprop(self.critic.parameters(), lr=critic_lr)
-        self.v_cost_func = nn.MSELoss()
-        
-        self.actor = policyNet(state_dim, actor_hidden_layers_dim, action_dim, continue_action_flag=A2C_kwargs.get('continue_action_flag', False)).to(device)
-        self.a_opt = optim.RMSprop(self.actor.parameters(), lr=actor_lr)
-    
-    def policy(self, state):
-        state = torch.FloatTensor(np.array([state])).to(self.device)
-        action_dist = self.actor.get_dist(state, self.action_bound)
-        action = action_dist.sample()
-        action = self._action_fix(action)
-        return action.cpu().detach().numpy()
-
-    def _one_deque_pp(self, samples):
-        state, action, reward, next_state, done = zip(*samples)
-        state = torch.FloatTensor(np.stack(state)).to(self.device)
-        action = torch.FloatTensor(np.stack(action)).to(self.device)
-        reward = torch.tensor(np.stack(reward)).view(-1, 1).to(self.device)
-        if self.reward_func is not None:
-            reward = self.reward_func(reward)
-
-        next_state = torch.FloatTensor(np.stack(next_state)).to(self.device)
-        done = torch.FloatTensor(np.stack(done)).view(-1, 1).to(self.device)
-
-        old_v = self.critic(state)
-        advantage = self.k_step_advantage(reward, state).to(self.device)
-        action_dists = self.actor.get_dist(state, self.action_bound)
-        log_probs = action_dists.log_prob(self._action_return(action))
+    def load_model(self, file_path):
+        ac_f = os.path.join(file_path, 'SEA2CER_ac.ckpt')
         try:
-            entropy_loss = action_dists.entropy().sum(1).mean()
+            self.actor_critic.load_state_dict(torch.load(ac_f))
         except Exception as e:
-            # sperate action
-            entropy_loss = action_dists.entropy().mean()
-        if len(log_probs.shape) == 2:
-            log_probs = log_probs.sum(dim=1)
-        return state, action, log_probs, advantage, entropy_loss
+            self.actor_critic.load_state_dict(torch.load(ac_f, map_location='cpu'))
 
-    def update(self, samples_buffer, wandb = None, update_lr=True):
-        state, action, log_probs, advantage, entropy_loss = self._one_deque_pp(samples_buffer)
-        v_loss = (advantage ** 2).mean()
-        self.v_opt.zero_grad()
-        v_loss.backward()
-        self.v_opt.step()
-
-        advantage = (advantage - advantage.mean()) / (torch.std(advantage) + 1e-8)
-        actor_loss = -(advantage * log_probs).mean() - self.ent_coef * entropy_loss
-        self.a_opt.zero_grad()
-        actor_loss.backward()
-        self.a_opt.step()
-
-    def k_step_advantage(self, reward, state):
-        k_step = len(reward) - 1
-        r = 0
-        for t in reversed(range(k_step)):
-            r += self.gamma * reward[t] 
-        
-        r += r**k_step * self.critic(state[-1])
-        
-        return r - self.critic(state[0])
-
-    def _action_return(self, act):
-        if not self.continue_action_flag:
-            return act.reshape(-1)
-        if self.dist_type == 'beta' and self.continue_action_flag:
-            # low ~ high -> 0-1 
-            act_out = (act - self.action_low) / (self.action_high - self.action_low)
-            return (act_out * 1 + 0).clip(1e-4, 9.999)
-        return act
-
-    def _action_fix(self, act):
-        if not self.continue_action_flag:
-            return act
-        if self.dist_type == 'beta':
-            # beta 0-1 -> low ~ high
-            return act * (self.action_high - self.action_low) + self.action_low
-        return act
+        self.actor_critic.to(self.device)
+        self.ac_opt = optim.RMSprop(self.actor_critic.parameters(), lr=self.learning_rate)
+    

@@ -210,17 +210,13 @@ def train_off_policy(env, agent ,cfg,
 
 
 @torch.no_grad()
-def play(env_in, env_agent, cfg, episode_count=2, action_contiguous=False, play_without_seed=False, render=True, ppo_train=False):
+def play(env_in, env_agent, cfg, episode_count=2, action_contiguous=False, play_without_seed=False, render=True, ppo_train=False, rank=None):
     """
     对训练完成的Agent进行游戏
     """
     time_int = max(int(not ppo_train) * 3, 1)
     max_steps = cfg.test_max_episode_steps if hasattr(cfg, "test_max_episode_steps") else cfg.max_episode_steps
     env = copy.deepcopy(env_in)
-    try:
-        env_agent.eval()
-    except Exception as e:
-        pass
     ep_reward_record = []
     for e in range(episode_count):
         final_seed = np.random.randint(0, 999999) if play_without_seed else cfg.seed
@@ -258,17 +254,13 @@ def play(env_in, env_agent, cfg, episode_count=2, action_contiguous=False, play_
         #     ep_reward_record.append(info['episode']['r'])
         # else:    
         ep_reward_record.append(episode_reward)
-
-        print(f'[ seed={final_seed} ] Get reward {episode_reward}. Last {episode_cnt} times')
+        add_str = f'(rk={rank})' if rank is not None else ''
+        print(f'[ {add_str}seed={final_seed} ] Get reward {episode_reward:.2f}. Last {episode_cnt} times')
     
     if render:
         env.close()
 
-    try:
-        env_agent.train()
-    except Exception as e:
-        pass
-    print(f'[ PLAY ] Get reward {np.mean(ep_reward_record)}.')
+    print(f'[ {add_str}PLAY ] Get reward {np.mean(ep_reward_record):.2f}.')
     return np.mean(ep_reward_record) # np.percentile(ep_reward_record, 50)
 
 
@@ -688,56 +680,105 @@ def acer_train_off_policy(
         reward_func=None, train_without_seed=False,
         wandb_flag=False,
         wandb_project_name="RL-acer_train_off_policy",
-        update_every=1,
         test_ep_freq=100,
         test_episode_count=3,
-        done_fix_flag=False
+        done_fix_flag=False,
+        update_entroy_coef=False,
+        rank=0
     ):
-    buffer = rolloutReplayBuffer(cfg.off_buffer_size)
-    tq_bar = tqdm(range(cfg.num_episode))
+    buffer = rolloutReplayBuffer(
+        cfg.off_buffer_size, step_chunk_size=getattr(cfg, "step_chunk_size", 100),
+        T=getattr(cfg, "T", 1.0), weight_sample=getattr(cfg, "weight_sample", True))
+    env_id = str(env).split('>')[0].split('<')[-1]
+    if wandb_flag:
+        wandb.login()
+        cfg_dict = cfg.__dict__
+        algo = agent.__class__.__name__
+        now_ = datetime.now().strftime('%Y%m%d__%H%M')
+        wandb.init(
+            project=wandb_project_name,
+            name=f"{algo}__{env_id}__{now_}",
+            config=cfg_dict,
+            monitor_gym=True
+        )
+
+    tq_bar = tqdm(range(cfg.num_step_chunks))
     rewards_list = deque(maxlen=10)
     now_reward = -np.inf
     recent_best_reward = -np.inf
     best_ep_reward = -np.inf
     policy_idx = 0
     tt_steps = 0
+    rand_seed = np.random.randint(0, 999999)
+    final_seed = rand_seed if train_without_seed else cfg.seed
+    s, _ = env.reset(seed=final_seed)
+    episode_rewards = 0
+    ep_steps = 0
+    ep_rewards = 0
+    steps = 0
     for i in tq_bar:
-        rand_seed = np.random.randint(0, 999999)
-        final_seed = rand_seed if train_without_seed else cfg.seed
-        s, _ = env.reset(seed=final_seed)
-        tq_bar.set_description(f'Episode [ {i+1} / {cfg.num_episode}|(seed={final_seed}) ]')
+        agent.train()
+        tq_bar.set_description(f'(rk={rank}) Episode [ {i+1} / {cfg.num_step_chunks}|(seed={final_seed}) ]')
         done = False
-        episode_rewards = 0
-        steps = 0
-        while not done:
+        action_deque = deque(maxlen=7)
+        for step_i in range(cfg.step_chunk_size):
             a, log_prob = agent.policy(s)
-            n_s, r, terminated, truncated, _ = env.step(a)
+            action_deque.append(a)
+            if (len(action_deque) == 7) and np.std(action_deque) == 0:
+                print(f'One Action Warning: {action_deque=}')
+            n_s, r, terminated, truncated, infos = env.step(a)
             done = np.logical_or(terminated, truncated)
-            steps += 1
             tt_steps += 1
-            ep_r = r
+            ep_steps += 1
+            ep_rewards += r
             buffer.add_more(s, a, r, n_s, done, log_prob)
             s = n_s
-            episode_rewards += ep_r
-            # buffer update
-            if (len(buffer) >= cfg.off_minimal_size) and (tt_steps % update_every == 0):
-                samples = buffer.sample(cfg.sample_size)
-                agent.update(samples, wandb=wandb if wandb_flag else None)
+            if done or (ep_steps >= cfg.max_episode_steps):
+                if not done:
+                    infos = {
+                        'episode': {
+                            'r': np.array([ep_rewards]), 
+                            'l': np.array([ep_steps]), 
+                            }
+                    }
 
-            if (episode_rewards >= cfg.max_episode_rewards) or (steps >= cfg.max_episode_steps):
-                break
+                ep_steps = 0
+                ep_rewards = 0
+                episode_rewards = infos['episode']['r']
+                steps = infos['episode']['l']
+                rand_seed = np.random.randint(0, 999999)
+                final_seed = rand_seed if train_without_seed else cfg.seed
+                s, _ = env.reset(seed=final_seed)
+                if (len(buffer) >= cfg.off_minimal_size) and (i >= 10):
+                    rewards_list.append(episode_rewards)
+                    now_reward = np.mean(rewards_list)
+                    episode_rewards = 0
 
-        if (len(buffer) >= cfg.off_minimal_size) and (i >= 10):
-            rewards_list.append(episode_rewards)
-            now_reward = np.mean(rewards_list)
-        if (now_reward > recent_best_reward) and (i >= 10) and (len(buffer) >= cfg.off_minimal_size):
-            # best 时也进行测试
-            test_ep_reward = play(env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False)
+                if (now_reward > recent_best_reward) and (i >= 10):
+                    # best 时也进行测试
+                    test_ep_reward = play(env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False)
 
-            if test_ep_reward > best_ep_reward:
-                best_ep_reward = test_ep_reward
-            
-            recent_best_reward = now_reward
+                    if test_ep_reward > best_ep_reward:
+                        best_ep_reward = test_ep_reward
+                        # 模型保存          
+                        save_agent_model(agent, cfg, f"[ ep={i+1} ](recentBest) bestTestReward={best_ep_reward:.2f}")
+                    recent_best_reward = now_reward
+
+            if ((tt_steps +1) % test_ep_freq == 0) and (tt_steps > cfg.off_buffer_size):
+                print(f'rk={rank} tt_steps={tt_steps} test_ep_freq={test_ep_freq}')
+                test_env = copy.deepcopy(env)
+                freq_ep_reward = play(test_env, agent, cfg, episode_count=test_episode_count, play_without_seed=train_without_seed, render=False, ppo_train=False)
+                if freq_ep_reward > best_ep_reward:
+                    best_ep_reward = freq_ep_reward
+                    # 模型保存
+                    save_agent_model(agent, cfg, f"[ ep={i+1} ](freqBest) bestTestReward={best_ep_reward:.2f}")
+
+        # buffer update
+        if len(buffer) >=  cfg.off_buffer_size * cfg.step_chunk_size * 0.7:
+            samples = buffer.sample(cfg.sample_size)
+            agent.update(samples, wandb=wandb if wandb_flag else None)
+        # if (i >= 10) and update_entroy_coef:
+        #     agent.update_entroy_coef(i-9, cfg.num_episode)
 
         tq_bar.set_postfix({
             "steps": steps,
@@ -745,3 +786,16 @@ def acer_train_off_policy(
             'BEST': f'{recent_best_reward:.2f}',
             "bestTestReward": f'{best_ep_reward:.2f}'
         })
+        if wandb_flag:
+            log_dict = {
+                'lastMeanRewards': now_reward,
+                'BEST': recent_best_reward,
+                "episodeRewards": episode_rewards,
+                "bestTestReward": best_ep_reward
+            }
+            wandb.log(log_dict)
+    if wandb_flag:
+        wandb.finish()
+    return agent
+
+
