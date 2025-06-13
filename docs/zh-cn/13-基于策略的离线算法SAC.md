@@ -6,14 +6,31 @@ DDPG 训练非常不稳定，收敛性比较差，对超参数比较敏感，难
 
 ## 13.2 最大熵强化学习
 
-在强化学习中，我们可以使用$H(\pi(.|s)$来表示策略$\pi$在状态`s`下的随机程度。
+在强化学习中，我们可以使用$H(\pi(.|s))$来表示策略$\pi$在状态`s`下的随机程度。
 
 最大熵强化学习（maximum entropy RL）的思想就是除了要最大化累积奖励，还要使得策略更加随机。强化学习的目标中就加入了一项熵的正则项：  
 $$\pi^*=argmax_\pi E_\pi[\sum_t(r(s_t, a_t) + \alpha H(\pi(a_t|s_t))]$$
 
 熵正则化增加了强化学习算法的探索程度，$\alpha$越大，探索性就越强，有助于加速后续的策略学习，并减少策略陷入较差的局部最优的可能性（和UCB的探索方式有点像）。
 
-## 13.3 Pytorch实践
+## 13.3 SAC的优化
+
+1. 避免V对动作空间进行积分，做了调整
+   1. 初始(SQL)： $V^{\overline{\theta}}_{soft}(s_t)=\alpha log E_{q_{a^\prime}}[\frac{e^{\frac{1}{\alpha}Q^{\overline{\theta}}_{soft}(s_t, a^\prime )}}{q_{a^\prime}(a^\prime)}]$
+   2. 调整后：$V(s_t) = E_{a_t \sim \pi}[Q(s_t, a_t) - \alpha log \pi(a_t|s_t)]$
+   3. $Q_{tar} = r+\gamma * [Q(s_{t+1}, a_{t+1}) - \alpha log \pi(a_{t+1}|s_{t+1})]$
+   4. 同时用2个critic网络+2个critic-target网络来解决高估和Bootstrapping问题
+2. actor
+   1. 将策略空间限制为某一类空间，并使用 `reparameterization trick`
+   2. 原始：$J(\phi) = E_{s_t \sim D}[D_{KL}(\pi^\prime(.|s_t) || \frac{e^{Q^{\pi_{old}}(s_t, .)}}{Z} )]$
+   3. 调整后: $J(\phi) = E_{s_t \sim D, \epsilon \sim N}[\alpha log \pi(f_\phi(\epsilon; s_t)|s_t) - Q(f_\phi(\epsilon; s_t), s_t)]$
+      1. $f_\phi(\epsilon; s_t)$: $\epsilon$ 从高斯分布中采样（下列实现是用tanh_normal分布）
+      2. 实际实现+蒙特卡洛：$J(\phi) = \alpha log \pi(a_t|s_t) - Q(a_t, s_t)$
+3. 可变熵权重
+   1. $min J(\alpha) = E_{a_t \sim \pi_t}[-\alpha log \pi_t(a_t, s_t) - \alpha H_0]$
+      1. $H_0$: 可以设置为固定值，一般可以设置成<font color=darkred> -1*动作空间</font>
+
+## 13.4 Pytorch实践
 
 策略网络（`Actor`）直接输出确定性action, 和动作的熵
 

@@ -12,7 +12,7 @@
 /wandb
 /src/RAGRL/__pycache__/*
 /src/RAGRL/data/*
-/src/RLAlgo/test.*
+/src/RLAlgo/test*.*
 /src/RLAlgo/__pycache__
 /src/RLAlgo/__pycache__/*.pyc
 ./*.log

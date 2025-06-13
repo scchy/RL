@@ -15,6 +15,7 @@
 * [<font color=darkred>10. 基于策略的PPO2</font>](zh-cn/10-基于策略的PPO2.md)
 * [11. 基于策略的离线算法DDPG](zh-cn/11-基于策略的离线算法DDPG.md)
 * [12. 基于策略的离线算法TD3](zh-cn/12-基于策略的离线算法TD3.md)
+* [13pre. 基于策略的离线算法SoftQL](zh-cn/13pre_2017_softQ.md.md)
 * [13. 基于策略的离线算法SAC](zh-cn/13-基于策略的离线算法SAC.md)
 * [<font color=darkred>14. 基于策略的DRL方法总结</font>](zh-cn/14-基于策略的方法总结.md)
 * [15. paper](zh-cn/15-paper.md)
