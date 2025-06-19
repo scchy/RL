@@ -33,25 +33,22 @@ class SQL:
         action_dim: int,
         actor_lr: float,
         critic_lr: float,
-        alpha_lr: float,
         gamma: float,
         SQL_kwargs: typ.Dict,
         device: torch.device  
     ):
-        self.device = device 
-        self.gamma = gamma
         self.actor_lr = actor_lr
         self.critic_lr = critic_lr
+        self.gamma = gamma
+        self.device = device
+        self.tau = SQL_kwargs.get('tau', 0.05)
+        self.alpha = SQL_kwargs.get('alpha', 0.25)
+
         self.q = valueNet(state_dim+action_dim, critic_hidden_layers_dim).to(device)
         self.tar_q = deepcopy(self.q)
-
         self.actor = policyNet(state_dim, actor_hidden_layers_dim, action_dim, action_bound=SQL_kwargs.get('action_bound', 1.0)).to(device)
-        # self.tar_actor = deepcopy(self.actor)
-        self.unf = Uniform(0, 1) 
-        
         self.q_opt = torch.optim.Adam(self.q.parameters(), lr=critic_lr)
         self.actor_opt = torch.optim.Adam(self.actor.parameters(), lr=actor_lr)
-        
 
     def policy(self, state):
         state = torch.FloatTensor(np.array([state])).to(self.device)
@@ -71,11 +68,11 @@ class SQL:
         # QLoss
         # next state with uniform samples
         new_next_act, _ = self.actor(next_state)
-        next_q = self.tar_q(next_state, new_next_act)
+        next_v = next_q = self.tar_q(next_state, new_next_act)
         # Eqution 10: \alpha log sum_ [exp(1/alpha * Q)/q_a(a)] 
-        next_v = self.alpha * torch.logsumexp(1/self.alpha * next_q, dim=1) - torch.log(self.value_n_particles)
+        # next_v = self.alpha * torch.logsumexp(1/self.alpha * next_q, dim=1) - torch.log(self.value_n_particles)
+        # + np.log(2 ** action_dim) # why
         tar_q = reward + self.gamma * next_v * (1 - done)
-
         q_v = self.q(state, action) 
         # q loss 
         self.q_opt.zero_grad()
@@ -84,11 +81,11 @@ class SQL:
         self.q_opt.step()
         # ------------------------------------------------
         # Actor loss: svg update
-        self._tanh_guassion_update() #self._SVG_update()
+        self._tanh_guassion_update(state) #self._SVG_update()
         # self.soft_update(self.actor, self.tar_actor)
         self.soft_update(self.q, self.tar_q)
 
-    def _tanh_guassion_update(self):
+    def _tanh_guassion_update(self, state):
         new_act, log_prob = self.actor(state)
         q_v = self.tar_q(state, new_act)
         a_loss = torch.mean(self.alpha * log_prob - q_v)

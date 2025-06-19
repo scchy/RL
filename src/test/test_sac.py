@@ -63,6 +63,62 @@ def sac_test():
     play(gym.make(env_name, render_mode='human'), agent, cfg, episode_count=2)
 
 
+def sac_test_new():
+    """
+    policyNet: 
+    valueNet: 
+    """
+    env_name = 'Pendulum-v1'
+    gym_env_desc(env_name)
+    env = gym.make(env_name)
+    print("gym.__version__ = ", gym.__version__ )
+    path_ = os.path.dirname(__file__)
+    cfg = Config(
+        env, 
+        num_episode = 220,
+        save_path=os.path.join(path_, "test_models" ,f'SAC_{env_name}.ckpt'), 
+        actor_hidden_layers_dim=[128, 64],
+        critic_hidden_layers_dim=[64, 32],
+        actor_lr=3e-5,
+        critic_lr=5e-4,
+        sample_size=256,
+        off_buffer_size=10240,
+        off_minimal_size=1024,
+        max_episode_rewards=2048,
+        max_episode_steps=240,
+        gamma=0.95,
+        SAC_kwargs={
+            'tau': 0.05, # soft update parameters
+            'target_entropy': 0.01,
+            'action_bound': 2.0
+        }
+    )
+    agent = SAC(
+        state_dim=cfg.state_dim,
+        actor_hidden_layers_dim=cfg.actor_hidden_layers_dim,
+        critic_hidden_layers_dim=cfg.critic_hidden_layers_dim,
+        action_dim=cfg.action_dim,
+        actor_lr=cfg.actor_lr,
+        critic_lr=cfg.critic_lr,
+        alpha_lr=5e-4,
+        gamma=cfg.gamma,
+        SAC_kwargs=cfg.SAC_kwargs,
+        device=cfg.device
+    )
+    # train_off_policy(env, agent, cfg, test_episode_count=5)
+    try:
+        agent.target_q.load_state_dict(
+            torch.load(cfg.save_path)
+        )
+    except Exception as e:
+        agent.actor.load_state_dict(
+            torch.load(cfg.save_path)
+        )
+    env_ = gym.make(env_name, render_mode='human')
+    play(env_, agent, cfg, episode_count=2, render=True)
+
+
+
 def sac_Reacher_v4_test():
     """
     policyNet: 
@@ -219,6 +275,62 @@ def sac_Walker2d_v4_test():
         SAC_kwargs=cfg.SAC_kwargs,
         device=cfg.device
     )
+    # print(cfg.SAC_kwargs, env.action_space.shape)
+    # train_off_policy(
+    #     env, agent, cfg, train_without_seed=True, wandb_flag=False, 
+    #     wandb_project_name=f'SAC-{env_name}',
+    #     test_episode_count=5,
+    #     step_lr_flag=True, 
+    #     step_lr_kwargs={'step_size': 1000, 'gamma': 0.9}
+    # )
+    agent.actor.load_state_dict(
+        torch.load(cfg.save_path, map_location='cpu')
+    )
+    agent.eval()
+    cfg.max_episode_steps = 200
+    env = gym.make(env_name) #, render_mode='human')
+    play(env, agent, cfg, episode_count=2, play_without_seed=True, render=False)
+
+
+# swimmer
+def sac_swimmer_test():
+    env_name = 'Swimmer-v4'
+    gym_env_desc(env_name)
+    env = gym.make(env_name)
+    print("gym.__version__ = ", gym.__version__ )
+    path_ = os.path.dirname(__file__)
+    cfg = Config(
+        env, 
+        num_episode=1800,
+        save_path=os.path.join(path_, "test_models" ,f'SAC-{env_name}.ckpt'), 
+        actor_hidden_layers_dim=[256, 256],
+        critic_hidden_layers_dim=[256, 256],
+        actor_lr=2.5e-5,
+        critic_lr=5.5e-4,
+        sample_size=256,
+        off_buffer_size=204800,
+        off_minimal_size=2048,
+        max_episode_rewards=2048,
+        max_episode_steps=60,
+        gamma=0.98,
+        SAC_kwargs={
+            'tau': 0.005, # soft update parameters
+            'target_entropy': -torch.prod(torch.Tensor(env.action_space.shape)).item(),
+            'action_bound': 1.0
+        }
+    )
+    agent = SAC(
+        state_dim=cfg.state_dim,
+        actor_hidden_layers_dim=cfg.actor_hidden_layers_dim,
+        critic_hidden_layers_dim=cfg.critic_hidden_layers_dim,
+        action_dim=cfg.action_dim, 
+        actor_lr=cfg.actor_lr,
+        critic_lr=cfg.critic_lr,
+        alpha_lr=5e-3,
+        gamma=cfg.gamma,
+        SAC_kwargs=cfg.SAC_kwargs,
+        device=cfg.device
+    )
     print(cfg.SAC_kwargs, env.action_space.shape)
     train_off_policy(
         env, agent, cfg, train_without_seed=True, wandb_flag=False, 
@@ -235,9 +347,9 @@ def sac_Walker2d_v4_test():
     play(env, agent, cfg, episode_count=2, play_without_seed=True, render=True)
 
 
-
 if __name__ == '__main__':
     # sac_test()
     # sac_Reacher_v4_test()
     # sac_Pusher_v4_test()
-    sac_Walker2d_v4_test()
+    sac_Walker2d_v4_test() # 2025-06-11
+    # sac_swimmer_test()

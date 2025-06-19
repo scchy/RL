@@ -80,7 +80,16 @@ class SAC:
             param_target.data.copy_(
                 param_target.data * (1 - self.tau) + param.data * self.tau
             )
-
+            
+    def train(self):
+        self.actor.train()
+        self.critic_1.train()
+        self.critic_2.train()
+    
+    def eval(self):
+        self.actor.eval()
+        self.critic_1.eval()
+        self.critic_2.eval()
 
     def update(self, samples):
         state, action, reward, next_state, done = zip(*samples)

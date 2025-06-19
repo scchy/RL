@@ -3,11 +3,14 @@
 paper Link: 
 - [Reinforcement Learning with Deep Energy-Based Policies](https://arxiv.org/abs/1702.08165)
 - [Equivalence Between Policy Gradients and Soft Q-Learning](https://ar5iv.labs.arxiv.org/html/1704.06440)
+
 其他相关链接: 
 - [Soft Q-Learning论文阅读笔记](https://zhuanlan.zhihu.com/p/76681229)
 - [www.lamda.nju.edu.cn slides](https://www.lamda.nju.edu.cn/xufeng/websites/tlrg/slides/pre_16.pdf)
 - [Learning Diverse Skills via Maximum Entropy Deep Reinforcement Learning](https://bair.berkeley.edu/blog/2017/10/06/soft-q-learning/)
 
+Github:
+- [softqlearning](https://github.com/haarnoja/softqlearning)
 
 ### 1. 背景
 对于无模型强化学习算法，我们从探索(exploration)的角度考虑。尽管随机策略(stochastic policy)看起来负责探索，但是这种探索一般都是启发式的，比如像DDPG算法通过添加噪声，或者像TRPO算法在随机策略基础上增加熵。然而我们需要一个更加直接的探索，也就是最大化期望收益的同时引入最大熵，这样会让策略面对扰动的时候更加稳定：
