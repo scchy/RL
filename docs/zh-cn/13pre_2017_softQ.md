@@ -17,8 +17,6 @@ Github:
 
 现在问题变成了针对任意分布的策略去完成最大化熵。这篇文章借用了基于能量的(energy-based)模型(EBM)来表示策略，可以适应多模式，并这反过来揭示了Q-learning，演员评论家算法和概率推理之间的有趣联系。
 
-
-
 ### 2. 最大熵策略框架
 
 $$\pi^\star_{\text{MaxEnt}} = \argmax_\pi \mathbf{E}_{\pi}[\sum_{t=0}^T r_t + \alpha H(\pi(.|s_t))]$$
@@ -44,7 +42,7 @@ $$Q^\star_{soft}(s_t, a_t)=r_t + \gamma  E_{s_{t+1}\sim p_s}[V^\star_{soft}(s_{t
 证明如下：
 
 对`Q-function`做变换
-$Q^\star_{soft}(s_t, a_t)=r_t + \gamma E_{s_{t+1}\sim p_s}[\alpha H(\pi(.|s_{t+1})) + E_{a_{t+1}\sim\pi(.|s_{t+1})}[Q^\pi_{soft}(s_{t+1}, a_{t+1})] ]  $
+$Q^\star_{soft}(s_t, a_t)=r_t + \gamma E_{s_{t+1}\sim p_s}[\alpha H(\pi(.|s_{t+1})) + E_{a_{t+1}\sim\pi(.|s_{t+1})}[Q^\pi_{soft}(s_{t+1}, a_{t+1})] ]$
 $=r+\gamma E_{s_{t+1}, a_{t+1}}[\alpha H(\pi(a_{t+1}|s_{t+1})) + Q^\pi_{soft}(s_{t+1}, a_{t+1})]$
 $=r+\gamma E_{s_{t+1}, a_{t+1}}[-\alpha log(\pi(a_{t+1}|s_{t+1})) + Q^\pi_{soft}(s_{t+1}, a_{t+1})]$
 $=r+\gamma E_{s_{t+1}, a_{t+1}}[Q^\pi_{soft}(s_{t+1}, a_{t+1}) -\alpha log(e^{\frac{1}{\alpha}(Q^\star_{soft}(s_{t+1}, a_{t+1}) - V^\star_{soft}(s_{t+1}) )}) ]$
@@ -54,7 +52,7 @@ $=r+\gamma E_{s_{t+1}}[V^\star_{soft}(s_{t+1})]$
 
 定义`Soft Q-Iteration`
 
-$Q^\star_{soft}(s_t, a_t) \leftarrow r_t + \gamma E_{s_{t+1} \sim p_s}[V_{soft}(s_{t+1})], \forall s_t, a_t $
+$Q^\star_{soft}(s_t, a_t) \leftarrow r_t + \gamma E_{s_{t+1} \sim p_s}[V_{soft}(s_{t+1})], \forall s_t, a_t$
 $V^\star_{soft}(s_t) \leftarrow  \alpha log \int_A e^{\frac{1}{\alpha}Q^\star_{soft}(s_t, a^\prime )}da^\prime, \forall s_t$
 
 
@@ -113,9 +111,9 @@ $Q_{tar} = r_t + \gamma E_{s_{t+1}\sim p_s}[V^{\overline{\theta}}_{soft}(s_{t+1}
 #### 2.2.2 $\phi$: `actor Loss`
 $\pi^\phi (a_t|s_t) = a_t=f^\phi(\xi;s_t ); \xi \sim N(0, I)$ 
 - 映射随机噪声到正态高斯函数，或者其他分布
-- 同时希望其接近`energy-based distribution`，用正向KL离散度($D_{KL}(P||Q)$, P为真实分布)作为损失
+- 同时希望其接近`energy-based distribution`，用反向KL离散度($D_{KL}(Q||P)$, P为真实分布)作为损失
 
-$J_{\pi}(\phi; s_t)=D_{KL}(\pi^\star_{MaxEnt}=e^{\frac{1}{\alpha}(Q^\star_{soft}(s_t, a_t) - V^\star_{soft}(s_t) )}||\pi^\phi (a_t|s_t))$
+$J_{\pi}(\phi; s_t)=D_{KL}(\pi^\phi (a_t|s_t)||\pi^\star_{MaxEnt}=e^{\frac{1}{\alpha}(Q^\star_{soft}(s_t, a_t) - V^\star_{soft}(s_t) )})$
 
 做SVGD近似：
 - $\triangle f^{\phi}(.;s_t) = E_{a_t \sim \pi ^ \phi}[\mathbf{k}(a_t, f^{\phi}(.;s_t))\nabla _{a^\prime} Q^\theta_{soft}(s_t, a^\prime)|_{a\prime=a_t} + \alpha \nabla _{a^\prime} \mathbf{k}(a_t, f^{\phi}(.;s_t))|_{a^\prime = a_t}]$
@@ -226,6 +224,7 @@ actor_loss = -sum(
 
 完整实现[test_softQ.py < sqlnew_Walker2d_v4_test > ](../../src/test/test_softQ.py)
 ```python
+
 def sqlnew_Walker2d_v4_test():
     env_name = 'Walker2d-v4'
     gym_env_desc(env_name)
@@ -234,7 +233,7 @@ def sqlnew_Walker2d_v4_test():
     path_ = os.path.dirname(__file__)
     cfg = Config(
         env, 
-        num_episode=1500,
+        num_episode=2000,
         save_path=os.path.join(path_, "test_models" ,f'SQL-{env_name}.ckpt'), 
         actor_hidden_layers_dim=[256, 256],
         critic_hidden_layers_dim=[256, 256],
@@ -251,7 +250,7 @@ def sqlnew_Walker2d_v4_test():
             kernel_n_particles=16,
             kernel_update_ratio=0.5,
             critcic_traget_update_freq=100,
-            reward_scale=1
+            reward_scale=10
         )
     )
     agent = SQLNew(
@@ -278,8 +277,8 @@ def sqlnew_Walker2d_v4_test():
     agent.eval()
     cfg.max_episode_steps = 200
     env = gym.make(env_name, render_mode='human')
-    play(env, agent, cfg, episode_count=2, play_without_seed=True, render=False)
+    play(env, agent, cfg, episode_count=2, play_without_seed=True, render=True)
 ```
 
-![pic](sql_Walker2d-v4.png)
+![pic](../../docs/pic/sql_Walker2d-v4.gif)
 

@@ -123,7 +123,7 @@ def sqlnew_Walker2d_v4_test():
     path_ = os.path.dirname(__file__)
     cfg = Config(
         env, 
-        num_episode=1500,
+        num_episode=2000,
         save_path=os.path.join(path_, "test_models" ,f'SQL-{env_name}.ckpt'), 
         actor_hidden_layers_dim=[256, 256],
         critic_hidden_layers_dim=[256, 256],
@@ -140,7 +140,7 @@ def sqlnew_Walker2d_v4_test():
             kernel_n_particles=16,
             kernel_update_ratio=0.5,
             critcic_traget_update_freq=100,
-            reward_scale=1
+            reward_scale=10
         )
     )
     agent = SQLNew(
@@ -166,8 +166,8 @@ def sqlnew_Walker2d_v4_test():
     )
     agent.eval()
     cfg.max_episode_steps = 200
-    env = gym.make(env_name) #, render_mode='human')
-    play(env, agent, cfg, episode_count=2, play_without_seed=True, render=False)
+    env = gym.make(env_name, render_mode='human')
+    play(env, agent, cfg, episode_count=2, play_without_seed=True, render=True)
 
 
 
