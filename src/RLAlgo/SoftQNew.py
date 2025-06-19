@@ -247,6 +247,7 @@ class SoftQ:
             [n_fixed_actions, n_updated_actions], 
             dim=1
         )
+        # eqution13: part_1-2 \nabla _{a^\prime} Q^\theta_{soft}(s_t, a^\prime)|_{a\prime=a_t}
         svgd_tar_values = self.critic(state[:, None, :], fixed_actions)
         # Target log-density. Q_soft in Equation 13:
         squash_corr = torch.sum(torch.log(1 - fixed_actions**2 + EPS), dim=-1)
@@ -263,6 +264,7 @@ class SoftQ:
         kernel_dict = self.kernel_fn(xs=fixed_actions, ys=updated_actions)
         # Kernel function in Equation 13:
         kappa = torch.unsqueeze(kernel_dict["output"], dim=3)
+        # eqution13: part_1 kappa * grad_log_p part_2 k_gradient
         action_gradients = torch.mean(kappa * grad_log_p + kernel_dict["gradient"], dim=1)
         # Propagate the gradient through the policy network (Equation 14).
         # 计算 gradients
@@ -287,8 +289,7 @@ class SoftQ:
         tar_action = 2 * random_actions - 1
         q_next = self.tar_critic(next_state[:, None, :], tar_action)
         # Equation 10:
-        q_next = torch.logsumexp(q_next, dim=1)
-        q_next -= torch.log(torch.tensor(self.value_n_particles).to(self.device))
+        q_next = torch.logsumexp(q_next, dim=1) - torch.log(torch.tensor(self.value_n_particles).to(self.device))
         q_next += self.action_dim * np.log(2)
         
         q_tar = self.reward_scale * reward + self.gamma * q_next * (1 - done)
