@@ -170,9 +170,64 @@ def sqlnew_Walker2d_v4_test():
     play(env, agent, cfg, episode_count=2, play_without_seed=True, render=True)
 
 
+def sqlnew_Swimmer_v4_test():
+    env_name = 'Swimmer-v4'
+    gym_env_desc(env_name)
+    env = gym.make(env_name)
+    print("gym.__version__ = ", gym.__version__ )
+    path_ = os.path.dirname(__file__)
+    cfg = Config(
+        env, 
+        num_episode=800,
+        save_path=os.path.join(path_, "test_models" ,f'SQL-{env_name}.ckpt'), 
+        actor_hidden_layers_dim=[128, 128],
+        critic_hidden_layers_dim=[128, 128],
+        actor_lr=4.5e-4,
+        critic_lr=5.5e-4,
+        sample_size=128,
+        off_buffer_size=204800,
+        off_minimal_size=2048,
+        max_episode_rewards=2048,
+        max_episode_steps=500,
+        gamma=0.99,
+        SQL_kwargs=dict(
+            value_n_particles=16,
+            kernel_n_particles=16,
+            kernel_update_ratio=0.5,
+            critcic_traget_update_freq=500,
+            reward_scale=30
+        )
+    )
+    agent = SQLNew(
+        state_dim=cfg.state_dim,
+        action_dim=cfg.action_dim, 
+        actor_hidden_layers_dim=cfg.actor_hidden_layers_dim,
+        critic_hidden_layers_dim=cfg.critic_hidden_layers_dim,
+        actor_lr=cfg.actor_lr,
+        critic_lr=cfg.critic_lr,
+        gamma=cfg.gamma,
+        SQL_kwargs=cfg.SQL_kwargs,
+        device=cfg.device
+    )
+    train_off_policy(
+        env, agent, cfg, train_without_seed=True, wandb_flag=False, 
+        wandb_project_name=f'SQL-{env_name}',
+        test_episode_count=5,
+        step_lr_flag=True, 
+        step_lr_kwargs={'step_size': 1000, 'gamma': 0.9}
+    )
+    agent.actor.load_state_dict(
+        torch.load(cfg.save_path, map_location='cpu')
+    )
+    agent.eval()
+    cfg.max_episode_steps = 200
+    env = gym.make(env_name, render_mode='human')
+    play(env, agent, cfg, episode_count=2, play_without_seed=True, render=True)
+
 
 if __name__ == '__main__':
     # sql_test()
     # sqlnew_test() # 2025-06-18
-    sqlnew_Walker2d_v4_test()
+    # sqlnew_Walker2d_v4_test()
+    sqlnew_Swimmer_v4_test()
 
