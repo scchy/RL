@@ -51,6 +51,7 @@ class SAC:
         
         self.gamma = gamma
         self.device = device
+        self.reward_scale = SAC_kwargs.get('reward_scale', 1)
         self.tau = SAC_kwargs.get('tau', 0.05)
         self.target_entropy = SAC_kwargs['target_entropy']
             
@@ -97,7 +98,7 @@ class SAC:
         state = torch.FloatTensor(np.stack(state)).to(self.device)
         action = torch.tensor(np.stack(action)).to(self.device)
         reward = torch.tensor(np.stack(reward)).view(-1, 1).to(self.device)
-        reward = (reward + 10.0) / 10.0  # 和TRPO一样,对奖励进行修改,方便训练
+        reward = (reward + 10.0) / 10.0 * self.reward_scale  # 和TRPO一样,对奖励进行修改,方便训练
         next_state = torch.FloatTensor(np.stack(next_state)).to(self.device)
         done = torch.FloatTensor(np.stack(done)).view(-1, 1).to(self.device)
         

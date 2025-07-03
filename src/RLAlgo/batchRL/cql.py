@@ -11,8 +11,8 @@ import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
-from ._base_net import DDPGValueNet as valueNet
-from ._base_net import SACPolicyNet as policyNet
+from .._base_net import DDPGValueNet as valueNet
+from .._base_net import SACPolicyNet as policyNet
 from copy import deepcopy
 
 
@@ -32,6 +32,7 @@ class CQL_H_SAC:
         action_dim: int,
         critic_hidden_layers_dim: typ.List[int],
         actor_lr: float,
+        gamma: float,
         CQL_kwargs: typ.Dict=dict(
             temp=1.0,
             min_q_weight=1.0,
@@ -59,13 +60,18 @@ class CQL_H_SAC:
         self.target_critic_1 = deepcopy(self.critic_1)
         self.target_critic_2 = deepcopy(self.critic_2)
         self._critic_to_device(device)
+        
+        # optim
+        self.actor_opt = torch.optim.Adam(self.actor.parameters(), lr=actor_lr)
+        self.critic_1_opt = torch.optim.Adam(self.critic_1.parameters(), lr=critic_lr)
+        self.critic_2_opt = torch.optim.Adam(self.critic_2.parameters(), lr=critic_lr)
 
         self.gamma = gamma
         self.device = device
         self.action_bound = CQL_kwargs.get('action_bound', 1.0)
         self.tau = CQL_kwargs.get('tau', 0.05)
         self.target_entropy = CQL_kwargs['target_entropy']
-
+        self.reward_scale = CQL_kwargs.get('reward_scale', 1)
         ## min Q
         self.temp = CQL_kwargs.get('temp', 1)
         self.min_q_weight = CQL_kwargs.get('min_q_weight', 1)
@@ -119,15 +125,14 @@ class CQL_H_SAC:
         self.critic_1.eval()
         self.critic_2.eval()
 
-    def update(self, samples):
-        state, action, reward, next_state, done = zip(*samples)
-
-        state = torch.FloatTensor(np.stack(state)).to(self.device)
-        action = torch.tensor(np.stack(action)).to(self.device)
-        reward = torch.tensor(np.stack(reward)).view(-1, 1).to(self.device)
-        reward = (reward + 10.0) / 10.0  # 和TRPO一样,对奖励进行修改,方便训练
-        next_state = torch.FloatTensor(np.stack(next_state)).to(self.device)
-        done = torch.FloatTensor(np.stack(done)).view(-1, 1).to(self.device)
+    def update(self, batch_tensor):
+        state, action, reward, next_state, done = batch_tensor
+        state = state.float().to(self.device)
+        action = action.float().to(self.device)
+        reward = reward.to(self.device)
+        reward = (reward + 10.0) / 10.0 * self.reward_scale 
+        next_state = next_state.float().to(self.device)
+        done = done.to(self.device)
 
         # 1- actor_loss 
         new_act, log_prob = self.actor(state)
@@ -155,12 +160,14 @@ class CQL_H_SAC:
         state_temp = state.unsqueeze(1).repeat(1, self.num_random, 1).view(
             state.shape[0] * self.num_random, state.shape[1])
         cur_act, cur_log_proba = self.actor(state_temp)
+        cur_log_proba = cur_log_proba.view(state.shape[0], self.num_random, 1)
 
         next_state_temp = next_state.unsqueeze(1).repeat(1, self.num_random, 1).view(
             next_state.shape[0] * self.num_random, next_state.shape[1])
         next_act, next_log_proba = self.actor(next_state_temp)
+        next_log_proba = next_log_proba.view(next_state.shape[0], self.num_random, 1) 
 
-        random_act_tensor = torch.FloatTensor(q2.shape[0] * self.num_random, actions.shape[-1]).uniform_(
+        random_act_tensor = torch.FloatTensor(q2.shape[0] * self.num_random, action.shape[-1]).uniform_(
             -self.action_bound, self.action_bound).to(self.device)
         q1_rand =  self._get_tensor_values(state, random_act_tensor, self.critic_1)
         q2_rand =  self._get_tensor_values(state, random_act_tensor, self.critic_2)
@@ -179,11 +186,12 @@ class CQL_H_SAC:
         std_q2 = torch.std(cat_q2, dim=1)
         # min_q_version
         random_density = np.log(0.5 ** cur_act.shape[-1])
+        # print(f'{q1_rand.shape=} {q1_next_actions.shape=} {next_act.shape=} {next_log_proba.shape=}, {q1_curr_actions.shape=} {cur_log_proba.shape=}')
         cat_q1 = torch.cat(
-            [q1_rand - random_density, q1_next_actions - new_log_pis.detach(), q1_curr_actions - curr_log_pis.detach()], 1
+            [q1_rand - random_density, q1_next_actions - next_log_proba.detach(), q1_curr_actions - cur_log_proba.detach()], 1
         )
         cat_q2 = torch.cat(
-            [q2_rand - random_density, q2_next_actions - new_log_pis.detach(), q2_curr_actions - curr_log_pis.detach()], 1
+            [q2_rand - random_density, q2_next_actions - next_log_proba.detach(), q2_curr_actions - cur_log_proba.detach()], 1
         )
         # eqution4 CQL(H)
         min_qf1_loss = torch.logsumexp(cat_q1 / self.temp, dim=1,).mean() * self.temp
