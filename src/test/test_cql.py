@@ -34,15 +34,15 @@ def cql_Walker2d_v4_test():
         save_path=os.path.join(path_, "test_models" ,f'CQL-{env_name}.ckpt'), 
         actor_hidden_layers_dim=[256, 256],
         critic_hidden_layers_dim=[256, 256],
-        actor_lr=4.5e-5,
-        critic_lr=5.5e-4,
+        actor_lr=2.5e-4,
+        critic_lr=4.5e-4,
         max_episode_rewards=2048,
         max_episode_steps=800,
         gamma=0.98,
         num_epoches=1600,
         batch_size=256,
         CQL_kwargs=dict(
-            temp=1.0,
+            temp=1.2,
             min_q_weight=1.0,
             num_random=10,
             tau=0.05,
@@ -64,16 +64,23 @@ def cql_Walker2d_v4_test():
         device=cfg.device
     )
     
-    batch_rl_training(
-        agent, 
-        cfg,
-        env_name,
-        data_level='simple',
-        test_episode_freq=10,
-        episode_count=5,
-        play_without_seed=True, 
-        render=False
+    # batch_rl_training(
+    #     agent, 
+    #     cfg,
+    #     env_name,
+    #     data_level='simple',
+    #     test_episode_freq=10,
+    #     episode_count=5,
+    #     play_without_seed=True, 
+    #     render=False
+    # )
+    agent.actor.load_state_dict(
+        torch.load(cfg.save_path, map_location='cpu')
     )
+    agent.eval()
+    cfg.max_episode_steps = 600
+    env = gym.make(env_name, render_mode='human')
+    play(env, agent, cfg, episode_count=2, play_without_seed=True, render=True)
 
 
 if __name__ == '__main__':

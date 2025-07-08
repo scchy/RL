@@ -17,3 +17,8 @@
 /src/RLAlgo/__pycache__/*.pyc
 ./*.log
 *.log
+*.pyc
+*/__pycache__/*
+# /src/RLAlgo/__pycache__/*
+# /src/RLAlgo/batchRL/__pycache__/*.pyc
+# /src/RLUtils/batchRL/__pycache__/*

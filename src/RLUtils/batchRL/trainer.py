@@ -4,6 +4,7 @@
 # Func: Batch RL-training Func
 # ===================================================================================
 import gymnasium as gym
+import wandb
 import numpy as np 
 from tqdm.auto import tqdm 
 import torch
@@ -108,11 +109,12 @@ def batch_rl_training(
         play_without_seed=False, 
         render=False, 
         wandb_flag=False,
+        wandb_project_name='batch_rl_training',
         rank=None
     ):
     env = gym.make(env_name)
     if collected_data is None:
-        collected_data = load_mujoco_data(env_name)
+        collected_data = load_mujoco_data(env_name, data_level)
     if wandb_flag:
         wandb.login()
         cfg_dict = cfg.__dict__
