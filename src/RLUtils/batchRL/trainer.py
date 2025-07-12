@@ -92,9 +92,15 @@ def play(
     return np.mean(ep_reward_record) # np.percentile(ep_reward_record, 50)
 
 
-# def iter_ep_date(num_epoches, collected_data):
-#     for ep in range(num_epoches):
-#         collected_data.iterate_episodes()
+def iter_ep_date(num_epoches, collected_data):
+    idx = 1
+    while (idx < num_epoches):
+        for batch in collected_data.iterate_episodes():
+            idx += 1
+            yield batch
+            if idx - 1 >= num_epoches:
+                break 
+
     
 
 @logger.catch
@@ -127,10 +133,12 @@ def batch_rl_training(
             config=cfg_dict,
             monitor_gym=True
         )
-    ep_bar = tqdm(zip(range(cfg.num_epoches), collected_data.iterate_episodes()), total=cfg.num_epoches)
+    iter_collecter = iter_ep_date(cfg.num_epoches, collected_data)
+    ep_bar = tqdm(range(cfg.num_epoches), total=cfg.num_epoches)
     ep_que = deque(maxlen=10)
     best_r = recent_p = -np.inf
-    for ep, episode_data in ep_bar:
+    for ep in ep_bar:
+        episode_data = next(iter_collecter)
         ep_bar.set_description(f'[ {ep} / {cfg.num_epoches} ]')
         dloader = DataLoader(epDataset(episode_data), batch_size=cfg.batch_size, shuffle=True)
         for batch in dloader:

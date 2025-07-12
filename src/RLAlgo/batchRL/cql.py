@@ -157,18 +157,20 @@ class CQL_H_SAC:
         critic_2_loss = 0.5 * torch.mean((q2 - td_target.float().detach())**2)
 
         # add CQL 进行采样
+        # \mu sampling a - state
         state_temp = state.unsqueeze(1).repeat(1, self.num_random, 1).view(
             state.shape[0] * self.num_random, state.shape[1])
         cur_act, cur_log_proba = self.actor(state_temp)
         cur_log_proba = cur_log_proba.view(state.shape[0], self.num_random, 1)
-
+        # \mu sampling a - next state
         next_state_temp = next_state.unsqueeze(1).repeat(1, self.num_random, 1).view(
             next_state.shape[0] * self.num_random, next_state.shape[1])
         next_act, next_log_proba = self.actor(next_state_temp)
         next_log_proba = next_log_proba.view(next_state.shape[0], self.num_random, 1) 
-
+        # uniform distribution
         random_act_tensor = torch.FloatTensor(q2.shape[0] * self.num_random, action.shape[-1]).uniform_(
             -self.action_bound, self.action_bound).to(self.device)
+
         q1_rand =  self._get_tensor_values(state, random_act_tensor, self.critic_1)
         q2_rand =  self._get_tensor_values(state, random_act_tensor, self.critic_2)
         q1_curr_actions = self._get_tensor_values(state, cur_act, network=self.critic_1)
@@ -176,22 +178,22 @@ class CQL_H_SAC:
         q1_next_actions = self._get_tensor_values(state, next_act, network=self.critic_1)
         q2_next_actions = self._get_tensor_values(state, next_act, network=self.critic_2)
         
-        cat_q1 = torch.cat(
-            [q1_rand, q1.unsqueeze(1), q1_next_actions, q1_curr_actions], 1
-        )
-        cat_q2 = torch.cat(
-            [q2_rand, q2.unsqueeze(1), q2_next_actions, q2_curr_actions], 1
-        )
-        std_q1 = torch.std(cat_q1, dim=1)
-        std_q2 = torch.std(cat_q2, dim=1)
-        # min_q_version
-        random_density = np.log(0.5 ** cur_act.shape[-1])
+        # cat_q1 = torch.cat(
+        #     [q1_rand, q1.unsqueeze(1), q1_next_actions, q1_curr_actions], 1
+        # )
+        # cat_q2 = torch.cat(
+        #     [q2_rand, q2.unsqueeze(1), q2_next_actions, q2_curr_actions], 1
+        # )
+        # std_q1 = torch.std(cat_q1, dim=1)
+        # std_q2 = torch.std(cat_q2, dim=1)
+
+        random_h = cur_act.shape[-1] * np.log(2)
         # print(f'{q1_rand.shape=} {q1_next_actions.shape=} {next_act.shape=} {next_log_proba.shape=}, {q1_curr_actions.shape=} {cur_log_proba.shape=}')
         cat_q1 = torch.cat(
-            [q1_rand - random_density, q1_next_actions - next_log_proba.detach(), q1_curr_actions - cur_log_proba.detach()], 1
+            [q1_rand + random_h, q1_next_actions - next_log_proba.detach(), q1_curr_actions - cur_log_proba.detach()], 1
         )
         cat_q2 = torch.cat(
-            [q2_rand - random_density, q2_next_actions - next_log_proba.detach(), q2_curr_actions - cur_log_proba.detach()], 1
+            [q2_rand + random_h, q2_next_actions - next_log_proba.detach(), q2_curr_actions - cur_log_proba.detach()], 1
         )
         # eqution4 CQL(H)
         min_qf1_loss = torch.logsumexp(cat_q1 / self.temp, dim=1,).mean() * self.temp

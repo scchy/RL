@@ -30,7 +30,6 @@ def cql_Walker2d_v4_test():
     path_ = os.path.dirname(__file__)
     cfg = Config(
         env, 
-        num_episode=2500,
         save_path=os.path.join(path_, "test_models" ,f'CQL-{env_name}.ckpt'), 
         actor_hidden_layers_dim=[256, 256],
         critic_hidden_layers_dim=[256, 256],
@@ -39,7 +38,7 @@ def cql_Walker2d_v4_test():
         max_episode_rewards=2048,
         max_episode_steps=800,
         gamma=0.98,
-        num_epoches=1600,
+        num_epoches=1200,
         batch_size=256,
         CQL_kwargs=dict(
             temp=1.2,
@@ -48,7 +47,7 @@ def cql_Walker2d_v4_test():
             tau=0.05,
             target_entropy=-torch.prod(torch.Tensor(env.action_space.shape)).item(),
             action_bound=1.0,
-            reward_scale=1
+            reward_scale=2.5
         )
     )
     agent = CQL(
@@ -68,7 +67,7 @@ def cql_Walker2d_v4_test():
     #     agent, 
     #     cfg,
     #     env_name,
-    #     data_level='simple',
+    #     data_level='simple',# 'medium', #
     #     test_episode_freq=10,
     #     episode_count=5,
     #     play_without_seed=True, 
