@@ -4,7 +4,7 @@
 # Func: Batch RL-training Func
 # ===================================================================================
 import gymnasium as gym
-import wandb
+import swanlab as wandb
 import numpy as np 
 from tqdm.auto import tqdm 
 import torch
@@ -141,9 +141,10 @@ def batch_rl_training(
         episode_data = next(iter_collecter)
         ep_bar.set_description(f'[ {ep} / {cfg.num_epoches} ]')
         dloader = DataLoader(epDataset(episode_data), batch_size=cfg.batch_size, shuffle=True)
+        min_q_collect = []
         for batch in dloader:
-            agnetAlgo.update(batch)
-
+            min_q = agnetAlgo.update(batch, wandb_w=wandb if wandb_flag else None)
+            min_q_collect.append(min_q)
         if (ep+1) % test_episode_freq == 0:
             ep_p = play(
                 env, 
@@ -160,6 +161,19 @@ def batch_rl_training(
                 best_r = ep_p
                 save_agent_model(agnetAlgo, cfg, info='[ test_ep_freq-SAVE ]')
 
-        ep_bar.set_postfix({'recent_reward':  f"{recent_p:.3f}", 'best_reward': f"{best_r:.3f}"})
+        min_q_ = np.mean(min_q_collect)
+        ep_bar.set_postfix({
+            'recent_reward':  f"{recent_p:.3f}", 
+            'best_reward': f"{best_r:.3f}",
+            'min_q': f'{min_q_:.3f}'
+        })
+        if wandb_flag:
+            log_dict = {
+                "recent_reward": recent_p,
+                'best_reward': best_r
+            }
+            wandb.log(log_dict)
 
-
+    if wandb_flag:
+        wandb.finish()
+    return agnetAlgo

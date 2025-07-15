@@ -23,7 +23,10 @@ src
 │   └── simple_rl_rag.py
 ├── requestment.txt
 ├── RLAlgo
+│   ├── A2C.py
 │   ├── _base_net.py
+│   ├──batchRL
+│   │   └──  cql.py
 │   ├── DDPG.py
 │   ├── DQN.py
 │   ├── grad_ana.py
@@ -32,8 +35,13 @@ src
 │   ├── PPO2.py
 │   ├── PPO.py
 │   ├── SAC.py
+│   ├── SoftQNew.py
+│   ├── SoftQ.py
 │   └── TD3.py
 ├── RLUtils
+│   ├── batchRL
+│   │   ├── trainer.py
+│   │   └── utils.py
 │   ├── config.py
 │   ├── env_wrapper.py
 │   ├── __init__.py
@@ -44,6 +52,8 @@ src
 ├── test
 │   ├── border_detector.py
 │   ├── README.md
+│   ├── test_ac.py
+│   ├── test_cql.py
 │   ├── test_ddpg.py
 │   ├── test_dqn.py
 │   ├── test_env_explore.ipynb
@@ -52,6 +62,7 @@ src
 │   ├── test_ppo_new.py
 │   ├── test_ppo.py
 │   ├── test_sac.py
+│   ├── test_softQ.py
 │   ├── test_TD3.py
 │   └── wandb
 └── TODO.md
@@ -68,7 +79,6 @@ src
 |torchvision | 0.16.1|
 |gymnasium | 0.29.1|
 |cloudpickle | 2.2.1|
-|envpool | 0.8.4|
 
 
 ## 运行示例
@@ -165,3 +175,7 @@ play(env_, agent, cfg, episode_count=3, play_without_seed=True, render=False)
 |[ ALE/Breakout-v5 ](state: (210, 160, 3),action: 4(离散 ))| [Breakout_v5_ppo2_test](./src/test/test_ppo_atari.py)  |![Breakout](./docs/pic/PPO2_Breakout_v5.gif) |
 |[ ALE/DoubleDunk-v5 ](state: (210, 160, 3),action: 18(离散 ))| [DoubleDunk_v5_ppo2_test](./src/test/test_ppo_atari.py) | ![DoubleDunk](./docs/pic/PPO2_DoubleDunk_v5.gif)|
 |[ ALE/Galaxian-v5 ](state: (210, 160, 3),action: 6(离散 ))| [Galaxian_v5_ppo2_test](./src/test/test_ppo_atari.py)  |![Galaxian](./docs/pic/PPO2_Galaxian_v5.gif) |
+|[ Walker2d-v4 ](state: (17,),action: (6,)(连续 <-1.0 -> 1.0>))| [cql_Walker2d_v4_simple_test](./src/test/test_cql.py)   |![warlker](./docs/pic/CQL_Walk2d-v4.gif) |
+
+
+

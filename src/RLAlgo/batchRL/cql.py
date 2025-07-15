@@ -40,7 +40,8 @@ class CQL_H_SAC:
             tau=0.05
         ),
         device: torch.device='cpu',
-        alpha_lr: float=None
+        alpha_lr: float=None,
+        reward_func: typ.Callable=None
     ):
         self.state_dim = state_dim
         self.action_dim = action_dim
@@ -48,6 +49,7 @@ class CQL_H_SAC:
         self.actor_lr = actor_lr
         self.critic_lr = critic_lr
         self.alpha_lr = alpha_lr
+        self.reward_func = reward_func
         if alpha_lr is None:
             self.alpha_lr = actor_lr
         self.log_alpha = torch.tensor(np.log(0.01), dtype=torch.float, requires_grad=True)
@@ -125,12 +127,14 @@ class CQL_H_SAC:
         self.critic_1.eval()
         self.critic_2.eval()
 
-    def update(self, batch_tensor):
+    def update(self, batch_tensor, wandb_w=None):
         state, action, reward, next_state, done = batch_tensor
         state = state.float().to(self.device)
         action = action.float().to(self.device)
         reward = reward.to(self.device)
-        reward = (reward + 10.0) / 10.0 * self.reward_scale 
+        if self.reward_func is not None:
+            reward = self.reward_func(reward)
+        reward = reward * self.reward_scale 
         next_state = next_state.float().to(self.device)
         done = done.to(self.device)
 
@@ -144,7 +148,7 @@ class CQL_H_SAC:
         #            log_prob = tanh_normal.log_prob(action, pre_tanh_value=pre_tanh_value);
         #            self.normal.log_prob(pre_tanh_value) - torch.log(1 - value * value + self.epsilon)
         #            log_prob = log_prob.sum(dim=1, keepdim=True)
-        actor_loss = torch.mean(-(torch.min(q1_v, q2_v) - self.log_alpha.exp() * log_prob))
+        actor_loss = torch.mean(-(torch.min(q1_v, q2_v) - self.log_alpha.exp().detach() * log_prob))
         self.actor_opt.zero_grad()
         actor_loss.backward()
         self.actor_opt.step()
@@ -189,12 +193,16 @@ class CQL_H_SAC:
 
         random_h = cur_act.shape[-1] * np.log(2)
         # print(f'{q1_rand.shape=} {q1_next_actions.shape=} {next_act.shape=} {next_log_proba.shape=}, {q1_curr_actions.shape=} {cur_log_proba.shape=}')
-        cat_q1 = torch.cat(
-            [q1_rand + random_h, q1_next_actions - next_log_proba.detach(), q1_curr_actions - cur_log_proba.detach()], 1
-        )
-        cat_q2 = torch.cat(
-            [q2_rand + random_h, q2_next_actions - next_log_proba.detach(), q2_curr_actions - cur_log_proba.detach()], 1
-        )
+        cat_q1 = torch.cat([
+            q1_rand + random_h, 
+            q1_next_actions - next_log_proba.detach(), 
+            q1_curr_actions - cur_log_proba.detach()
+        ], 1)
+        cat_q2 = torch.cat([
+            q2_rand + random_h, 
+            q2_next_actions - next_log_proba.detach(), 
+            q2_curr_actions - cur_log_proba.detach()
+        ], 1)
         # eqution4 CQL(H)
         min_qf1_loss = torch.logsumexp(cat_q1 / self.temp, dim=1,).mean() * self.temp
         min_qf2_loss = torch.logsumexp(cat_q2 / self.temp, dim=1,).mean() * self.temp
@@ -221,6 +229,18 @@ class CQL_H_SAC:
         # update target_critic 
         self.soft_update(self.critic_1, self.target_critic_1)
         self.soft_update(self.critic_2, self.target_critic_2)
+        if wandb_w is not None:
+            log_dict = {
+                "mean_q": torch.min(q1_v, q2_v).detach().cpu().numpy().mean()/self.reward_scale,
+                'min_qf1_loss': min_qf1_loss.detach(),
+                'min_qf2_loss': min_qf2_loss.detach(),
+                'critic_1_loss': critic_1_loss.detach(),
+                'critic_2_loss': critic_2_loss.detach(),
+                'alpha_loss': alpha_loss.detach(),
+                'actor_loss': actor_loss.detach(),
+            }
+            wandb_w.log(log_dict)
+        return torch.min(q1_v, q2_v).detach().cpu().numpy().mean()/self.reward_scale
 
     def _get_tensor_values(self, obs, actions, network=None):
         action_shape = actions.shape[0]
