@@ -11,7 +11,7 @@ import cv2
 import time 
 from torchvision import transforms
 from gymnasium.spaces import Box, Space
-from gymnasium.wrappers import FrameStack, LazyFrames, RecordEpisodeStatistics
+from gymnasium.wrappers import FrameStack, LazyFrames, RecordEpisodeStatistics, NormalizeObservation
 from collections import deque
 from typing import List, Dict, Optional, Callable, Iterable, Tuple, Any, Sequence, Union
 from numpy.typing import NDArray

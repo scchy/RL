@@ -92,16 +92,20 @@ def play(
     return np.mean(ep_reward_record) # np.percentile(ep_reward_record, 50)
 
 
-def iter_ep_date(num_epoches, collected_data):
+def iter_ep_date(num_epoches, collected_data, bc_flag=False):
     idx = 1
     while (idx < num_epoches):
         for batch in collected_data.iterate_episodes():
             idx += 1
+            if bc_flag and idx == 3:
+                idx += num_epoches # 直接截断 仅用2个数据进行训练
             yield batch
             if idx - 1 >= num_epoches:
                 break 
 
-    
+        if bc_flag:
+            idx = 1
+
 
 @logger.catch
 def batch_rl_training(
@@ -116,7 +120,8 @@ def batch_rl_training(
         render=False, 
         wandb_flag=False,
         wandb_project_name='batch_rl_training',
-        rank=None
+        rank=None,
+        name_str=''
     ):
     env = gym.make(env_name)
     if collected_data is None:
@@ -129,11 +134,11 @@ def batch_rl_training(
         now_ = datetime.now().strftime('%Y%m%d__%H%M')
         wandb.init(
             project=wandb_project_name,
-            name=f"{algo}__{env_id}__{now_}",
+            name=f"{algo}{name_str}__{env_id}__{now_}",
             config=cfg_dict,
             monitor_gym=True
         )
-    iter_collecter = iter_ep_date(cfg.num_epoches, collected_data)
+    iter_collecter = iter_ep_date(cfg.num_epoches, collected_data, getattr(agnetAlgo, 'bc_flag', False))
     ep_bar = tqdm(range(cfg.num_epoches), total=cfg.num_epoches)
     ep_que = deque(maxlen=10)
     best_r = recent_p = -np.inf
@@ -143,7 +148,10 @@ def batch_rl_training(
         dloader = DataLoader(epDataset(episode_data), batch_size=cfg.batch_size, shuffle=True)
         min_q_collect = []
         for batch in dloader:
-            min_q = agnetAlgo.update(batch, wandb_w=wandb if wandb_flag else None)
+            if getattr(agnetAlgo, 'bc_flag', False):
+                min_q = agnetAlgo.bc_update(batch, wandb_w=wandb if wandb_flag else None)
+            else:
+                min_q = agnetAlgo.update(batch, wandb_w=wandb if wandb_flag else None)
             min_q_collect.append(min_q)
         if (ep+1) % test_episode_freq == 0:
             ep_p = play(

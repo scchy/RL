@@ -8,6 +8,9 @@
 
 import typing as typ
 import numpy as np
+import os
+import math
+from gymnasium.wrappers.normalize import RunningMeanStd
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -50,6 +53,8 @@ class CQL_H_SAC:
         self.critic_lr = critic_lr
         self.alpha_lr = alpha_lr
         self.reward_func = reward_func
+        self.bc_flag = CQL_kwargs.get('bc_flag', False)
+        self.norm_obs = CQL_kwargs.get('norm_obs', False)
         if alpha_lr is None:
             self.alpha_lr = actor_lr
         self.log_alpha = torch.tensor(np.log(0.01), dtype=torch.float, requires_grad=True)
@@ -81,6 +86,16 @@ class CQL_H_SAC:
 
         self.softmax = torch.nn.Softmax(dim=1)
         self.softplus = torch.nn.Softplus(beta=self.temp, threshold=20)
+        
+        # NormalizeObservation
+        self.obs_rms = RunningMeanStd(shape=(state_dim,))
+
+    def normalize(self, obs, update_flag=True):
+        if not self.norm_obs:
+            return obs
+        if update_flag:
+            self.obs_rms.update(obs if isinstance(obs, np.ndarray) else obs.detach().cpu().numpy())
+        return (obs - self.obs_rms.mean) / np.sqrt(self.obs_rms.var + 1e-6)
 
     def _critic_to_device(self, device):
         self.critic_1 = self.critic_1.to(device)
@@ -89,8 +104,8 @@ class CQL_H_SAC:
         self.target_critic_2 = self.target_critic_2.to(device)
 
     def policy(self, state):
-        state = torch.FloatTensor(np.array([state])).to(self.device)
-        action = self.actor(state)[0]
+        state = torch.FloatTensor(np.array([self.normalize(state, False)])).to(self.device)
+        action = self.actor(state, retrun_log_prob=not self.bc_flag)[0]
         return action.cpu().detach().numpy()[0]
 
     def _get_tensor_values(self, obs, actions, network):
@@ -127,14 +142,35 @@ class CQL_H_SAC:
         self.critic_1.eval()
         self.critic_2.eval()
 
+    def bc_update(self, batch_tensor, wandb_w=None):
+        state, action, reward, next_state, done = batch_tensor
+        state = self.normalize(state, True)
+        action = action.float().to(self.device)
+        state = state.float().to(self.device) 
+        # 1- actor_loss 
+        new_act, log_prob = self.actor(state, retrun_log_prob=False)
+        imitation_loss = torch.mean(0.5 * (action - new_act) ** 2)
+        self.actor_opt.zero_grad()
+        imitation_loss.backward()
+        self.actor_opt.step()
+
+        if wandb_w is not None:
+            log_dict = {                
+                'imitation_loss': imitation_loss.detach()
+            }
+            wandb_w.log(log_dict)
+        return -1
+
     def update(self, batch_tensor, wandb_w=None):
         state, action, reward, next_state, done = batch_tensor
+        state = self.normalize(state, True)
         state = state.float().to(self.device)
         action = action.float().to(self.device)
         reward = reward.to(self.device)
         if self.reward_func is not None:
             reward = self.reward_func(reward)
         reward = reward * self.reward_scale 
+        next_state = self.normalize(next_state, False)
         next_state = next_state.float().to(self.device)
         done = done.to(self.device)
 
@@ -250,4 +286,49 @@ class CQL_H_SAC:
         preds = network(obs_temp, actions)
         preds = preds.view(obs.shape[0], num_repeat, 1)
         return preds
+
+    def save_model(self, file_path):
+        if not os.path.exists(file_path):
+            os.makedirs(file_path)
+
+        act_f = os.path.join(file_path, 'cql_actor.ckpt')
+        critic_f = os.path.join(file_path, 'cql_critic.ckpt')
+        if self.norm_obs:
+            self.actor.obs_mean.data = torch.tensor(self.obs_rms.mean).to(self.device)
+            self.actor.obs_var.data = torch.tensor(self.obs_rms.var).to(self.device)
+        
+        torch.save(self.actor.state_dict(), act_f)
+        torch.save(self.critic_1.state_dict(), critic_f)
+
+    def load_model(self, file_path):
+        act_f = os.path.join(file_path, 'cql_actor.ckpt')
+        critic_f = os.path.join(file_path, 'cql_critic.ckpt')
+        self.actor.load_state_dict(torch.load(act_f, map_location='cpu'))
+        self.critic_1.load_state_dict(torch.load(critic_f, map_location='cpu'))
+        self.critic_2.load_state_dict(torch.load(critic_f, map_location='cpu'))
+        self.target_critic_1.load_state_dict(torch.load(critic_f, map_location='cpu'))
+        self.target_critic_2.load_state_dict(torch.load(critic_f, map_location='cpu'))
+        
+        self.obs_rms.mean = self.actor.obs_mean.data.detach().cpu().numpy()
+        self.obs_rms.var = self.actor.obs_var.data.detach().cpu().numpy()
+        
+        self.actor.to(self.device)
+        self.critic_1.to(self.device)
+        self.critic_2.to(self.device)
+        self.target_critic_1.to(self.device)
+        self.target_critic_2.to(self.device)
+
+        self.actor_opt = torch.optim.Adam(self.actor.parameters(), lr=self.actor_lr)
+        self.critic_1_opt = torch.optim.Adam(self.critic_1.parameters(), lr=self.critic_lr)
+        self.critic_2_opt = torch.optim.Adam(self.critic_2.parameters(), lr=self.critic_lr)
+
+
+
+
+
+def mdn_loss(mu, logvar, logpi, a):
+    var = torch.exp(logvar.clamp(-10, 10))
+    log_prob = -0.5 * ((a - mu) ** 2 / var + logvar + math.log(2 * math.pi))
+    log_mix = torch.logsumexp(logpi + log_prob, dim=-1)
+    return -log_mix.mean()
 

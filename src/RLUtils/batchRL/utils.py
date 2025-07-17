@@ -68,12 +68,18 @@ class epDataset(Dataset):
 
 if __name__ == '__main__':
     env_name = 'Walker2d-v4'
+    env = gym.make(env_name)
+    print(f"{env.observation_space.shape=}")
     data_ = load_mujoco_data(env_name)
+    idx = 0
     for episode_data in data_.iterate_episodes():
+        if idx == 2:
+            break
+        print(f"len={len(episode_data.rewards)} {episode_data.rewards.sum()=}")
         dloader = DataLoader(epDataset(episode_data), batch_size=256, shuffle=True)
         for batch in dloader:
             states, actions, reward, next_state, done = batch
-            print(f'{states.shape=} {actions.shape=} {reward.shape=}')
-        break 
+            print(f'[{idx=}] {states.shape=} {actions.shape=} {reward.shape=}')
+        idx += 1
 
 

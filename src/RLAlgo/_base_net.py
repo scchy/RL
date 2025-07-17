@@ -161,18 +161,33 @@ class SACPolicyNet(nn.Module):
             }))
         self.fc_mu = nn.Linear(hidden_layers_dim[-1], action_dim)
         self.fc_std = nn.Linear(hidden_layers_dim[-1], action_dim)
+        self.register_parameter(name="obs_mean", param=nn.Parameter(torch.tensor(0.0, dtype=torch.float), requires_grad=False))
+        self.register_parameter(name="obs_var", param=nn.Parameter(torch.tensor(0.0, dtype=torch.float), requires_grad=False))
+        sample_n = 10
+        self.mdn_head = nn.Linear(hidden_layers_dim[-1], sample_n * action_dim)
 
-    def forward(self, x):
+    def get_feature(self, x):
         for layer in self.features:
             x = layer['linear_action'](layer['linear'](x))
-        
+        return x
+    
+    def get_mdn(self, x):
+        x = self.get_feature(x)
+        params = self.mdn_head(x)
+        mu, logvar, logpi = torch.chunk(params, 3, dim=-1)
+        return mu, logvar, logpi
+
+    def forward(self, x, retrun_log_prob=True):
+        x = self.get_feature(x)
         mean_ = self.fc_mu(x)
         std = F.softplus(self.fc_std(x).clip(-100, 650)) + 3e-5
         dist = Normal(mean_, std)
         normal_sample = dist.rsample()
-        log_prob = dist.log_prob(normal_sample)
         action = torch.tanh(normal_sample)
+        if not retrun_log_prob:
+            return action * self.action_bound, None
         # 计算tanh_normal分布的对数概率密度
+        log_prob = dist.log_prob(normal_sample)
         log_prob = log_prob - torch.log(1 - torch.tanh(action).pow(2) + 1e-7)
         if len(log_prob.shape) >= 2:
             log_prob = log_prob.sum(1, keepdim=True)

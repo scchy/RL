@@ -177,8 +177,10 @@ def cql_Walker2d_v4_medium_test():
     play(env, agent, cfg, episode_count=2, play_without_seed=True, render=False)
 
 
-
-def cql_Walker2d_v4_expert_test():
+def cql_Walker2d_v4_expert_bc_test():
+    """
+    BC 调参核心 norm_obs + lr 
+    """
     data_level = 'expert' 
     add_str_ = '' if data_level == 'simple' else f'-{data_level}'
     env_name = 'Walker2d-v4'
@@ -188,24 +190,95 @@ def cql_Walker2d_v4_expert_test():
     path_ = os.path.dirname(__file__)
     cfg = Config(
         env, 
-        save_path=os.path.join(path_, "test_models" ,f'CQL-{env_name}{add_str_}.ckpt'), 
-        actor_hidden_layers_dim=[256, 256],
-        critic_hidden_layers_dim=[256, 256],
-        actor_lr=2.5e-4,  
+        save_path=os.path.join(path_, "test_models" ,f'CQL-{env_name}{add_str_}-BC'), 
+        actor_hidden_layers_dim=[256, 256, 256],
+        critic_hidden_layers_dim=[256, 256, 256],
+        actor_lr=1.047e-4, # 1.05e-4 bc
+        critic_lr=3.5e-4,  
+        max_episode_rewards=2048,
+        max_episode_steps=800,
+        gamma=0.98,
+        num_epoches=6000,  # bc  6000
+        batch_size=128,    # bc  128
+        CQL_kwargs=dict(
+            temp=1.0,
+            min_q_weight=2.45,  
+            num_random=10,
+            tau=0.025,
+            target_entropy=-torch.prod(torch.Tensor(env.action_space.shape)).item(),
+            action_bound=1.0,
+            reward_scale=1.25, 
+            bc_flag=True,
+            norm_obs=True
+        )
+    )
+    agent = CQL(
+        state_dim=cfg.state_dim,
+        actor_hidden_layers_dim=cfg.actor_hidden_layers_dim,
+        critic_hidden_layers_dim=cfg.critic_hidden_layers_dim,
+        action_dim=cfg.action_dim, 
+        actor_lr=cfg.actor_lr,
+        critic_lr=cfg.critic_lr,
+        alpha_lr=5e-3, #simple 
+        gamma=cfg.gamma,
+        CQL_kwargs=cfg.CQL_kwargs,
+        device=cfg.device,
+        #reward_func=lambda r: (r + 10)/10 
+    )
+    # batch_rl_training(
+    #     agent, 
+    #     cfg,
+    #     env_name,
+    #     data_level=data_level, 
+    #     test_episode_freq=10,
+    #     episode_count=5,
+    #     play_without_seed=True, 
+    #     wandb_flag=True,
+    #     render=False,
+    #     wandb_project_name=f'OfflineRL-{env_name}-{data_level}',
+    #     name_str='-bc' if cfg.CQL_kwargs.get('bc_flag', False) else ''
+    # )
+    agent.load_model(cfg.save_path)
+    logger.info('--'*25 + ' [ EVALUATION-PLAY ] ' + '--'*25)
+    agent.eval()
+    cfg.max_episode_steps = 600
+    env = gym.make(env_name) #, render_mode='human')
+    play(env, agent, cfg, episode_count=3, play_without_seed=True, render=False)
+
+
+def cql_Walker2d_v4_expert_test():
+    """
+    BC 调参核心 norm_obs + lr 
+    """
+    data_level = 'expert' 
+    add_str_ = '' if data_level == 'simple' else f'-{data_level}'
+    env_name = 'Walker2d-v4'
+    gym_env_desc(env_name)
+    env = gym.make(env_name)
+    print("gym.__version__ = ", gym.__version__ )
+    path_ = os.path.dirname(__file__)
+    cfg = Config(
+        env, 
+        save_path=os.path.join(path_, "test_models" ,f'CQL-{env_name}{add_str_}-obsNorm'), 
+        actor_hidden_layers_dim=[256, 256, 256],
+        critic_hidden_layers_dim=[256, 256, 256],
+        actor_lr=2.25e-4,  # 1.047e-4, 
         critic_lr=4.5e-4,  
         max_episode_rewards=2048,
         max_episode_steps=800,
         gamma=0.98,
-        num_epoches=12400,  
-        batch_size=256,
+        num_epoches=12600,  
+        batch_size=128,    
         CQL_kwargs=dict(
             temp=1.0,
-            min_q_weight=1.45,  
+            min_q_weight=2.45,  
             num_random=10,
-            tau=0.05, # simple
+            tau=0.025,
             target_entropy=-torch.prod(torch.Tensor(env.action_space.shape)).item(),
             action_bound=1.0,
-            reward_scale=1.0, 
+            reward_scale=1.25, 
+            bc_flag=False,
+            norm_obs=True
         )
     )
     agent = CQL(
@@ -229,13 +302,12 @@ def cql_Walker2d_v4_expert_test():
         test_episode_freq=10,
         episode_count=5,
         play_without_seed=True, 
-        wandb_flag=False,
+        wandb_flag=True,
         render=False,
-        wandb_project_name=f'OfflineRL-{env_name}'
+        wandb_project_name=f'OfflineRL-{env_name}-{data_level}',
+        name_str='-bc' if cfg.CQL_kwargs.get('bc_flag', False) else ''
     )
-    agent.actor.load_state_dict(
-        torch.load(cfg.save_path, map_location='cpu')
-    )
+    agent.load_model(cfg.save_path)
     logger.info('--'*25 + ' [ EVALUATION-PLAY ] ' + '--'*25)
     agent.eval()
     cfg.max_episode_steps = 600
@@ -246,5 +318,6 @@ def cql_Walker2d_v4_expert_test():
 if __name__ == '__main__':
     # cql_Walker2d_v4_simple_test()
     # cql_Walker2d_v4_medium_test()
+    # cql_Walker2d_v4_expert_bc_test()
     cql_Walker2d_v4_expert_test()
 
