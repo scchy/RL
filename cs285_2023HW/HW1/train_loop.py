@@ -120,13 +120,14 @@ def run_training_loop(params):
                 env, 
                 expert_policy, 
                 # todo: check 
-                params['batch_size'], # min_timesteps_per_batch 
-                params['batch_size']//params['train_batch_size'], # max_path_length
+                params['batch_size'], # min_timesteps_per_batch:  n*episode >= min_timesteps_per_batch
+                params['ep_len'],     # max_path_length: episode length 
                 render=False
             )
         
         total_envsteps += envsteps_this_batch
-        # add collected data to replay buffer
+        # BC: only user expert Data
+        # DAgger: expert Data +  expert_policy 生成的数据
         replay_buffer.add_rollouts(paths)
         # train agent (using sampled data from replay buffer)
         print('\nTraining agent using sampled data from replay buffer...')

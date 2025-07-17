@@ -200,13 +200,13 @@ class ReplayBuffer(object):
         observations, actions, rewards, next_observations, terminals = (
             convert_listofrollouts(paths, concat_rew))
 
-        if self.obs is None:
+        if self.obs is None: # 第一次加入
             self.obs = observations[-self.max_size:]
             self.acs = actions[-self.max_size:]
             self.rews = rewards[-self.max_size:]
             self.next_obs = next_observations[-self.max_size:]
             self.terminals = terminals[-self.max_size:]
-        else:
+        else: # DAgger 取最新的数据-合并的数据
             self.obs = np.concatenate([self.obs, observations])[-self.max_size:]
             self.acs = np.concatenate([self.acs, actions])[-self.max_size:]
             if concat_rew:

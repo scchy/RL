@@ -144,8 +144,8 @@ class MLPPolicySL(BasePolicy, metaclass=abc.ABCMeta):
         actions = torch.tensor(actions).float().to(self.device)
         pred_dist = self.actor(observations)
         pred_a = pred_dist.rsample()
-        # print(f"{pred_a=}")
 
+        # imitation loss
         loss = torch.mean(0.5 * (actions - pred_a) ** 2)
         self.optimizer.zero_grad()
         loss.backward()
