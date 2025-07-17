@@ -242,8 +242,8 @@ def cql_Walker2d_v4_expert_bc_test():
     logger.info('--'*25 + ' [ EVALUATION-PLAY ] ' + '--'*25)
     agent.eval()
     cfg.max_episode_steps = 600
-    env = gym.make(env_name) #, render_mode='human')
-    play(env, agent, cfg, episode_count=3, play_without_seed=True, render=False)
+    env = gym.make(env_name, render_mode='human')
+    play(env, agent, cfg, episode_count=3, play_without_seed=True, render=True)
 
 
 def cql_Walker2d_v4_expert_test():
@@ -267,7 +267,7 @@ def cql_Walker2d_v4_expert_test():
         max_episode_rewards=2048,
         max_episode_steps=800,
         gamma=0.98,
-        num_epoches=12600,  
+        num_epoches=21600,   # 12600,  
         batch_size=128,    
         CQL_kwargs=dict(
             temp=1.0,
@@ -294,25 +294,25 @@ def cql_Walker2d_v4_expert_test():
         device=cfg.device,
         #reward_func=lambda r: (r + 10)/10 
     )
-    batch_rl_training(
-        agent, 
-        cfg,
-        env_name,
-        data_level=data_level, 
-        test_episode_freq=10,
-        episode_count=5,
-        play_without_seed=True, 
-        wandb_flag=True,
-        render=False,
-        wandb_project_name=f'OfflineRL-{env_name}-{data_level}',
-        name_str='-bc' if cfg.CQL_kwargs.get('bc_flag', False) else ''
-    )
+    # batch_rl_training(
+    #     agent, 
+    #     cfg,
+    #     env_name,
+    #     data_level=data_level, 
+    #     test_episode_freq=10,
+    #     episode_count=5,
+    #     play_without_seed=True, 
+    #     wandb_flag=True,
+    #     render=False,
+    #     wandb_project_name=f'OfflineRL-{env_name}-{data_level}',
+    #     name_str='-bc' if cfg.CQL_kwargs.get('bc_flag', False) else ''
+    # )
     agent.load_model(cfg.save_path)
     logger.info('--'*25 + ' [ EVALUATION-PLAY ] ' + '--'*25)
     agent.eval()
     cfg.max_episode_steps = 600
-    env = gym.make(env_name) #, render_mode='human')
-    play(env, agent, cfg, episode_count=2, play_without_seed=True, render=False)
+    env = gym.make(env_name, render_mode='human')
+    play(env, agent, cfg, episode_count=2, play_without_seed=True, render=True)
 
 
 if __name__ == '__main__':

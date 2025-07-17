@@ -303,14 +303,15 @@ class CQL_H_SAC:
     def load_model(self, file_path):
         act_f = os.path.join(file_path, 'cql_actor.ckpt')
         critic_f = os.path.join(file_path, 'cql_critic.ckpt')
-        self.actor.load_state_dict(torch.load(act_f, map_location='cpu'))
+        actor_d = torch.load(act_f, map_location='cpu')
+        self.actor.load_state_dict(actor_d)
         self.critic_1.load_state_dict(torch.load(critic_f, map_location='cpu'))
         self.critic_2.load_state_dict(torch.load(critic_f, map_location='cpu'))
         self.target_critic_1.load_state_dict(torch.load(critic_f, map_location='cpu'))
         self.target_critic_2.load_state_dict(torch.load(critic_f, map_location='cpu'))
         
-        self.obs_rms.mean = self.actor.obs_mean.data.detach().cpu().numpy()
-        self.obs_rms.var = self.actor.obs_var.data.detach().cpu().numpy()
+        self.obs_rms.mean = actor_d['obs_mean'].detach().cpu().numpy()
+        self.obs_rms.var = actor_d['obs_var'].detach().cpu().numpy()
         
         self.actor.to(self.device)
         self.critic_1.to(self.device)
