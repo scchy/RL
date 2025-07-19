@@ -21,7 +21,7 @@
     - 单一策略：在单一策略（如随机策略或专家策略）生成的数据集中，CQL 的保守性正则化能够更好地发挥作用。
     - 混合策略：在混合策略生成的数据集中，CQL 的保守性正则化可能无法有效区分不同策略的质量，导致性能下降
     - [x]  目前简单解决`min_q_weight=12.75, reward_scale=1.25`
-    - [ ]  [WHEN SHOULD WE PREFER DECISION TRANSFORMERS FOR OFFLINE REINFORCEMENT LEARNING](https://arxiv.org/pdf/2305.14550)
+    - [X]  [WHEN SHOULD WE PREFER DECISION TRANSFORMERS FOR OFFLINE REINFORCEMENT LEARNING](https://arxiv.org/pdf/2305.14550)
 - [ ] Soft Actor-Critic 2018    [Soft Actor-Critic: Off-Policy Maximum Entropy Deep Reinforcement Learning with a Stochastic Actor](https://arxiv.org/abs/1801.01290)
 - [ ] TT: Trajectory Transformer Offline Reinforcement Learning as One Big Sequence Modeling Problem
   - [ ] [Github:trajectory-transformer](https://github.com/JannerM/trajectory-transformer)
