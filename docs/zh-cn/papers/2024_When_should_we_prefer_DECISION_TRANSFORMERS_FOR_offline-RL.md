@@ -81,36 +81,34 @@ Github link: [prajjwal1/rl_paradigm](https://github.com/prajjwal1/rl_paradigm)
 3) 在低质量数据上，DT 仅微微好于 CQL
 4) DT和CQL比BC更可取，特别是在存在次优数据的情况下。
 
-![pic-fig1]()
+![pic-fig1](../../pic/2024_use_DT_fig1.png)
 
 ### 4.2 轨迹长度增加引起的次优性的影响
 
 1) 轨迹长度的增加，Agent也会受到类似的影响，但当数据由人类生成时，BC是首选。
 
-![Table 4]()
-
+![Table 4](../../pic/2024_use_DT_tb4.png)
 
 ### 4.3 向数据添加噪声的影响
 
 1) BC可能会受到噪声数据的影响最大，而DT和CQL则更稳健。然而，在这种设置下，DT的性能比CQL更可靠。
 
-![fig2]()
-
+![fig2](../../pic/2024_use_DT_fig2.png)
 
 ## 五、当任务复杂性增加时，Agent表现如何
 
 > 导致任务复杂性的两个主要因素是状态空间的维度和任务MDP的视界
 
 当状态空间的维数增加时，所有Agent都会经历类似的恶化。当任务期限增加时，DT仍然是一个稳健的选择，但当已知数据质量高时，BC可能更可取。(fig3 右)
-![fig3]()
-![fig4]()
 
+![fig3_4](../../pic/2024_use_DT_fig3_4.png)
 
 ## 六、在随机环境中，Agent表现如何
 
 虽然在连续动作空间中对高质量数据进行训练时，DT的下降幅度与CQL相当，但随着数据质量的下降或随机性的增加，CQL预计会相对更稳健。
 
-![fig5]()
+![fig5](../../pic/2024_use_DT_fig5.png)
+
 
 ## 七、如何在实践中有效地使用DT
 
@@ -159,3 +157,4 @@ flowchart TD
 | **Step 3** | 评估随机性：环境转移噪声 σ>0.1 时，放弃 DT 换 CQL                                                           |
 | **Step 4** | 若 horizon>1 k 步，DT 训练时用 **context length ≥ 3×horizon** 并加 **gradient checkpointing** 防 OOM |
 | **Step 5** | 训练 DT 时把 **return-to-go 离散化**（如 0/1 稀疏标签）可进一步加速收敛                                          |
+

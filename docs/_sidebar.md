@@ -28,4 +28,4 @@
     * [2017: **ICM: Curiosity-driven Exploration by Self-supervised Prediction**](zh-cn/papers/2017_ICM.md)
 * [16. RLHF VS deepseek-r1](zh-cn/16-RLHF_VS_deepseek-r1.md)
 * [17. OfflineRL-CQL](zh-cn/17-batchRL_CQL.md)
-
+* [18. When Should We Prefer DECISION TRANSFORMERS for offline-RL](zh-cn/papers/2024_When_should_we_prefer_DECISION_TRANSFORMERS_FOR_offline-RL.md)
