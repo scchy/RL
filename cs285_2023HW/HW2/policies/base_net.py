@@ -6,7 +6,7 @@ from typing import Any
 import numpy as np
 import torch
 from torch import distributions
-
+from .utils import from_numpy, to_numpy
 
 
 class ActorNN(nn.Module):
@@ -66,14 +66,14 @@ class ActorNN(nn.Module):
         # `torch.distributions.Distribution` object. It's up to you!
         m_ = self.get_mean(observation)
         if self.discrete:
-            return m_
+            return distributions.Categorical(logits=m_) 
         log_std = self.logstd.expand_as(m_) # self.log_std
         std_ = torch.exp(log_std)
         action_dist = distributions.Normal(m_, std_)
         return action_dist
 
 
-class MLPPolicy(nn.Module):
+class MLPPolicy:
     def __init__(
         self,
         ac_dim: int,
@@ -89,10 +89,11 @@ class MLPPolicy(nn.Module):
         self.discrete = discrete
         self.learning_rate = learning_rate
         self.actor = ActorNN(
-            input_size=ob_dim,
-            output_size=ac_dim,
+            ob_dim=ob_dim,
+            ac_dim=ac_dim,
             n_layers=n_layers,
             size=layer_size,
+            discrete=discrete
         ).to(device)
         self.optimizer = optim.Adam(self.actor.parameters(), lr=self.learning_rate)
 
@@ -106,7 +107,8 @@ class MLPPolicy(nn.Module):
         observation = from_numpy(observation.astype(np.float32)).to(self.device)
         actor_res = self.actor(observation)
         if self.discrete:
-            return actor_res
+            action = actor_res.sample()
+            return to_numpy(action)
 
         action = actor_res.sample()
         return to_numpy(action)
@@ -139,14 +141,13 @@ class MLPPolicyPG(MLPPolicy):
         pred_dist = self.actor(obs)
         if self.discrete:
             # TODO: discrete log proba 
-            pred_a = torch.argmax(pred_a)
-            log_proba = torch.log(pred_dist)[pred_a]
+            log_proba = pred_dist.log_prob(actions)
         else:
-            pred_a = pred_dist.rsample()
-            log_proba = pred_dist.log_proba(pred_a)
-             
+            # pred_a = pred_dist.rsample()
+            log_proba = pred_dist.log_proba(actions).view(-1)
 
         # TODO: implement the policy gradient actor update.
+        # print(f'{advantages.shape=} {log_proba.shape=}')
         loss = -torch.mean(log_proba * advantages)
         self.optimizer.zero_grad()
         loss.backward()
@@ -155,17 +156,21 @@ class MLPPolicyPG(MLPPolicy):
             "Actor Loss": to_numpy(loss),
         }
 
+    def train(self):
+        self.actor.train()
+    
+    def eval(self):
+        self.actor.eval()
+
 
 class criticNN(nn.Module):
     def __init__(
         self,
-        ac_dim,
         ob_dim,
         n_layers,
         size
     ):
-        super(ActorNN, self).__init__()
-        self.ac_dim = ac_dim
+        super(criticNN, self).__init__()
         self.ob_dim = ob_dim
         self.n_layers = n_layers
         self.size = size
@@ -203,16 +208,24 @@ class ValueCritic(nn.Module):
         self.device = device
         self.learning_rate = learning_rate
         self.network = criticNN(
-            input_size=ob_dim,
-            output_size=1,
+            ob_dim=ob_dim,
             n_layers=n_layers,
             size=layer_size,
         ).to(self.device)
-
         self.optimizer = optim.Adam(
             self.network.parameters(),
             learning_rate,
         )
+        self.train()
+    
+    def eval(self):
+        self.network.eval()
+    
+    def train(self):
+        self.network.train()
+
+    def forward(self, obs):
+        return self.network(obs)
 
     def update(self, obs: np.ndarray, q_values: np.ndarray) -> dict:
         obs = from_numpy(obs).to(self.device)
@@ -220,7 +233,7 @@ class ValueCritic(nn.Module):
 
         pred = self.network(obs)
         # TODO: update the critic using the observations and q_values
-        loss = 0.5 * torch.mean((q_values - pred) ** 2)
+        loss = 0.5 * (q_values - pred).pow(2).mean()
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()

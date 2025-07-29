@@ -23,5 +23,5 @@
 # /src/RLAlgo/batchRL/__pycache__/*.pyc
 # /src/RLUtils/batchRL/__pycache__/*
 
-/cs285_2023HW/HW1/data/*.pkl
-/cs285_2023HW/HW1/data/run_summary/*
+/cs285_2023HW/HW*/data/*.pkl
+/cs285_2023HW/HW*/data/run_summary/*

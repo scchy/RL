@@ -1,34 +1,31 @@
 import os
 import time
-
-# from cs285.agents.pg_agent import PGAgent
+from tqdm.auto import tqdm 
+from loguru import logger as lg
 from policies.pg_agent import PGAgent
 import gymnasium as gym
 import numpy as np
 import torch
 from policies.utils import (
-    Logger, 
+    Logger, all_seed,
     init_gpu,
     sample_trajectories, compute_metrics, sample_n_trajectories
     
 )
-# from cs285.infrastructure import pytorch_util as ptu
-# from cs285.infrastructure import utils
-# from cs285.infrastructure.logger import Logger
 from policies.env_wrapper import ActionNoiseWrapper
-# from cs285.infrastructure.action_noise_wrapper import ActionNoiseWrapper
 
 MAX_NVIDEO = 2
 
+
+@lg.catch()
 def run_training_loop(args):
     logger = Logger(args.logdir)
 
-    # set random seeds
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
+    all_seed(args.seed)
     init_gpu(use_gpu=not args.no_gpu, gpu_id=args.which_gpu)
 
     env = gym.make(args.env_name, render_mode=None)
+    env.reset(seed=args.seed)
     discrete = isinstance(env.action_space, gym.spaces.Discrete)
     # add action noise, if needed
     if args.action_noise_std > 0:
@@ -62,30 +59,35 @@ def run_training_loop(args):
 
     total_envsteps = 0
     start_time = time.time()
-
-    for itr in range(args.n_iter):
-        print(f"\n********** Iteration {itr} ************")
+    
+    tq_bar = tqdm(range(args.n_iter))
+    for itr in tq_bar:
+        tq_bar.set_description(f'[ {itr+1}/{args.n_iter} ]')
+        # print(f"\n********** Iteration {itr} ************")
         # TODO: sample `args.batch_size` transitions using utils.sample_trajectories
         # make sure to use `max_ep_len`
+        agent.actor.eval()
         trajs, envsteps_this_batch = sample_trajectories(
             env, agent.actor, args.batch_size, max_ep_len
         )  # TODO
         total_envsteps += envsteps_this_batch
-
         # trajs should be a list of dictionaries of NumPy arrays, where each dictionary corresponds to a trajectory.
         # this line converts this into a single dictionary of lists of NumPy arrays.
         trajs_dict = {k: [traj[k] for traj in trajs] for k in trajs[0]}
 
         # TODO: train the agent using the sampled trajectories and the agent's update function
+        agent.actor.train()
         train_info: dict = agent.update(
             trajs_dict['observation'],
             trajs_dict['action'], 
             trajs_dict['reward'], 
             trajs_dict['terminal']
         )
+        # tq_bar.set_postfix(train_info)
         if itr % args.scalar_log_freq == 0:
             # save eval metrics
-            print("\nCollecting data for eval...")
+            # print("\nCollecting data for eval...")
+            agent.actor.eval()
             eval_trajs, eval_envsteps_this_batch = sample_trajectories(
                 env, agent.actor, args.eval_batch_size, max_ep_len
             )
@@ -102,11 +104,16 @@ def run_training_loop(args):
 
             # perform the logging
             for key, value in logs.items():
-                print("{} : {}".format(key, value))
+                if itr == args.n_iter - 1:
+                    print("{} : {}".format(key, value))
                 logger.log_scalar(value, key, itr)
-            print("Done logging...\n\n")
-
+                # print("Done logging...\n\n")
             logger.flush()
+            train_info['test_R'] = logs['Eval_AverageReturn']
+            train_info['train_R'] = logs['Train_AverageReturn']
+            for k, v in train_info.items():
+                train_info[k] = np.round(v, 5)
+            tq_bar.set_postfix(train_info)
 
         if args.video_log_freq != -1 and itr % args.video_log_freq == 0:
             print("\nCollecting video rollouts...")
@@ -159,18 +166,16 @@ def main():
     parser.add_argument("--scalar_log_freq", type=int, default=1)
 
     parser.add_argument("--action_noise_std", type=float, default=0)
-
+    parser.add_argument('--logdir', type=str, default='./data/run_summary')
     args = parser.parse_args()
 
     # create directory for logging
+    data_path = args.logdir
     logdir_prefix = "q2_pg_"  # keep for autograder
-
-    data_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../../data")
-
     if not (os.path.exists(data_path)):
         os.makedirs(data_path)
 
-    logdir = (
+    logdir_name = (
         logdir_prefix
         + args.exp_name
         + "_"
@@ -178,7 +183,7 @@ def main():
         + "_"
         + time.strftime("%d-%m-%Y_%H-%M-%S")
     )
-    logdir = os.path.join(data_path, logdir)
+    logdir = os.path.join(data_path, logdir_name)
     args.logdir = logdir
     if not (os.path.exists(logdir)):
         os.makedirs(logdir)

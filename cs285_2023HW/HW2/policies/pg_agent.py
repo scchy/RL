@@ -6,11 +6,13 @@
 from typing import Optional, Sequence
 import numpy as np
 import torch
+from torch.nn import Module
 from torch import nn
+from .utils import to_numpy, from_numpy
 from .base_net import MLPPolicyPG, ValueCritic
 
 
-class PGAgent(nn.module):
+class PGAgent:
     def __init__(
         self,
         ob_dim: int,
@@ -84,7 +86,8 @@ class PGAgent(nn.module):
         # step 4: if needed, use all datapoints (s_t, a_t, q_t) to update the PG critic/baseline
         if self.critic is not None:
             # TODO: perform `self.baseline_gradient_steps` updates to the critic/baseline network
-            critic_info: dict = self.critic.update(obs, q_values)
+            for _ in range(self.baseline_gradient_steps):
+                critic_info: dict = self.critic.update(obs, q_values)
 
             info.update(critic_info)
 
@@ -124,7 +127,7 @@ class PGAgent(nn.module):
             advantages = q_values
         else:
             # TODO: run the critic and use it as a baseline
-            values = self.critic(from_numpy(obs)).detach().cpu().numpy()
+            values = self.critic(from_numpy(obs)).detach().cpu().numpy().flatten()
             assert values.shape == q_values.shape
 
             if self.gae_lambda is None:
@@ -137,17 +140,17 @@ class PGAgent(nn.module):
                 # HINT: append a dummy T+1 value for simpler recursive calculation
                 values = np.append(values, [0])
                 advantages = np.zeros(batch_size + 1)
-
-                for i in reversed(range(batch_size)):
+                gae = 0
+                for t in reversed(range(batch_size)):
                     # TODO: recursively compute advantage estimates starting from timestep T.
                     # HINT: use terminals to handle edge cases. terminals[i] is 1 if the state is the last in its
                     # trajectory, and 0 otherwise.
-                    ascending_idx = batch_size - i - 1
-                    mask = 1 - terminals[ascending_idx] * 1
-                    delta = rewards[ascending_idx] + self.gamma * values[ascending_idx + 1] * mask - values[ascending_idx]
-                    advantages[ascending_idx] = delta + self.gae_lambda * self.gamma * advantages[ascending_idx + 1] * mask
+                    mask = 1 - terminals[t] * 1
+                    delta = rewards[t] + self.gamma * values[t + 1] * mask - values[t]
+                    advantages[t] = gae = delta + self.gae_lambda * self.gamma * gae * mask
                 # remove dummy advantage
                 advantages = advantages[:-1]
+                # print('gae adv=', advantages)
 
         # TODO: normalize the advantages to have a mean of zero and a standard deviation of one
         # within the batch
