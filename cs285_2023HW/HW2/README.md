@@ -87,3 +87,5 @@ def compute_GAE(gamma, lmbda, td_delta):
     return torch.tensor(advantage_list, dtype=torch.float)
 ```
 
+# 8- Analysis
+

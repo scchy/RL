@@ -144,7 +144,7 @@ class MLPPolicyPG(MLPPolicy):
             log_proba = pred_dist.log_prob(actions)
         else:
             # pred_a = pred_dist.rsample()
-            log_proba = pred_dist.log_proba(actions).view(-1)
+            log_proba = pred_dist.log_prob(actions).sum(1)
 
         # TODO: implement the policy gradient actor update.
         # print(f'{advantages.shape=} {log_proba.shape=}')
