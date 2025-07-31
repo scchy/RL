@@ -28,16 +28,18 @@ class PGAgent:
         baseline_gradient_steps: Optional[int],
         gae_lambda: Optional[float],
         normalize_advantages: bool,
+        norm_obs: bool=False,
+        max_grad_norm: float=None
     ):
         super().__init__()
         self.actor = MLPPolicyPG(
-            ac_dim, ob_dim, discrete, n_layers, layer_size, learning_rate
+            ac_dim, ob_dim, discrete, n_layers, layer_size, learning_rate, norm_obs, max_grad_norm=max_grad_norm
         )
 
         # create the critic (baseline) network, if needed
         if use_baseline:
             self.critic = ValueCritic(
-                ob_dim, n_layers, layer_size, baseline_learning_rate
+                ob_dim, n_layers, layer_size, baseline_learning_rate, max_grad_norm=max_grad_norm
             )
             self.baseline_gradient_steps = baseline_gradient_steps
         else:
@@ -48,6 +50,7 @@ class PGAgent:
         self.use_reward_to_go = use_reward_to_go
         self.gae_lambda = gae_lambda
         self.normalize_advantages = normalize_advantages
+        print(f"{normalize_advantages=}")
 
     def update(
         self,
@@ -86,6 +89,7 @@ class PGAgent:
         # step 4: if needed, use all datapoints (s_t, a_t, q_t) to update the PG critic/baseline
         if self.critic is not None:
             # TODO: perform `self.baseline_gradient_steps` updates to the critic/baseline network
+            obs = self.actor.normalize(obs, False)
             for _ in range(self.baseline_gradient_steps):
                 critic_info: dict = self.critic.update(obs, q_values)
 
@@ -155,7 +159,7 @@ class PGAgent:
         # TODO: normalize the advantages to have a mean of zero and a standard deviation of one
         # within the batch
         if self.normalize_advantages:
-            advantages = (advantages - np.mean(advantages))/(np.std(advantages) + 1e-5)
+            advantages = (advantages - np.mean(advantages))/(np.std(advantages) + 1e-8)
         return advantages
 
     def _discounted_return(self, rewards: Sequence[float]) -> Sequence[float]:

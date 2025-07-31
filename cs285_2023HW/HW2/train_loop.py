@@ -33,7 +33,8 @@ def run_training_loop(args):
         env = ActionNoiseWrapper(env, args.seed, args.action_noise_std)
 
     max_ep_len = args.ep_len or env.spec.max_episode_steps
-
+    eval_ep_len = args.eval_ep_len or max_ep_len
+    lg.info(f"{max_ep_len=} {eval_ep_len=}")
     ob_dim = env.observation_space.shape[0]
     ac_dim = env.action_space.n if discrete else env.action_space.shape[0]
     if hasattr(env, "model"):
@@ -55,6 +56,8 @@ def run_training_loop(args):
         baseline_learning_rate=args.baseline_learning_rate,
         baseline_gradient_steps=args.baseline_gradient_steps,
         gae_lambda=args.gae_lambda,
+        norm_obs=args.gae_lambda,
+        max_grad_norm=args.max_grad_norm
     )
 
     total_envsteps = 0
@@ -89,7 +92,7 @@ def run_training_loop(args):
             # print("\nCollecting data for eval...")
             agent.actor.eval()
             eval_trajs, eval_envsteps_this_batch = sample_trajectories(
-                env, agent.actor, args.eval_batch_size, max_ep_len
+                env, agent.actor, args.eval_batch_size, eval_ep_len
             )
 
             logs = compute_metrics(trajs, eval_trajs)
@@ -118,7 +121,7 @@ def run_training_loop(args):
         if args.video_log_freq != -1 and itr % args.video_log_freq == 0:
             print("\nCollecting video rollouts...")
             eval_video_trajs = sample_n_trajectories(
-                env, agent.actor, MAX_NVIDEO, max_ep_len, render=True
+                env, agent.actor, MAX_NVIDEO, eval_ep_len, render=True
             )
 
             logger.log_trajs_as_videos(
@@ -140,6 +143,8 @@ def main():
 
     parser.add_argument("--use_reward_to_go", "-rtg", action="store_true")
     parser.add_argument("--use_baseline", action="store_true")
+    parser.add_argument("--norm_obs", action="store_true")
+    parser.add_argument("--max_grad_norm", type=float, default=None)
     parser.add_argument("--baseline_learning_rate", "-blr", type=float, default=5e-3)
     parser.add_argument("--baseline_gradient_steps", "-bgs", type=int, default=5)
     parser.add_argument("--gae_lambda", type=float, default=None)
@@ -158,6 +163,9 @@ def main():
 
     parser.add_argument(
         "--ep_len", type=int
+    )  # students shouldn't change this away from env's default
+    parser.add_argument(
+        "--eval_ep_len", type=int
     )  # students shouldn't change this away from env's default
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--no_gpu", "-ngpu", action="store_true")

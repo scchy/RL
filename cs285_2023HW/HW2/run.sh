@@ -122,15 +122,29 @@ python train_loop.py  --seed 202507 \
 
 elif [ $runEnv == "Humanoid" ]; then
 # 7 Extra Credit: Humanoid
+# python train_loop.py  --seed 202507 \
+#     --env_name Humanoid-v4 -n 1000 -b 4096 -lr 1.0e-3 \
+#     --ep_len 1000 \
+#     --discount 0.99 \
+#     --n_layers 3 --layer_size 256 \
+#     --video_log_freq -1 \
+#     --use_baseline -na -rtg -bgs 25 \
+#     --gae_lambda 0.97 \
+#     --exp_name humanoid_rtg_gae_na_bgs25 
+# 4.5e-4  1.5e-3 20480
 python train_loop.py  --seed 202507 \
-    --env_name Humanoid-v4 -n 1000 -b 4096 -lr 1.0e-3 \
-    --ep_len 1000 \
+    --env_name Humanoid-v4 -n 1800 -b 10240 -lr 1.0e-3 \
+    --norm_obs \
+    --max_grad_norm 3.5 \
+    --ep_len 880 \
+    --eval_ep_len 1000 \
     --discount 0.99 \
     --n_layers 3 --layer_size 256 \
     --video_log_freq -1 \
-    --use_baseline -na -rtg -bgs 15 \
+    --use_baseline --normalize_advantages -rtg -bgs 12 \
+    --baseline_learning_rate 2.5e-3 \
     --gae_lambda 0.97 \
-    --exp_name humanoid_rtg_gae_na 
+    --exp_name humanoid_rtg_gae_na_bgs12_nobs
 
 else
     echo "Please input runEnv: CartPole, HalfCheetah, LunarLander, InvertedPendulum, Humanoid"
