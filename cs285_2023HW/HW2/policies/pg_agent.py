@@ -32,8 +32,10 @@ class PGAgent:
         max_grad_norm: float=None
     ):
         super().__init__()
+        if norm_obs is None:
+            norm_obs = False
         self.actor = MLPPolicyPG(
-            ac_dim, ob_dim, discrete, n_layers, layer_size, learning_rate, norm_obs, max_grad_norm=max_grad_norm
+            ac_dim, ob_dim, discrete, n_layers, layer_size, learning_rate, norm_obs=norm_obs, max_grad_norm=max_grad_norm
         )
 
         # create the critic (baseline) network, if needed
@@ -50,7 +52,7 @@ class PGAgent:
         self.use_reward_to_go = use_reward_to_go
         self.gae_lambda = gae_lambda
         self.normalize_advantages = normalize_advantages
-        print(f"{normalize_advantages=}")
+        print(f"{normalize_advantages=} {norm_obs=} {max_grad_norm=}")
 
     def update(
         self,
@@ -140,7 +142,6 @@ class PGAgent:
             else:
                 # TODO: implement GAE
                 batch_size = obs.shape[0]
-
                 # HINT: append a dummy T+1 value for simpler recursive calculation
                 values = np.append(values, [0])
                 advantages = np.zeros(batch_size + 1)
@@ -154,8 +155,21 @@ class PGAgent:
                     advantages[t] = gae = delta + self.gae_lambda * self.gamma * gae * mask
                 # remove dummy advantage
                 advantages = advantages[:-1]
-                # print('gae adv=', advantages)
+                print('gae adv=', advantages)
 
+                # neg error
+                # delta = torch.tensor(rewards).float() + self.gamma * torch.tensor(values[1:]).float() - torch.tensor(values[:-1]).float() 
+                # log_w = torch.log(torch.tensor(self.gamma * self.gae_lambda)) * torch.arange(len(delta))
+                # log_gae = torch.logcumsumexp((delta.log() + log_w ).flip(0), 0)
+                # print(f"{delta=} {delta.min()=}")
+                # advantages = torch.exp(log_gae.flip(0) - log_w)
+
+                # weight equals 
+                # delta = torch.tensor(rewards).float() + self.gamma * torch.tensor(values[1:]).float() - torch.tensor(values[:-1]).float() 
+                # weights = (self.gamma * self.gae_lambda) ** torch.arange(len(delta))
+                # advantages = (delta * weights).flip(0).cumsum(0).flip(0) / weights # fix weight
+                # advantages = to_numpy(advantages)
+                
         # TODO: normalize the advantages to have a mean of zero and a standard deviation of one
         # within the batch
         if self.normalize_advantages:

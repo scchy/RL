@@ -56,7 +56,7 @@ def run_training_loop(args):
         baseline_learning_rate=args.baseline_learning_rate,
         baseline_gradient_steps=args.baseline_gradient_steps,
         gae_lambda=args.gae_lambda,
-        norm_obs=args.gae_lambda,
+        norm_obs=args.norm_obs,
         max_grad_norm=args.max_grad_norm
     )
 
