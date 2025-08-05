@@ -1,5 +1,5 @@
 
-# Assignment 1: Imitation Learning
+# Assignment 2: Policy Gradients
 
 - [berkeley-PDF-HW02](https://rail.eecs.berkeley.edu/deeprlcourse/deeprlcourse/static/homeworks/hw2.pdf)
 - [Github-hw2](https://github.com/berkeleydeeprlcourse/homework_fall2023/blob/main/hw2/README.md)
@@ -197,17 +197,17 @@ Return-to-go estimator variance:
 
 sparse reward：
 
-$R(\tau) = \left\{ \begin{matrix} 1 \ \ \tau \rightarrow s_H \\ 0   \ \ \tau \rightarrow s_F  \end{matrix} \right. $
+$R(\tau) = \left\{ \begin{matrix} 1 \ \ \tau \rightarrow s_H \\ 0   \ \ \tau \rightarrow s_F  \end{matrix} \right.$
 
 
 a) Write the policy gradient with importance sampling.
 
 $\nabla_\theta J(\theta) = \nabla_\theta E_{\tau \sim \pi_{old}}[\frac{\pi_{new}}{\pi_{old}}log(\pi_{new} (a|s))R(\tau)] $
-- $\rho = \frac{\pi_{new}}{\pi_{old}} = \frac{\theta^k}{ {\theta^\prime}^k} $
+- $\rho = \frac{\pi_{new}}{\pi_{old}} = \frac{\theta^k}{ {\theta^\prime}^k}$
 - $\nabla_\theta log(\pi_{new} (a|s))=\nabla_\theta [log(\theta^k)] = \frac{k}{\theta}$
 
 策略梯度（一条轨迹）:
-$g = \left\{ \begin{matrix} 1*\frac{k\theta^{k-1}}{ {\theta^\prime}^k }\ \ \tau \rightarrow s_H \\ 0   \ \ \tau \rightarrow s_F  \end{matrix} \right. $
+$g = \left\{ \begin{matrix} 1*\frac{k\theta^{k-1}}{ {\theta^\prime}^k }\ \ \tau \rightarrow s_H \\ 0   \ \ \tau \rightarrow s_F  \end{matrix} \right.$
 
 
 b) Compute its variance. How does it change when H becomes large?
@@ -223,5 +223,6 @@ $Var[g] = E[g^2] - (E[g])^2$
 
 $Var[g] =  H^2 \theta^{H-2} - H^2 \theta^{2H-2} = H^2 \theta^{H-2}(1-\theta^H)$
 
-$lim_{H \rightarrow +\infin} Var[g]$ 指数级放大 
+$lim_{H \rightarrow +\infin} Var[g]$ 指数级放大
+
 
