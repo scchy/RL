@@ -5,7 +5,7 @@ target_update_period: 2000
 learning_rate: 7.5e-4
 total_steps: 108000 # 300000
 discount: 0.99
-use_double_q: False 
+use_double_q: true 
 learning_starts: 20000 # 20000
 batch_size: 128
 

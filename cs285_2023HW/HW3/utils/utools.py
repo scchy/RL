@@ -437,4 +437,3 @@ def compute_metrics(paths, eval_paths):
 
 def get_pathlength(path):
     return len(path["reward"])
-    

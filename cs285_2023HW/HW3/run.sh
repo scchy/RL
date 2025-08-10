@@ -19,5 +19,10 @@ echo "CONDA_DEFAULT_ENV=${CONDA_DEFAULT_ENV}"
 python run_dqn.py -cfg ./benchmark/dqn_lunarlander.yaml \
     --seed 1 \
     --video_log_freq -1 \
-    -ei 2000  # 10000
+    -ei 6000 # 10000
 
+
+python run_dqn.py -cfg ./benchmark/double_dqn_lunarlander.yaml \
+    --seed 1 \
+    --video_log_freq -1 \
+    -ei 6000
