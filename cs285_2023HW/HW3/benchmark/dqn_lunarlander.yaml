@@ -1,0 +1,11 @@
+base_config: dqn_basic
+env_name: LunarLander-v2
+
+target_update_period: 2000
+learning_rate: 5.0e-4
+total_steps: 108000 # 300000
+discount: 0.99
+use_double_q: False 
+learning_starts: 20000 # 20000
+batch_size: 128
+
