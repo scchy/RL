@@ -1,0 +1,21 @@
+base_config: sac
+env_name: Pendulum-v1
+exp_name: sanity_pendulum
+actor_gradient_type: reparametrize # reinforce # 
+# num_critic_networks: 2
+# target_critic_backup_type: min
+
+num_actor_samples: 5
+use_entropy_bonus: true
+total_steps: 38800 # 300000
+random_steps: 6000 # 
+training_starts: 8000 # 10000,
+replay_buffer_capacity:  50000 # 1000000
+temperature: 0.01
+# Use hard target update by default.
+# comment this line and uncomment the next to test your soft target update.
+target_update_period: 200
+# soft_target_update_rate: 0.005
+actor_learning_rate:  2.5e-4 #float = 3e-4,
+critic_learning_rate: 5.5e-4 #float = 3e-4,
+

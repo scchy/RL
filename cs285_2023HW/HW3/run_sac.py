@@ -3,8 +3,7 @@ import time
 import yaml
 
 from agents.soft_actor_critic import SoftActorCritic
-import gym
-from gym import wrappers
+import gymnasium as gym
 import numpy as np
 import torch
 import tqdm
@@ -29,7 +28,7 @@ def run_training_loop(config: dict, logger: Logger, args: argparse.Namespace):
     # make the gym environment
     env = config["make_env"]()
     eval_env = config["make_env"]()
-    render_env = config["make_env"](render=True)
+    render_env = config["make_env"](render=False)
 
     ep_len = config["ep_len"] or env.spec.max_episode_steps
     batch_size = config["batch_size"] or batch_size
@@ -57,37 +56,48 @@ def run_training_loop(config: dict, logger: Logger, args: argparse.Namespace):
 
     replay_buffer = ReplayBuffer(config["replay_buffer_capacity"])
 
-    observation = env.reset()
-
-    for step in tqdm.trange(config["total_steps"], dynamic_ncols=True):
+    observation, _ = env.reset()
+    tq_bar = tqdm.trange(config["total_steps"], dynamic_ncols=True)
+    for step in tq_bar:
+        agent.train()
         if step < config["random_steps"]:
             action = env.action_space.sample()
         else:
             # TODO(student): Select an action
-            action = ...
+            action = agent.get_action(observation)
 
         # Step the environment and add the data to the replay buffer
-        next_observation, reward, done, info = env.step(action)
+        next_observation, reward, terminated, truncated, info = env.step(action)
+        done = np.logical_or(terminated, truncated)
         replay_buffer.insert(
             observation=observation,
             action=action,
             reward=reward,
             next_observation=next_observation,
-            done=done and not info.get("TimeLimit.truncated", False),
+            done=done
         )
 
         if done:
             logger.log_scalar(info["episode"]["r"], "train_return", step)
             logger.log_scalar(info["episode"]["l"], "train_ep_len", step)
-            observation = env.reset()
+            observation, _ = env.reset()
         else:
             observation = next_observation
 
         # Train the agent
+        update_info = None
         if step >= config["training_starts"]:
+            agent.train()
             # TODO(student): Sample a batch of config["batch_size"] transitions from the replay buffer
-            batch = ...
-            update_info = ...
+            batch = replay_buffer.sample(config["batch_size"])
+            update_info = agent.update(
+                from_numpy(batch["observations"]),
+                from_numpy(batch["actions"]),
+                from_numpy(batch["rewards"]),
+                from_numpy(batch["next_observations"]),
+                from_numpy(batch["dones"]),
+                step
+            ) 
 
             # Logging
             update_info["actor_lr"] = agent.actor_lr_scheduler.get_last_lr()[0]
@@ -101,17 +111,29 @@ def run_training_loop(config: dict, logger: Logger, args: argparse.Namespace):
 
         # Run evaluation
         if step % args.eval_interval == 0:
+            agent.eval()
             trajectories = sample_n_trajectories(
                 eval_env,
-                policy=agent,
-                ntraj=args.num_eval_trajectories,
-                max_length=ep_len,
+                agent,
+                args.num_eval_trajectories,
+                ep_len,
             )
             returns = [t["episode_statistics"]["r"] for t in trajectories]
             ep_lens = [t["episode_statistics"]["l"] for t in trajectories]
 
             logger.log_scalar(np.mean(returns), "eval_return", step)
             logger.log_scalar(np.mean(ep_lens), "eval_ep_len", step)
+
+            p_info = {
+                "EReward": np.mean(returns),
+                "ERewardMax": np.max(returns),
+                "ELen": np.mean(ep_lens),
+            }
+            if update_info is not None:
+                for k, v in update_info.items():
+                    if any(j in k for j in ['value', 'loss']):
+                        p_info[k] = np.round(v, 5)
+            tq_bar.set_postfix(p_info)
 
             if len(returns) > 1:
                 logger.log_scalar(np.std(returns), "eval/return_std", step)
@@ -121,11 +143,11 @@ def run_training_loop(config: dict, logger: Logger, args: argparse.Namespace):
                 logger.log_scalar(np.max(ep_lens), "eval/ep_len_max", step)
                 logger.log_scalar(np.min(ep_lens), "eval/ep_len_min", step)
 
-            if args.num_render_trajectories > 0:
+            if  args.video_log_freq != -1 and step % args.video_log_freq == 0:
                 video_trajectories = sample_n_trajectories(
                     render_env,
                     agent,
-                    args.num_render_trajectories,
+                    args.video_log_freq,
                     ep_len,
                     render=True,
                 )
@@ -134,7 +156,7 @@ def run_training_loop(config: dict, logger: Logger, args: argparse.Namespace):
                     video_trajectories,
                     step,
                     fps=fps,
-                    max_videos_to_save=args.num_render_trajectories,
+                    max_videos_to_save=args.video_log_freq,
                     video_title="eval_rollouts",
                 )
 
@@ -145,21 +167,20 @@ def main():
 
     parser.add_argument("--eval_interval", "-ei", type=int, default=5000)
     parser.add_argument("--num_eval_trajectories", "-neval", type=int, default=10)
-    parser.add_argument("--num_render_trajectories", "-nvid", type=int, default=0)
 
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--no_gpu", "-ngpu", action="store_true")
     parser.add_argument("--which_gpu", "-g", default=0)
     parser.add_argument("--log_interval", type=int, default=1000)
-
+    parser.add_argument('--logdir', type=str, default='./data/run_summary')
+    parser.add_argument("--video_log_freq", "-nvid", type=int, default=-1)
     args = parser.parse_args()
 
     # create directory for logging
     logdir_prefix = "hw3_sac_"  # keep for autograder
 
     config = make_config(args.config_file)
-    logger = make_logger(logdir_prefix, config)
-
+    logger = make_logger(args.logdir, logdir_prefix, config)
     run_training_loop(config, logger, args)
 
 

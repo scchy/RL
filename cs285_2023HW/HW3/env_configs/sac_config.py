@@ -1,15 +1,12 @@
 from typing import Tuple, Optional
 
 import gymnasium as gym
-
 import numpy as np
 import torch
 import torch.nn as nn
-
 from agents.mlp_policy import MLPPolicy
 from agents.state_action_critic import StateActionCritic
-
-from gymnasium.wrappers.rescale_action import RescaleAction, ClipAction, RecordEpisodeStatistics
+from gymnasium.wrappers import RescaleAction, ClipAction, RecordEpisodeStatistics
 
 
 def sac_config(
@@ -91,7 +88,7 @@ def sac_config(
             ClipAction(
                 RescaleAction(
                     gym.make(
-                        env_name, render_mode="single_rgb_array" if render else None
+                        env_name, render_mode="rgb_array" if render else None
                     ),
                     -1,
                     1,

@@ -6,7 +6,7 @@ import torch
 from torch import distributions
 
 from utils.utools import device, build_mlp
-from cs285.infrastructure.distributions import make_tanh_transformed, make_multi_normal
+from utils.distributions import make_tanh_transformed, make_multi_normal
 
 
 class MLPPolicy(nn.Module):

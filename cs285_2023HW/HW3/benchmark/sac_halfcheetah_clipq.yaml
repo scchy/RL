@@ -1,0 +1,29 @@
+# Use clipped double-Q learning (from TD3)
+num_critic_networks: 2
+target_critic_backup_type: min
+
+exp_name: clipq
+
+# All these are the same as from the last problem...
+base_config: sac
+env_name: HalfCheetah-v4
+
+total_steps: 188800 # 1000000
+random_steps: 5000
+training_starts: 8000
+
+batch_size: 128
+replay_buffer_capacity: 800000 #1000000
+
+discount: 0.99
+use_soft_target_update: true
+soft_target_update_rate: 0.005
+
+actor_gradient_type: reparametrize
+num_critic_updates: 1
+
+use_entropy_bonus: true
+temperature: 0.01
+
+actor_learning_rate:  2.5e-4 #float = 3e-4,
+critic_learning_rate: 5.5e-4 #float = 3e-4,

@@ -132,6 +132,23 @@ $\phi_{k+1} \leftarrow \argmin_{\phi \in \Phi}  \sum_{j, t} \rho_{t:t+n-1}^j (y_
 实际实现中，通常会使用 加权经验回放 (weighted experience replay) 或 V-trace 等方法来稳定 off-policy 训练。
 
 
-# 2 Deep Q-Learning
+# SAC 
+
+## Actor + REINFORCE 
+
+$$\nabla \mathbb{E}_{s\sim D, a\sim \pi(a|s)} [Q(s, a)] =\mathbb{E}_{s\sim D, a\sim \pi(a|s)}[\nabla_\theta log(\pi_\theta (a|s)) Q_\phi(s, a)]$$
+
+
+## Actor + REPARAMETRIZE
+
+REINFORCE works quite well with many samples, but particularly in high-dimensional action spaces, it starts to require a lot of samples to give low variance.
+We can improve this by using the reparametrized gradient.
+
+
+
+$$\nabla \mathbb{E}_{s\sim D, a\sim \pi(a|s)} [Q(s, a)] = \nabla \mathbb{E}_{s\sim D, a\sim \pi(a|s)}[Q(s, \mu_\theta (s) + \sigma_\theta (s) \epsilon)]$$
+
+- Parametrize $\pi_\theta = \mu_\theta (s) + \sigma_\theta (s) \epsilon$
+- $\epsilon$: normally distributed.
 
 
