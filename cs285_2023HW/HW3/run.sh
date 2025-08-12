@@ -34,8 +34,28 @@ echo "CONDA_DEFAULT_ENV=${CONDA_DEFAULT_ENV}"
 #     -ei 2000
 
 
-python run_sac.py -cfg ./benchmark/sac_halfcheetah_clipq.yaml \
+# python run_sac.py -cfg ./benchmark/sac_halfcheetah_clipq.yaml \
+#     --seed 1 \
+#     --video_log_freq -1 \
+#     -ei 5000
+
+python run_sac.py -cfg ./benchmark/sanity_invertedpendulum_reinforce.yaml \
     --seed 1 \
     --video_log_freq -1 \
     -ei 5000
 
+
+python run_sac.py -cfg ./benchmark/halfcheetah_reinforce10.yaml \
+    --seed 1 \
+    --video_log_freq -1 \
+    -ei 5000
+
+python run_sac.py -cfg ./benchmark/halfcheetah_reparametrize.yaml \
+    --seed 1 \
+    --video_log_freq -1 \
+    -ei 5000
+
+python run_sac.py -cfg ./benchmark/hopper_clipq.yaml \
+    --seed 1 \
+    --video_log_freq -1 \
+    -ei 5000

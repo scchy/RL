@@ -12,7 +12,7 @@
 - [ ] 1996: Generalization in reinforcement learning: Successful examples using sparse coarse coding
 - [ ] 1995: A menu of designs for reinforcement learning over time
 - [ ] 1996: Reinforcement learning with replacing eligibility traces
-- [ ] 1998: **Reinforcement learning: An introduction**
+- [ ] 1998: 《**Reinforcement learning: An introduction**》
 - [ ] 1999: **Policy gradient methods for reinforcement learning with function approximation**
 - [ ] 1999: **Between MDPs and semi-MDPs: A framework for temporal abstraction in reinforcement learning**
 

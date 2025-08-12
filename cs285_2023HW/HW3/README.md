@@ -132,23 +132,92 @@ $\phi_{k+1} \leftarrow \argmin_{\phi \in \Phi}  \sum_{j, t} \rho_{t:t+n-1}^j (y_
 实际实现中，通常会使用 加权经验回放 (weighted experience replay) 或 V-trace 等方法来稳定 off-policy 训练。
 
 
-# SAC 
+# 3 SAC 
 
-## Actor + REINFORCE 
+## 3.1 Entropy Bonus and Soft Actor-Critic 
+
+Soft update
+$$\phi^\prime \rightarrow \phi^\prime + \tau (\phi - \phi^\prime)=(1-\tau)\phi^\prime + \tau \phi$$
+
+Entropy Bonus
+$$y \leftarrow r_t + \gamma (1-d_t) [ Q_\phi (s_{t+1}, a_{t+1}) + \beta \mathcal{H}(\pi(a|s))]$$
+
+- $\mathcal{H}(\pi(a|s)) = \mathbb{E}_{a \sim \pi}[-log \pi(a|s)]$
+- $\beta$: “temperature” coefficient
+
+
+## 3.2 Actor
+### 3.2.1 Actor + REINFORCE 
+
 
 $$\nabla \mathbb{E}_{s\sim D, a\sim \pi(a|s)} [Q(s, a)] =\mathbb{E}_{s\sim D, a\sim \pi(a|s)}[\nabla_\theta log(\pi_\theta (a|s)) Q_\phi(s, a)]$$
 
+- more sample: `action_distribution.sample((self.num_actor_samples,))`
 
-## Actor + REPARAMETRIZE
+
+### 3.2.2 Actor + REPARAMETRIZE
 
 REINFORCE works quite well with many samples, but particularly in high-dimensional action spaces, it starts to require a lot of samples to give low variance.
 We can improve this by using the reparametrized gradient.
 
 
 
-$$\nabla \mathbb{E}_{s\sim D, a\sim \pi(a|s)} [Q(s, a)] = \nabla \mathbb{E}_{s\sim D, a\sim \pi(a|s)}[Q(s, \mu_\theta (s) + \sigma_\theta (s) \epsilon)]$$
+$$\nabla \mathbb{E}_{s\sim D, a\sim \pi(a|s)} [Q(s, a)] = \nabla \mathbb{E}_{s\sim D, \epsilon \sim \mathcal{N} }[Q(s, \mu_\theta (s) + \sigma_\theta (s) \epsilon)]$$
 
 - Parametrize $\pi_\theta = \mu_\theta (s) + \sigma_\theta (s) \epsilon$
 - $\epsilon$: normally distributed.
 
 
+## 3.3 Stabilizing Target Values
+
+Double-Q:
+$$y_A=r+\gamma Q_{\phi^\prime_B}(s^\prime, a^\prime)\\y_B=r+\gamma Q_{\phi^\prime_A}(s^\prime, a^\prime)$$
+
+Clipped double-Q:
+
+$$y_A=y_B=r + \gamma min(Q_{\phi^\prime_A}(s^\prime, a^\prime), Q_{\phi^\prime_B}(s^\prime, a^\prime))$$
+
+
+implement 
+
+```python
+   def target_critic(self, obs, action):
+      # several critic 
+      return torch.stack(
+         [critic(obs, action) for critic in self.target_critics], dim=0
+      )
+
+   def q_backup_strategy(self, next_qs):
+      """
+      For example:
+      - for "vanilla", we can just leave the Q-values as-is (we only have one critic).
+      - for double-Q, swap the critics' predictions (so each uses the other as the target).
+      - for clip-Q, clip to the minimum of the two critics' predictions.
+      """
+      num_critic_networks, batch_size = next_qs.shape
+      if self.target_critic_backup_type == "doubleq":
+         next_qs = next_qs
+      elif self.target_critic_backup_type == "min":
+         # clip-Q, TD3: Twin Critics：双 Q-网络取最小值，抑制过估计
+         next_qs = next_qs.min(dim=0)[0]  
+      elif self.target_critic_backup_type == "mean":
+         next_qs = next_qs.mean(dim=0)
+      else:
+         pass
+
+      if next_qs.shape == (batch_size,):
+         next_qs = next_qs[None].expand(
+            (self.num_critic_networks, batch_size)
+         ).contiguous()
+
+      return next_qs
+
+
+# y_A, y_B
+next_qs = self.target_critic(next_obs, next_action)
+# Handle Q-values from multiple different target critic networks (if necessary)
+# (For double-Q, clip-Q, etc.)
+next_qs = self.q_backup_strategy(next_qs)
+target_values = reward[None, ...] + self.discount * next_qs * (1 - done)
+
+```

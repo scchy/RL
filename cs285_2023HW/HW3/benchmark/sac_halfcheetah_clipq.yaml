@@ -8,12 +8,12 @@ exp_name: clipq
 base_config: sac
 env_name: HalfCheetah-v4
 
-total_steps: 188800 # 1000000
+total_steps: 528800 # 1000000
 random_steps: 5000
 training_starts: 8000
 
 batch_size: 128
-replay_buffer_capacity: 800000 #1000000
+replay_buffer_capacity: 128000 #1000000
 
 discount: 0.99
 use_soft_target_update: true
