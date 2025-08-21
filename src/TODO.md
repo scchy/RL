@@ -26,7 +26,7 @@
   - HW3
 - [ ] DT: Decision Transformer: Reinforcement Learning via Sequence Modeling
   - [ ] [Github: kzl/decision-transformer](https://github.com/kzl/decision-transformer/blob/master/gym/decision_transformer/models/decision_transformer.py)
-
+- [ ] [Settling the Reward Hypothesis](https://arxiv.org/pdf/2212.10420)
 - [ ] TT: Trajectory Transformer Offline Reinforcement Learning as One Big Sequence Modeling Problem
   - [ ] [Github:trajectory-transformer](https://github.com/JannerM/trajectory-transformer)
 
