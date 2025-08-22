@@ -8,7 +8,7 @@ import torch
 from torch import nn 
 import transformers
 from transformers import GPT2Model as orgGPT2Model
-from transformers import GPT2Config, DecisionTransformerGPT2Model
+from transformers import GPT2Config, DecisionTransformerGPT2Model, DecisionTransformerModel as orgDecisionTransformer
 try:
     from .trajectory_gpt2 import GPT2Model
 except Exception as e:
@@ -183,7 +183,12 @@ if __name__ == '__main__':
     config = GPT2Config(
         vocab_size=1,  # doesn't matter -- we don't use the vocab
         n_embd=hidden_size,
+        hidden_size=hidden_size,
         n_ctx=12,
+        max_ep_len=1000,
+        state_dim=17,
+        act_dim=7,
+        action_tanh=True,
         **kwargs
     )
 
@@ -191,7 +196,17 @@ if __name__ == '__main__':
     # is that the positional embeddings are removed (since we'll add those ourselves)
     transformer = orgGPT2Model(config)
     transformer2 = GPT2Model(config)
-    dt_tf = DecisionTransformerGPT2Model(config)
+    dt_tf = orgDecisionTransformer(config)
+    dt = DecisionTransformer(
+            state_dim=config.state_dim,
+            act_dim=config.act_dim,
+            hidden_size=config.n_embd,
+            max_ep_len=config.max_ep_len,
+            action_tanh=True
+    )
     print("orgGPT2Model=", transformer )
     print("GPT2Model=", transformer2 )
-    print("DecisionTransformerGPT2Model=", dt_tf )
+    print('--'*25)
+    print("orgDecisionTransformer=", dt_tf )
+    print("DecisionTransformer=", dt )
+

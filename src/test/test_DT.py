@@ -58,21 +58,21 @@ def dt_Walker2d_v4_simple_test():
         DT_kwargs=cfg.DT_kwargs,
         device=cfg.device
     )
-    DT_training(
-        agent, 
-        cfg,
-        env_name,
-        data_level=data_level, 
-        test_episode_freq=10,
-        episode_count=5,
-        play_without_seed=True, 
-        render=False
-    )
+    # DT_training(
+    #     agent, 
+    #     cfg,
+    #     env_name,
+    #     data_level=data_level, 
+    #     test_episode_freq=10,
+    #     episode_count=5,
+    #     play_without_seed=True, 
+    #     render=False
+    # )
     agent.load_model(cfg.save_path)
     logger.info('--'*25 + ' [ EVALUATION-PLAY ] ' + '--'*25)
     agent.eval()
-    env = gym.make(env_name) #, render_mode='human')
-    dt_play(env, agent, cfg, episode_count=2, play_without_seed=True, render=False)
+    env = gym.make(env_name, render_mode='human')
+    dt_play(env, agent, cfg, episode_count=2, play_without_seed=True, render=True)
 
 
 if __name__ == '__main__':
