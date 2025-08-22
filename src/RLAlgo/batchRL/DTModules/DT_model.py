@@ -56,6 +56,7 @@ class DecisionTransformer(TrajectoryModel):
     ):
         super().__init__(state_dim, act_dim, max_length=max_length)
         self.hidden_size = hidden_size 
+        self.max_length = max_length
         print(f"{kwargs=}")
         config = GPT2Config(
             vocab_size=1, # doesnt matter _ we dont use the word embedding 

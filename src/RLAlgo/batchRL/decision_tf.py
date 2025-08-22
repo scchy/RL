@@ -23,7 +23,7 @@ class DTAgent:
     DecisionTransformer
     Reference
     ----------
-    - Github: https://github.com/kzl/decision-transformer/blob/master/gym/decision_transformer/models/decision_transformer.py
+    - Github: https://github.com/kzl/decision-transformer/blob/master/gym/decision_transformer/training/seq_trainer.py
     - paper: [DT: Decision Transformer: Reinforcement Learning via Sequence Modeling](https://arxiv.org/pdf/2106.01345)
     """
     def __init__(
