@@ -1,5 +1,7 @@
 import torch.nn as nn
-from cs285.infrastructure import pytorch_util as ptu
+from utils.utools import (
+    from_numpy, to_numpy, build_mlp,
+)
 from gymnasium.wrappers import RecordEpisodeStatistics
 import gymnasium as gym
 import torch
@@ -36,7 +38,7 @@ def mpc_config(
         ep_len = 100
 
     def make_dynamics_model(ob_dim: int, ac_dim: int) -> nn.Module:
-        return ptu.build_mlp(
+        return build_mlp(
             input_size=ob_dim + ac_dim,
             output_size=ob_dim,
             n_layers=num_layers,
