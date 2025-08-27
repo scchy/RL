@@ -7,8 +7,77 @@
 import os 
 from openai import OpenAI
 import numpy as np 
-from FlagEmbedding import FlagModel
+import json
+# from FlagEmbedding import FlagModel
 from modelscope.hub.snapshot_download import snapshot_download
+
+
+help_functions = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_current_weather",
+            "description": "获取指定城市的天气",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {
+                        "type": "string",
+                        "description": "城市名称，例如北京"
+                    }
+                },
+                "required": ["location"]
+            }
+        },
+     },
+]
+
+def get_current_weather(location):
+    if location == '东京':
+        return'misty'
+    return'sunny'
+
+
+def test_function_call():
+    api_key = os.environ['DEEPSEEK_API_KEY']
+    client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+
+    messages = [
+        {"role": "system", "content": "如果不知道函数中的具体参数，不要假设。如果知道或者参数为空，请询问用户具体的内容."},
+        {"role": "user", "content": "东京天气怎么样？"}
+    ]
+    response = client.chat.completions.create(
+        model="deepseek-chat",
+        messages=messages,
+        stream=False
+    )
+    print('ORG-Response:', response.choices[0].message.content)
+    # 第一次 → 模型“做决策，下指令”。
+    response = client.chat.completions.create(
+        model="deepseek-chat",
+        messages=messages,
+        stream=False,
+        tools=help_functions
+    )
+    tool_call = response.choices[0].message.tool_calls[0]
+    if tool_call.function.name == "get_current_weather":
+        args = json.loads(tool_call.function.arguments)  # 注意：生产环境请用 json.loads
+        result = get_current_weather(**args)
+
+        # 把结果返回给模型继续对话
+        # 第二次 → 模型“拿到执行结果，生成自然语言”。
+        messages.append(response.choices[0].message)
+        messages.append({
+            "role": "tool",
+            "tool_call_id": tool_call.id,
+            "content": result
+        })
+
+        final_response = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=messages
+        )
+        print('\n--------------------------\nFunctionCall-Response:',final_response.choices[0].message.content)
 
 
 def ds_test():
@@ -118,4 +187,5 @@ if __name__ == '__main__':
     # ds_test()
     # aiml_test()
     # deepinfra_test()
-    ali_chat_test()
+    # ali_chat_test()
+    test_function_call()
