@@ -35,7 +35,7 @@ def dt_Walker2d_v4_simple_test():
         max_episode_rewards=2048,
         max_episode_steps=1000,
         max_ep_len=1000,
-        num_epoches=1680,
+        num_epoches=2680,
         K=30,
         batch_size=20 * 32,
         target_return=5000,
@@ -58,16 +58,16 @@ def dt_Walker2d_v4_simple_test():
         DT_kwargs=cfg.DT_kwargs,
         device=cfg.device
     )
-    # DT_training(
-    #     agent, 
-    #     cfg,
-    #     env_name,
-    #     data_level=data_level, 
-    #     test_episode_freq=10,
-    #     episode_count=5,
-    #     play_without_seed=True, 
-    #     render=False
-    # )
+    DT_training(
+        agent, 
+        cfg,
+        env_name,
+        data_level=data_level, 
+        test_episode_freq=10,
+        episode_count=5,
+        play_without_seed=True, 
+        render=False
+    )
     agent.load_model(cfg.save_path)
     logger.info('--'*25 + ' [ EVALUATION-PLAY ] ' + '--'*25)
     agent.eval()

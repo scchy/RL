@@ -24,8 +24,8 @@
     - [X]  [WHEN SHOULD WE PREFER DECISION TRANSFORMERS FOR OFFLINE REINFORCEMENT LEARNING](https://arxiv.org/pdf/2305.14550)
 - [X] Soft Actor-Critic 2018    [Soft Actor-Critic: Off-Policy Maximum Entropy Deep Reinforcement Learning with a Stochastic Actor](https://arxiv.org/abs/1801.01290)
   - HW3
-- [ ] DT: Decision Transformer: Reinforcement Learning via Sequence Modeling
-  - [ ] [Github: kzl/decision-transformer](https://github.com/kzl/decision-transformer/blob/master/gym/decision_transformer/models/decision_transformer.py)
+- [X] DT: Decision Transformer: Reinforcement Learning via Sequence Modeling
+  - [X] [Github: kzl/decision-transformer](https://github.com/kzl/decision-transformer/blob/master/gym/decision_transformer/models/decision_transformer.py)
 - [ ] [Settling the Reward Hypothesis](https://arxiv.org/pdf/2212.10420)
 - [ ] TT: Trajectory Transformer Offline Reinforcement Learning as One Big Sequence Modeling Problem
   - [ ] [Github:trajectory-transformer](https://github.com/JannerM/trajectory-transformer)
