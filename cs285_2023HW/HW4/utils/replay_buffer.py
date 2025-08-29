@@ -82,6 +82,48 @@ class ReplayBuffer:
 
         self.size += 1
 
+    def batched_insert(
+        self,
+        /,
+        observations: np.ndarray,
+        actions: np.ndarray,
+        rewards: np.ndarray,
+        next_observations: np.ndarray,
+        dones: np.ndarray,
+            ):
+        """
+        Insert a batch of transitions into the replay buffer.
+        """
+        if self.observations is None:
+            self.observations = np.empty(
+                (self.max_size, *observations.shape[1:]), dtype=observations.dtype
+            )
+            self.actions = np.empty(
+                (self.max_size, *actions.shape[1:]), dtype=actions.dtype
+            )
+            self.rewards = np.empty(
+                (self.max_size, *rewards.shape[1:]), dtype=rewards.dtype
+            )
+            self.next_observations = np.empty(
+                (self.max_size, *next_observations.shape[1:]),
+                dtype=next_observations.dtype,
+            )
+            self.dones = np.empty((self.max_size, *dones.shape[1:]), dtype=dones.dtype)
+
+        assert observations.shape[1:] == self.observations.shape[1:]
+        assert actions.shape[1:] == self.actions.shape[1:]
+        assert rewards.shape[1:] == self.rewards.shape[1:]
+        assert next_observations.shape[1:] == self.next_observations.shape[1:]
+        assert dones.shape[1:] == self.dones.shape[1:]
+
+        indices = np.arange(self.size, self.size + observations.shape[0]) % self.max_size
+        self.observations[indices] = observations
+        self.actions[indices] = actions
+        self.rewards[indices] = rewards
+        self.next_observations[indices] = next_observations
+        self.dones[indices] = dones
+
+        self.size += observations.shape[0]
 
 class MemoryEfficientReplayBuffer:
     """

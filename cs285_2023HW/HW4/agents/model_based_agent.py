@@ -9,7 +9,7 @@ from torch import nn
 import torch
 import gymnasium as gym
 from utils.utools import (
-    from_numpy, to_numpy
+    from_numpy, to_numpy, device
 )
 
 class ModelBasedAgent(nn.Module):
@@ -56,24 +56,26 @@ class ModelBasedAgent(nn.Module):
                 )
                 for _ in range(ensemble_size)
             ]
-        )
+        ).to(device)
         self.optimizer = make_optimizer(self.dynamics_models.parameters())
         self.loss_fn = nn.MSELoss()
 
         # keep track of statistics for both the model input (obs & act) and
         # output (obs delta)
         self.register_buffer(
-            "obs_acs_mean", torch.zeros(self.ob_dim + self.ac_dim)
+            "obs_acs_mean", torch.zeros(self.ob_dim + self.ac_dim, device=device)
         )
         self.register_buffer(
-            "obs_acs_std", torch.ones(self.ob_dim + self.ac_dim)
+            "obs_acs_std", torch.ones(self.ob_dim + self.ac_dim, device=device)
         )
         self.register_buffer(
-            "obs_delta_mean", torch.zeros(self.ob_dim)
+            "obs_delta_mean", torch.zeros(self.ob_dim, device=device)
         )
         self.register_buffer(
-            "obs_delta_std", torch.ones(self.ob_dim)
+            "obs_delta_std", torch.ones(self.ob_dim, device=device)
         )
+        self.epsilon = 1e-8
+        self.cnt = 1e-8
 
     def update(self, i: int, obs: np.ndarray, acs: np.ndarray, next_obs: np.ndarray):
         """
@@ -95,13 +97,30 @@ class ModelBasedAgent(nn.Module):
         # directly
         # HINT 3: make sure to avoid any risk of dividing by zero when
         # normalizing vectors by adding a small number to the denominator!
-        loss = ...
+        norm_in = self.norm_func(torch.cat([obs, acs], dim=-1), tp='obs_acs')
+        hat_delta = self.dynamics_models[i]( 
+            norm_in
+        )
+        delta =  self.norm_func(next_obs - obs, tp='obs_delta')
+        loss = self.loss_fn(delta, hat_delta)
 
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
 
         return to_numpy(loss)
+
+    @torch.no_grad()
+    def norm_func(self, input_tensor, tp='obs_acs', reverse=False):
+        assert tp in ('obs_acs', 'obs_delta'), f"Please use ('obs_acs', 'obs_delta') for tp, but input {tp=}"
+        if tp == 'obs_acs':
+            if reverse:
+                return input_tensor * (self.epsilon + self.obs_acs_std) + self.obs_acs_mean
+            return (input_tensor - self.obs_acs_mean) / (self.epsilon + self.obs_acs_std)
+
+        if reverse:
+            return input_tensor * (self.epsilon + self.obs_delta_std) + self.obs_delta_mean
+        return (input_tensor - self.obs_delta_mean) / (self.epsilon + self.obs_delta_std)
 
     @torch.no_grad()
     def update_statistics(self, obs: np.ndarray, acs: np.ndarray, next_obs: np.ndarray):
@@ -115,12 +134,40 @@ class ModelBasedAgent(nn.Module):
         """
         obs = from_numpy(obs)
         acs = from_numpy(acs)
+        obs_acs = torch.cat([obs, acs], dim=1)
         next_obs = from_numpy(next_obs)
+        delta = next_obs - obs
         # TODO(student): update the statistics
-        self.obs_acs_mean = ...
-        self.obs_acs_std = ...
-        self.obs_delta_mean = ...
-        self.obs_delta_std = ...
+        m_, v_, tt_cnt = self.update_mean_var_count_from_moments(
+            self.obs_acs_mean, torch.square(self.obs_acs_std), self.cnt, 
+            obs_acs.mean(axis=0),  obs_acs.var(axis=0), obs_acs.shape[0]
+        )
+        self.obs_acs_mean = m_
+        self.obs_acs_std = torch.sqrt(v_)
+
+        m_, v_, tt_cnt = self.update_mean_var_count_from_moments(
+            self.obs_delta_mean, torch.square(self.obs_delta_std), self.cnt, 
+            delta.mean(axis=0),  delta.var(axis=0), delta.shape[0]
+        )
+        self.obs_delta_mean = m_
+        self.obs_delta_std = torch.sqrt(v_)
+        self.cnt = tt_cnt
+    
+    def update_mean_var_count_from_moments(
+        self, m, v, cnt, batch_m, batch_v, batch_cnt
+    ):
+        # reference: gymnasium.wrappers.normalize
+        # print(f'{batch_m.device=} {m.device=} {device=}')
+        delta = batch_m - m
+        tot_cnt = cnt + batch_cnt
+
+        new_m = m + delta * batch_cnt / tot_cnt
+        m_a = v * cnt 
+        m_b = batch_v * batch_cnt
+        M2 = m_a + m_b + torch.square(delta) * cnt * batch_cnt / tot_cnt
+        new_v = M2 / tot_cnt
+        new_cnt = tot_cnt
+        return new_m, new_v, new_cnt 
 
     @torch.no_grad()
     def get_dynamics_predictions(
@@ -141,8 +188,9 @@ class ModelBasedAgent(nn.Module):
         # HINT: make sure to *unnormalize* the NN outputs (observation deltas)
         # Same hints as `update` above, avoid nasty divide-by-zero errors when
         # normalizing inputs!
+        hat_delta = self.dynamics_models[i](self.norm_func(torch.cat([obs, acs], dim=-1), tp='obs_acs'))
+        pred_next_obs = obs + self.norm_func(hat_delta, tp='obs_delta', reverse=True)
         return to_numpy(pred_next_obs)
-
 
     def evaluate_action_sequences(self, obs: np.ndarray, action_sequences: np.ndarray):
         """
@@ -167,7 +215,7 @@ class ModelBasedAgent(nn.Module):
         obs = np.tile(obs, (self.ensemble_size, self.mpc_num_action_sequences, 1))
 
         # TODO(student): for each batch of actions in in the horizon...
-        for acs in ...:
+        for acs in action_sequences.transpose(1, 0, 2) :
             assert acs.shape == (self.mpc_num_action_sequences, self.ac_dim)
             assert obs.shape == (
                 self.ensemble_size,
@@ -177,7 +225,7 @@ class ModelBasedAgent(nn.Module):
 
             # TODO(student): predict the next_obs for each rollout
             # HINT: use self.get_dynamics_predictions
-            next_obs = ...
+            next_obs = np.stack([self.get_dynamics_predictions(i, obs[i, ...], acs) for i in range(self.ensemble_size)], axis=0)
             assert next_obs.shape == (
                 self.ensemble_size,
                 self.mpc_num_action_sequences,
@@ -190,8 +238,10 @@ class ModelBasedAgent(nn.Module):
             # respectively, and returns a tuple of `(rewards, dones)`. You can 
             # ignore `dones`. You might want to do some reshaping to make
             # `next_obs` and `acs` 2-dimensional.
-            rewards = ...
-            assert rewards.shape == (self.ensemble_size, self.mpc_num_action_sequences)
+
+            rewards = np.stack([
+              self.env.get_reward(next_obs[i], acs)[0] for i in range(self.ensemble_size)], axis=0)
+            assert rewards.shape == (self.ensemble_size, self.mpc_num_action_sequences), f"{rewards.shape=} != ({self.ensemble_size}, {self.mpc_num_action_sequences})"
 
             sum_of_rewards += rewards
 
@@ -227,7 +277,28 @@ class ModelBasedAgent(nn.Module):
                 # TODO(student): implement the CEM algorithm
                 # HINT: you need a special case for i == 0 to initialize
                 # the elite mean and std
-                ...
+                # Step1: i==0 → 用初始 mean/ std
+                if i == 0:
+                    mean_ = (self.env.action_space.high + self.env.action_space.low) / 2.0
+                    std_  = (self.env.action_space.high - self.env.action_space.low) / 2.0
+                else:
+                    mean_, std_ = elite_mean, elite_std
+                # Step2: 采样
+                pop = np.random.normal(
+                    loc=mean_,
+                    scale=std_,
+                    size=(self.mpc_num_action_sequences, self.mpc_horizon, self.ac_dim)
+                ).clip(self.env.action_space.low, self.env.action_space.high)
+
+                # Step3: 评估  
+                scores = self.evaluate_action_sequences(obs, pop) 
+
+                # Step4: 重估 → 精英样本的 mean / std 作为下一轮参数
+                elite_idx = np.argpartition(scores, self.cem_num_elite)[:self.cem_num_elite] # 取最大的n个元素索引（不排序）
+                elite_pop = pop[elite_idx]
+                elite_mean = elite_pop.mean(dim=0)
+                elite_std  = elite_pop.std(dim=0) + 1e-8    
+            return elite_mean[0]
         else:
             raise ValueError(f"Invalid MPC strategy '{self.mpc_strategy}'")
 

@@ -10,6 +10,7 @@
 # =============================================================================
 from collections import OrderedDict
 from typing import Union
+import gymnasium as gym
 import cv2
 import numpy as np
 import time
@@ -43,6 +44,7 @@ def init_gpu(use_gpu=True, gpu_id=0):
     else:
         device = torch.device("cpu")
         print("GPU not detected. Defaulting to CPU.")
+    return device
 
 
 def set_device(gpu_id):
@@ -318,6 +320,7 @@ def sample_trajectory(env, policy, max_path_length, render=False):
 
     # init vars
     obs, acs, rewards, next_obs, terminals, image_obs = [], [], [], [], [], []
+    dones = []
     steps = 0
     while True:
         # render image of the simulated env
@@ -330,11 +333,12 @@ def sample_trajectory(env, policy, max_path_length, render=False):
     
         # TODO use the most recent ob to decide what to do
         ac = policy.get_action(ob)
-        if not isinstance(ac, int):
+        try:
+            # TODO: take that action and get reward and next ob
+            next_ob, rew, terminated, truncated, info = env.step(ac)    
+        except Exception as e:
             ac = ac[0]
-
-        # TODO: take that action and get reward and next ob
-        next_ob, rew, terminated, truncated, info = env.step(ac)
+            next_ob, rew, terminated, truncated, info = env.step(ac)    
         done = np.logical_or(terminated, truncated)
         
         # TODO rollout can end due to done, or due to max_path_length
@@ -347,6 +351,7 @@ def sample_trajectory(env, policy, max_path_length, render=False):
         rewards.append(rew)
         next_obs.append(next_ob)
         terminals.append(rollout_done)
+        dones.append(done)
 
         ob = next_ob # jump to next timestep
         # end the rollout if the rollout ended
@@ -363,6 +368,7 @@ def sample_trajectory(env, policy, max_path_length, render=False):
             "action" : np.array(acs, dtype=np.float32),
             "next_observation": np.array(next_obs, dtype=np.float32),
             "terminal": np.array(terminals, dtype=np.float32),
+            "done": np.array(dones, dtype=np.float32),
             "episode_statistics": episode_statistics,
         }
 
@@ -437,3 +443,12 @@ def compute_metrics(paths, eval_paths):
 
 def get_pathlength(path):
     return len(path["reward"])
+
+
+class RandomPolicy:
+    def __init__(self, env: gym.Env):
+        self.env = env
+
+    def get_action(self, *args, **kwargs):
+        return self.env.action_space.sample()
+
