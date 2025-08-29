@@ -16,6 +16,7 @@ import numpy as np
 import time
 import torch
 from torch import nn
+from tqdm.auto import tqdm
 import os 
 import random
 import yaml
@@ -388,7 +389,7 @@ def sample_trajectories(env, policy, min_timesteps_per_batch, max_path_length, r
 def sample_n_trajectories(env, policy, ntraj, max_path_length, render=False):
     """Collect ntraj rollouts."""
     paths = []
-    for i in range(ntraj):
+    for i in tqdm(range(ntraj)):
         # collect rollout
         path = sample_trajectory(env, policy, max_path_length, render)
         paths.append(path)

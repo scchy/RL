@@ -5,8 +5,8 @@ base_config: mpc
 num_layers: 1
 hidden_size: 32
 
-num_iters: 5
-initial_batch_size: 20000
+num_iters: 36
+initial_batch_size: 12000
 num_agent_train_steps_per_iter: 500
-num_eval_trajectories: 3
+num_eval_trajectories: 5
 

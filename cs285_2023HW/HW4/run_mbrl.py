@@ -34,7 +34,7 @@ def collect_mbpo_rollout(
     rollout_len: int = 1,
 ):
     obs, acs, rewards, next_obs, dones = [], [], [], [], []
-    for _ in range(rollout_len):
+    for _ in tqdm(range(rollout_len)):
         # TODO(student): collect a rollout using the learned dynamics models
         # HINT: get actions from `sac_agent` and `next_ob` predictions from `mb_agent`.
         # Average the ensemble predictions directly to get the next observation.
