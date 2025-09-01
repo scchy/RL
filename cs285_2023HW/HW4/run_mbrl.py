@@ -110,7 +110,6 @@ def run_training_loop(
         actor_agent = sac_agent
 
     total_envsteps = 0
-
     for itr in range(config["num_iters"]):
         print(f"\n\n********** Iteration {itr} ************")
         # collect data
@@ -241,10 +240,9 @@ def run_training_loop(
 
         returns = [t["episode_statistics"]["r"] for t in trajs]
         ep_lens = [t["episode_statistics"]["l"] for t in trajs]
-
         logger.log_scalar(np.mean(returns), "eval_return", itr)
         logger.log_scalar(np.mean(ep_lens), "eval_ep_len", itr)
-        print(f"Average eval return: {np.mean(returns)}")
+        print(f"Average eval return: {np.mean(returns)} & len: {np.mean(ep_lens):.1f}")
 
         if len(returns) > 1:
             logger.log_scalar(np.std(returns), "eval/return_std", itr)

@@ -282,7 +282,7 @@ class ModelBasedAgent(nn.Module):
                     mean_ = (self.env.action_space.high + self.env.action_space.low) / 2.0
                     std_  = (self.env.action_space.high - self.env.action_space.low) / 2.0
                 else:
-                    mean_, std_ = elite_mean, elite_std
+                    mean_, std_ = elite_mean, elite_std * self.cem_alpha
                 # Step2: 采样
                 pop = np.random.normal(
                     loc=mean_,
@@ -294,30 +294,12 @@ class ModelBasedAgent(nn.Module):
                 scores = self.evaluate_action_sequences(obs, pop) 
 
                 # Step4: 重估 → 精英样本的 mean / std 作为下一轮参数
-                elite_idx = np.argpartition(scores, self.cem_num_elite)[:self.cem_num_elite] # 取最大的n个元素索引（不排序）
+                elite_idx = np.argpartition(scores, -self.cem_num_elites)[-self.cem_num_elites:] # 取最大的n个元素索引（不排序）
                 elite_pop = pop[elite_idx]
-                elite_mean = elite_pop.mean(dim=0)
-                elite_std  = elite_pop.std(dim=0) + 1e-8    
+                elite_mean = elite_pop.mean(axis=0)
+                elite_std  = elite_pop.std(axis=0) + 1e-8   
             return elite_mean[0]
         else:
             raise ValueError(f"Invalid MPC strategy '{self.mpc_strategy}'")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 

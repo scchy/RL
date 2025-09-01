@@ -32,6 +32,8 @@ def mpc_config(
     # hardcoded for this assignment
     if env_name == "reacher-cs285-v0":
         ep_len = 200
+    if env_name == "reacher-cs285-v0":
+        ep_len = 200
     if env_name == "cheetah-cs285-v0":
         ep_len = 500
     if env_name == "obstacles-cs285-v0":

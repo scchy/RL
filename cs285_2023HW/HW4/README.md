@@ -178,6 +178,15 @@ while not done:
 
 ----
 
+$\pi_{MPC-CEM}$: (数据驱动 + 随机搜索 + 分布更新)
+1. 进行N次迭代
+   1. i==0 → 用初始 mean/ std
+   2. 基于$\mathcal{N}(\mu, \sigma)$ 采样action
+   3. 评估采样的action
+   4. 基于评估选取TopK & 更新 $(\mu, \sigma)$
+2. 最终返回 $\mu$ 作为action
+
+
 ### 3.4 Ensembles 
 
 提升预测精度的一个简单且有效的方法是使用模型集成。其思路很直接：
@@ -186,4 +195,48 @@ while not done:
 
 
 ## Code
+
+### P1: halfcheetah_0_iter.yaml
+Collect a large dataset by executing random actions. Train a neural network dynamics model on this fixed
+dataset. 
+
+参数调整：
+- num_iters: $5 \rightarrow 36$
+- initial_batch_size: $20000 \rightarrow 12000$
+- num_eval_trajectories: $0 \rightarrow 5$
+
+![p1](./pic/p1.png)
+
+
+### P3
+
+You should expect 
+- rewards of around-25 to-20 for the obstacles env: -17.7498
+  - ![obstacles](./pic/obstacles.png)
+- rewards of around-300 to-250 for the reacher env: -258.87
+  - ![reacher](./pic/p3_reacher.png)
+- rewards of around 250-350 for the cheetah env: 419.827
+  - ![cheetah](./pic/p3_cheetah.png)
+
+### P4
+修改YAML 配置文件，分别去掉每一个超参数（即做消融实验）。
+对每个超参数，至少跑两次：一次将其调大，一次将其调小（相对默认值），因此总共需要 7 次实验。
+研究某一个超参数时，请保持其余超参数不变。
+提交内容：
+将这 7 次实验的完整日志作为 run logs 一并提交。
+绘制并提交以下三组图，每张图需配有标题、图例和说明文字，描述你观察到的趋势：
+- **集成规模（ensemble size）** 的影响
+  - ![p4_es](./pic/p4_es.png)
+- **候选动作序列数量（candidate action sequences）** 的影响
+  - ![p4_nas](./pic/p4_nas.png)
+- **规划时域（planning horizon）** 的影响
+  - ![p4_horizon](./pic/p4_horizon.png)
+
+### P5 halfcheetah_cem.yaml
+
+![p5](./pic/p5.png)
+
+
+### P6  MBPO.
+
 
