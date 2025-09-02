@@ -21,7 +21,7 @@ from utils.utools import (
     init_gpu, Logger,
     make_logger, 
     sample_n_trajectories, sample_trajectories, 
-    RandomPolicy, device
+    RandomPolicy, device, from_numpy
 )
 register_envs()
 
@@ -40,14 +40,13 @@ def collect_mbpo_rollout(
         # Average the ensemble predictions directly to get the next observation.
         # Get the reward using `env.get_reward`.
         ac = sac_agent.get_action(ob)
-        next_ob = mb_agent.get_dynamics_predictions(0, ob, ac) # todo: use witch dynamics model 
+        next_ob = np.stack([mb_agent.get_dynamics_predictions(i, ob, acs) for i in range(mb_agent.ensemble_size)], axis=0).mean(axis=0)
         rew = env.get_reward(next_ob, ac)
         obs.append(ob)
         acs.append(ac)
         rewards.append(rew)
         next_obs.append(next_ob)
         dones.append(False)
-
         ob = next_ob
 
     return {
@@ -219,11 +218,11 @@ def run_training_loop(
                 # train SAC
                 batch = sac_replay_buffer.sample(sac_config["batch_size"])
                 sac_agent.update(
-                    batch["observations"],
-                    batch["actions"],
-                    batch["rewards"],
-                    batch["next_observations"],
-                    batch["dones"],
+                    from_numpy(batch["observations"]),
+                    from_numpy(batch["actions"]),
+                    from_numpy(batch["rewards"]),
+                    from_numpy(batch["next_observations"]),
+                    from_numpy(batch["dones"]),
                     i,
                 )
 

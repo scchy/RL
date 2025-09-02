@@ -237,6 +237,52 @@ You should expect
 ![p5](./pic/p5.png)
 
 
-### P6  MBPO.
+### P6  MBPO(model-based policy optimization)
 
+1. Model-free SAC baseline: no additional rollouts from the learned model
+2. Dyna (technically “dyna-style”- the original Dyna algorithm is a little different): add single-step rollouts from the model to the replay buffer and incorporate additional gradient steps per real world step.
+3. MBPO: add in 10-step rollouts from the model to the replay buffer and incorporate additional gradient steps per real world step.
 
+整体流程：和之前最大的差异是策略函数，之前是 $\pi_{MPC-CEM}, \pi_{MPC-random}$, 现在是策略函数$\pi_{sac}$
+1. 数据收集
+   1. iter=0, 随机策略收集数据(initial_batch_size) -> replay_buffer & sac_replay_buffer
+   2. iter>0, `sac_agent`收集数据(batch_size) -> replay_buffer & sac_replay_buffer
+2. 基于`replay_buffer`更新$\mathcal{N}(\mu_{obs-acs}, \sigma_{obs-acs})$和$\mathcal{N}(\mu_{\delta_{ob}}, \sigma_{\delta_{ob}})$
+3. 对`mb_agent`进行迭代更新`config.num_agent_train_steps_per_iter` 次
+4. 对`sac_agent`进行迭代更新`sac_config.num_agent_train_steps_per_iter` 次 (基于生成状态进行训练)
+   1. `collect_mbpo_rollout`收集`mbpo_rollout_length`条数据 -> sac_replay_buffer
+   2. 采样`sac_config.batch_size`
+   3. 对`sac_agent`进行迭代
+
+```python
+def collect_mbpo_rollout(
+    env: gym.Env,
+    mb_agent: ModelBasedAgent,
+    sac_agent: SoftActorCritic,
+    ob: np.ndarray,
+    rollout_len: int = 1,
+):
+    obs, acs, rewards, next_obs, dones = [], [], [], [], []
+    for _ in tqdm(range(rollout_len)):
+        # TODO(student): collect a rollout using the learned dynamics models
+        # HINT: get actions from `sac_agent` and `next_ob` predictions from `mb_agent`.
+        # Average the ensemble predictions directly to get the next observation.
+        # Get the reward using `env.get_reward`.
+        ac = sac_agent.get_action(ob)
+        next_ob = np.stack([mb_agent.get_dynamics_predictions(i, ob, acs) for i in range(mb_agent.ensemble_size)], axis=0).mean(axis=0)
+        rew = env.get_reward(next_ob, ac)
+        obs.append(ob)
+        acs.append(ac)
+        rewards.append(rew)
+        next_obs.append(next_ob)
+        dones.append(False)
+        ob = next_ob
+
+    return {
+        "observation": np.array(obs),
+        "action": np.array(acs),
+        "reward": np.array(rewards),
+        "next_observation": np.array(next_obs),
+        "done": np.array(dones),
+    }
+```

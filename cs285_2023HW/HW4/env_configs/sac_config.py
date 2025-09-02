@@ -5,8 +5,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from cs285.networks.mlp_policy import MLPPolicy
-from cs285.networks.state_action_value_critic import StateActionCritic
+from agents.mlp_policy import MLPPolicy
+from agents.state_action_critic import StateActionCritic
 from utils.utools import (
     from_numpy, to_numpy, build_mlp,
 )

@@ -32,9 +32,9 @@ echo "CONDA_DEFAULT_ENV=${CONDA_DEFAULT_ENV}"
 #     -ei 5000
 
 # p5 CEM
-python run_mbrl.py -cfg ./benchmark/halfcheetah_cem.yaml \
-    --seed 1 \
-    --video_log_freq -1  
+# python run_mbrl.py -cfg ./benchmark/halfcheetah_cem.yaml \
+#     --seed 1 \
+#     --video_log_freq -1  
 
 # python run_mbrl.py -cfg ./benchmark/p4/reacher_ablation.yaml --seed 1 --video_log_freq -1 &
 # python run_mbrl.py -cfg ./benchmark/p4/reacher_es2.yaml --seed 1 --video_log_freq -1 & 
@@ -45,3 +45,7 @@ python run_mbrl.py -cfg ./benchmark/halfcheetah_cem.yaml \
 # python run_mbrl.py -cfg ./benchmark/p4/reacher_nas1500.yaml --seed 1 --video_log_freq -1 & 
 # python run_mbrl.py -cfg ./benchmark/p4/reacher_nas500.yaml --seed 1 --video_log_freq -1 
 
+# P6 
+python run_mbrl.py -cfg ./benchmark/halfcheetah_mbpo.yaml \
+    --seed 1 --video_log_freq -1 \
+    --sac_config_file ./benchmark/halfcheetah_clipq.yaml

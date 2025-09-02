@@ -5,13 +5,12 @@
 # =============================================================================
 import yaml 
 from .mpc_config import  mpc_config
-# from .sac_config import sac_config
+from .sac_config import sac_config
 
 
 configs = {
-    # "dqn_atari": atari_dqn_config,
     "mpc": mpc_config,
-    # "sac": sac_config,
+    "sac": sac_config,
 }
 
 
