@@ -17,7 +17,7 @@
     - 36页
 - [ ] 1998: BOOK 《**Reinforcement learning: An introduction**》
 - [ ] 1999: **Policy gradient methods for reinforcement learning with function approximation**
-- [ ] 1999: **Between MDPs and semi-MDPs: A framework for temporal abstraction in reinforcement learning**
+- [x] 1999: **Between MDPs and semi-MDPs: A framework for temporal abstraction in reinforcement learning**
 
 ## 2000年代
 - [ ] 2000: Eligibility traces for off-policy policy evaluation
