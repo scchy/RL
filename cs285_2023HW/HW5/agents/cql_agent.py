@@ -7,13 +7,8 @@
 
 
 import torch
-from torch import nn
-import numpy as np
-from typing import Callable, List, Tuple, Sequence
+from typing import Tuple, Sequence
 from .dqn_agent import DQNAgent
-from utils.utools import (
-    from_numpy, to_numpy, device
-)
 
 
 class CQLAgent(DQNAgent):
@@ -47,7 +42,6 @@ class CQLAgent(DQNAgent):
             done,
         )
         # TODO(student): modify the loss to implement CQL
-
         # Hint: `variables` includes qa_values and q_values from your CQL implementation
         q_sa = self.critic(obs)
         loss = loss + self.cql_alpha * (

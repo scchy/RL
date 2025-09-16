@@ -105,6 +105,9 @@ $$J=\left[ \frac{1}{N} \sum_{i=1}^N (Q(s_i, a_i) - (r + \gamma Q(s_i^\prime, a_i
 增强actor训练
 
 $$\theta \leftarrow \argmax_\theta \mathbb{E}_{s, a\sim \mathcal{B}} \left[  log \pi_\theta(a|s) exp(\frac{1}{\lambda} \mathcal{A}^{\pi _k}(s, a) ) \right]$$
+- $\mathcal{A}^{\pi _k} = V^{\pi _k}(s) - Q(s, a)$
+- $V^{\pi _k}(s) = \sum_a \pi _k (a|s) Q(s, a)$
+  - SAC: $V^{\pi _k}(s) = \sum_a \pi _k(a|s) \left[ Q(s, a) -  log\pi _k(a|s) \right]$
 
 这个迭代和 wieghted behavior cloning 很像。我们让策略偏向于选择那些在我们学到的 Q 函数下取值较高的动作。在上述的迭代中，智能体以较大权重向高优势动作回归，几乎忽略低优势动作
 这种 Actor 更新等价于加权最大似然（即监督学习）：
@@ -117,4 +120,24 @@ $$\mathbb{E}_D[ (Q(s, a) - (r(s, a) + \gamma \mathbb{E}_{a^\prime \sim \pi}[ Q_{
 
 
 ### Implicit Q-Learning (IQL) Algorithm
+
+IQL 通过使用implicit Bellman backup 而不是显式地考虑在特定策略下的backup，将学习评论家（critic）的问题与策略学习解耦。
+它通过**学习 Q 的期望分位数（expectile）**来实现——这是一种类似于分位数的统计量，是分布所达到最大值的“软”版本。
+对于随机变量 X，期望分位数 $m_\tau(X)$ 由最小化以下目标给出：
+$$\argmin_{m_\tau} \mathbb{E}_{x \sim X}[L_2(x-m_\tau)], L_2(\mu) = |\tau - \mathbb{1}\{\mu \le 0 \}|\mu ^2$$
+
+
+为了避免对状态转移过于乐观，我们需要学习一个独立的价值函数 V(s) 来承担这种乐观性，
+
+$$L_V(\phi) = \mathbb{E}_{(s, a) \sim D}[ L_2^\tau (Q_\theta (s, a) - V_\phi (s)) ]$$
+$$L_Q(\theta) = \mathbb{E}_{(s, a, s^\prime) \sim D}[(r(s, a) + \gamma V_\phi(s^\prime) - Q_\theta (s, a))^2  ]$$
+
+critic 学习过程有2个好的属性
+1. 永远没有使用OOD的action, 从而完全避免了分布外（OOD）过估计问题
+   1. $a^\prime \sim \pi$ 任意策略
+2. 这一过程可以在不更新 Actor 的情况下进行，因此如果你愿意，可以先单独训练 Critic，最后再训练 Actor。
+
+Actor 的更新与 Critic 的更新是解耦的（因此称为 implicit Q-learning），并且它使用与 AWAC 相同的目标函数进行学习：
+
+$$L_\pi(\psi)=-\mathbb{E}_{s, a \sim \mathcal{B}}\left[ log \pi_\psi (a|s) exp(\frac{1}{\lambda} \mathcal{A}^{\pi _k}(s, a)) \right]$$
 
