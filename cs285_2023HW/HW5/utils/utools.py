@@ -234,6 +234,9 @@ class Logger:
         self._n_logged_samples = n_logged_samples
         self._summ_writer = SummaryWriter(log_dir, flush_secs=1, max_queue=1)
 
+    def get_log_dir(self):
+        return self._log_dir
+
     def log_scalar(self, scalar, name, step_):
         self._summ_writer.add_scalar('{}'.format(name), scalar, step_)
 

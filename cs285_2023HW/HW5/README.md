@@ -133,7 +133,7 @@ $$L_V(\phi) = \mathbb{E}_{(s, a) \sim D}[ L_2^\tau (Q_\theta (s, a) - V_\phi (s)
 $$L_Q(\theta) = \mathbb{E}_{(s, a, s^\prime) \sim D}[(r(s, a) + \gamma V_\phi(s^\prime) - Q_\theta (s, a))^2  ]$$
 
 critic 学习过程有2个好的属性
-1. 永远没有使用OOD的action, 从而完全避免了分布外（OOD）过估计问题
+1. 因为迭代没有用到action，所以永远没有使用OOD的action, 从而完全避免了分布外（OOD）过估计问题
    1. $a^\prime \sim \pi$ 任意策略
 2. 这一过程可以在不更新 Actor 的情况下进行，因此如果你愿意，可以先单独训练 Critic，最后再训练 Actor。
 

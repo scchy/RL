@@ -60,7 +60,7 @@ class DQNAgent(nn.Module):
             action = np.random.randint(self.num_actions)
             return action
         qa = self.critic(obs)
-        return qa.argmax().detach().cpu().numpy()[0]
+        return qa.argmax().detach().cpu().numpy()
 
     def compute_critic_loss(
         self,

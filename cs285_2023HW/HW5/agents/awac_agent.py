@@ -55,7 +55,7 @@ class AWACAgent(DQNAgent):
         qa_values = self.critic(observations)
         q_values = qa_values.gather(1, actions.long().view(-1, 1)).view(-1)
         assert q_values.shape == target_values.shape
-        loss = self.critic_loss(q_values, target_values)
+        loss = self.critic_loss(q_values, target_values.detach())
         return (
             loss,
             {

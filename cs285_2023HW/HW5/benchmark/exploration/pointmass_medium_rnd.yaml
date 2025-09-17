@@ -1,0 +1,7 @@
+base_config: "rnd"
+env_name: "PointmassMedium-v0"
+exp_name: "pointmass_medium_rnd"
+dataset_name: "pointmass_medium_rnd"
+total_steps: 10000
+rnd_weight: 1.0
+

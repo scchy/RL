@@ -79,7 +79,7 @@ def basic_dqn_config(
         "make_env": make_env,
         "total_steps": total_steps,
         "batch_size": batch_size,
+        "env_name": env_name,
         "learning_starts": learning_starts,
         **kwargs,
     }
-

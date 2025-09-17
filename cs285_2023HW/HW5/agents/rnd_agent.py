@@ -22,7 +22,7 @@ def init_weight(model):
         model.bias.data.normal_()
     
 
-class RNDAgent(nn.Module):
+class RNDAgent(DQNAgent):
     """
     用“一个随机初始化且永远固定的神经网络”作为神秘目标，再训练“另一个可学习的网络”去模仿它的输出；
 
@@ -47,7 +47,7 @@ class RNDAgent(nn.Module):
         self.rnd_net = make_rnd_network(observation_shape)
         self.rnd_target_net = make_target_rnd_network(observation_shape)
 
-        self.rnd_target_net.apply(init_network) # 固定随机网络
+        self.rnd_target_net.apply(init_weight) # 固定随机网络
         self.rnd_optimizer = make_rnd_network_optimizer(
             self.rnd_net.parameters()
         )
@@ -56,7 +56,7 @@ class RNDAgent(nn.Module):
         """
         Update the RND network using the observations.
         """
-        loss = (self.rnd_net(obs) - self.rnd_target_net(obs).detach()).power(2).mean()
+        loss = (self.rnd_net(obs) - self.rnd_target_net(obs).detach()).pow(2).mean()
 
         self.rnd_optimizer.zero_grad()
         loss.backward()
@@ -108,7 +108,7 @@ class RNDAgent(nn.Module):
             y = torch.linspace(0, 1, 100)
             xx, yy = torch.meshgrid(x, y)
 
-            inputs = ptu.from_numpy(np.stack([xx.flatten(), yy.flatten()], axis=1))
+            inputs = from_numpy(np.stack([xx.flatten(), yy.flatten()], axis=1))
             targets = self.rnd_target_net(inputs)
             predictions = self.rnd_net(inputs)
 
@@ -117,7 +117,7 @@ class RNDAgent(nn.Module):
 
             # Log scale, aligned with normal axes
             from matplotlib import cm
-            ax.imshow(ptu.to_numpy(errors).T, extent=[0, 1, 0, 1], origin="lower", cmap="hot")
+            ax.imshow(to_numpy(errors).T, extent=[0, 1, 0, 1], origin="lower", cmap="hot")
             plt.colorbar(ax.images[0], ax=ax)
 
 
