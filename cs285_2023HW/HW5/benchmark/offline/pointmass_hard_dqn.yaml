@@ -1,0 +1,9 @@
+base_config: "dqn"
+env_name: "PointmassHard-v0"
+exp_name: "pointmass_hard_dqn"
+training_steps: 200000
+dataset_name: "./data/run_summary/hw5_explore_PointmassHard-v0_rnd1.0_17-09-2025_23-16-30/pointmass_hard_rnd.pkl"
+
+hidden_size: 64
+num_layers: 2
+

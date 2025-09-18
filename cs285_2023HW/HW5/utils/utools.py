@@ -276,7 +276,7 @@ class Logger:
 
     def log_figures(self, figure, name, step, phase):
         """figure: matplotlib.pyplot figure handle"""
-        assert figure.shape[0] > 0, "Figure logging requires input shape [batch x figures]!"
+        assert len(figure) > 0, "Figure logging requires input shape [batch x figures]!"
         self._summ_writer.add_figure('{}_{}'.format(name, phase), figure, step)
 
     def log_figure(self, figure, name, step, phase):
@@ -392,7 +392,7 @@ def sample_trajectories(env, policy, min_timesteps_per_batch, max_path_length, r
 def sample_n_trajectories(env, policy, ntraj, max_path_length, render=False):
     """Collect ntraj rollouts."""
     paths = []
-    for i in tqdm(range(ntraj)):
+    for i in tqdm(range(ntraj), leave=False):
         # collect rollout
         path = sample_trajectory(env, policy, max_path_length, render)
         paths.append(path)

@@ -1,0 +1,13 @@
+base_config: "cql"
+env_name: "PointmassHard-v0"
+exp_name: "pointmass_hard_cql"
+use_double_q: true
+training_steps: 200000
+dataset_name: "./data/run_summary/hw5_explore_PointmassHard-v0_rnd1.0_17-09-2025_23-16-30/pointmass_hard_rnd.pkl"
+
+cql_alpha: 0.1
+
+hidden_size: 64
+num_layers: 2
+
+

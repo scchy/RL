@@ -2,6 +2,6 @@ base_config: "rnd"
 env_name: "PointmassEasy-v0"
 exp_name: "pointmass_easy_rnd"
 dataset_name: "pointmass_easy_rnd"
-total_steps: 10000
-rnd_weight: 1.0
+total_steps: 15000
+rnd_weight: 0.5
 

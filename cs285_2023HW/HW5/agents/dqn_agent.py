@@ -84,7 +84,7 @@ class DQNAgent(nn.Module):
             next_qa_values = self.critic(next_obs)
 
             if self.use_double_q:
-                next_star_qa_values = self.traget_critic(next_obs)
+                next_star_qa_values = self.target_critic(next_obs)
                 next_action = next_star_qa_values.argmax(dim=-1).view(-1, 1)
             else:
                 next_action = next_qa_values.argmax(dim=-1).view(-1, 1)

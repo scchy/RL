@@ -80,6 +80,7 @@ def basic_dqn_config(
         "total_steps": total_steps,
         "batch_size": batch_size,
         "env_name": env_name,
+        "agent": "dqn",
         "learning_starts": learning_starts,
         **kwargs,
     }

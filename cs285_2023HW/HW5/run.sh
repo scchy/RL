@@ -14,9 +14,24 @@ echo "CONDA_DEFAULT_ENV=${CONDA_DEFAULT_ENV}"
 # python run_explore.py -cfg ./benchmark/exploration/pointmass_medium_random.yaml
 # python run_explore.py -cfg ./benchmark/exploration/pointmass_hard_random.yaml
 
-# Random Network Distillation
+# 3.2 Random Network Distillation
 # python run_explore.py -cfg ./benchmark/exploration/pointmass_easy_rnd.yaml
-python run_explore.py -cfg ./benchmark/exploration/pointmass_medium_rnd.yaml
-python run_explore.py -cfg ./benchmark/exploration/pointmass_hard_rnd.yaml
+# python run_explore.py -cfg ./benchmark/exploration/pointmass_medium_rnd.yaml
+# python run_explore.py -cfg ./benchmark/exploration/pointmass_hard_rnd.yaml
+
+
+# 4 Offline RL 
+# 4.1 CQL
+# python run_offline.py -cfg ./benchmark/offline/pointmass_easy_cql.yaml
+# python run_offline.py -cfg ./benchmark/offline/pointmass_easy_dqn.yaml
+
+
+# python run_offline.py -cfg ./benchmark/offline/pointmass_medium_cql.yaml
+# python run_offline.py -cfg ./benchmark/offline/pointmass_medium_dqn.yaml
+
+python run_offline.py -cfg ./benchmark/offline/pointmass_hard_cql.yaml
+python run_offline.py -cfg ./benchmark/offline/pointmass_hard_dqn.yaml
+
+# 4.2 IQL AWAC
 
 
