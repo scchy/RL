@@ -37,6 +37,7 @@ def awac_config(
     config["agent_kwargs"]["temperature"] = temperature
     config["agent_kwargs"]["make_actor"] = make_actor
     config["agent_kwargs"]["make_actor_optimizer"] = make_actor_optimizer
+    config["agent_kwargs"]["adv_norm"] = kwargs.get("adv_norm", False)
 
     return config
 

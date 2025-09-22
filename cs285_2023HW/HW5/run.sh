@@ -29,9 +29,16 @@ echo "CONDA_DEFAULT_ENV=${CONDA_DEFAULT_ENV}"
 # python run_offline.py -cfg ./benchmark/offline/pointmass_medium_cql.yaml
 # python run_offline.py -cfg ./benchmark/offline/pointmass_medium_dqn.yaml
 
-python run_offline.py -cfg ./benchmark/offline/pointmass_hard_cql.yaml
-python run_offline.py -cfg ./benchmark/offline/pointmass_hard_dqn.yaml
+# python run_offline.py -cfg ./benchmark/offline/pointmass_hard_cql.yaml
+# python run_offline.py -cfg ./benchmark/offline/pointmass_hard_dqn.yaml
 
 # 4.2 IQL AWAC
+# python run_offline.py -cfg ./benchmark/offline/pointmass_hard_awac.yaml
+python run_offline.py -cfg ./benchmark/offline/pointmass_hard_iql.yaml
+
+# 5 online fine-tunning 
+ 
+
+
 
 

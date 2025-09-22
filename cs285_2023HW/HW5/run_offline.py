@@ -48,7 +48,7 @@ def run_training_loop(config: dict, logger: Logger, args: argparse.Namespace):
 
     with open(f"{config['dataset_name']}", "rb") as f:
         dataset = pickle.load(f)
-
+    eval_r = -float("inf")
     tq_bar = tqdm(range(config["training_steps"]))
     for step in tq_bar:
         # Train with offline RL
@@ -64,10 +64,6 @@ def run_training_loop(config: dict, logger: Logger, args: argparse.Namespace):
             batch["dones"],
             step,
         )
-        tq_bar.set_postfix(
-            {k: np.round(v, 3) for k, v in metrics.items()}
-        )
-
         if step % args.log_interval == 0:
             for k, v in metrics.items():
                 logger.log_scalar(v, k, step)
@@ -82,8 +78,8 @@ def run_training_loop(config: dict, logger: Logger, args: argparse.Namespace):
             )
             returns = [t["episode_statistics"]["r"] for t in trajectories]
             ep_lens = [t["episode_statistics"]["l"] for t in trajectories]
-
-            logger.log_scalar(np.mean(returns), "eval_return", step)
+            eval_r = np.mean(returns)
+            logger.log_scalar(eval_r, "eval_return", step)
             logger.log_scalar(np.mean(ep_lens), "eval_ep_len", step)
 
             if len(returns) > 1:
@@ -110,6 +106,13 @@ def run_training_loop(config: dict, logger: Logger, args: argparse.Namespace):
                 os.makedirs(os.path.join(args.dataset_dir, "eval_visualization"))
             filename = os.path.join(args.dataset_dir, "eval_visualization", "eval_.png")
             fig.savefig(filename)
+
+
+        metrics['eval_r'] = eval_r
+        tq_bar.set_postfix(
+            {k: np.round(v, 3) for k, v in metrics.items()}
+        )
+
 
 
 def main():

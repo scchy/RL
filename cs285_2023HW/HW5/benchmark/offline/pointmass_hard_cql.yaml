@@ -5,7 +5,9 @@ use_double_q: true
 training_steps: 200000
 dataset_name: "./data/run_summary/hw5_explore_PointmassHard-v0_rnd1.0_17-09-2025_23-16-30/pointmass_hard_rnd.pkl"
 
-cql_alpha: 0.1
+# q_value逐渐变低有略微上升， eval_return 逐渐提升:
+# 被高估的 Q 逐步修正到真实回报附近，同时策略利用这些“越来越准”的 
+cql_alpha: 0.05
 
 hidden_size: 64
 num_layers: 2

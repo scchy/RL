@@ -1,0 +1,16 @@
+base_config: "awac"
+env_name: "PointmassHard-v0"
+exp_name: "pointmass_hard_awac"
+training_steps: 200000
+dataset_name: "./data/run_summary/hw5_explore_PointmassHard-v0_rnd1.0_17-09-2025_23-16-30/pointmass_hard_rnd.pkl"
+
+temperature: 5
+adv_norm: True
+learning_rate: 1.0e-3 # 3.0e-4 
+hidden_size: 64
+num_layers: 2
+
+target_update_period: 1000
+# -100  --> -20 --> -100 
+# actor_learning_rate: 3.0e-4
+# 40K 前都是逐步变好的，但是之后就便变差了

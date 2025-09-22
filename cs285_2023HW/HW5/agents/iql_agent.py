@@ -43,9 +43,10 @@ class IQLAgent(AWACAgent):
     ):
         # TODO(student): Compute advantage with IQL
         qa_values = self.critic(observations)
-        q_value = qa_values.gather(1, actions.view(-1, 1)).view(-1, 1)
+        q_value = qa_values.gather(1, actions.long().view(-1, 1)).view(-1)
         value = torch.sum(action_dist.probs * qa_values, dim=-1)
         adv = q_value - value
+        assert q_value.shape == value.shape, f"{q_value.shape=} != {value.shape=}"
         return adv
 
     def update_q(
@@ -61,10 +62,12 @@ class IQLAgent(AWACAgent):
         """
         # TODO(student): Update Q(s, a) to match targets (based on V)
         with torch.no_grad():
-            target_values = rewards + self.value_critic(next_observations) * (1 - dones)
+            v = self.value_critic(next_observations).view(-1)
+            target_values = rewards + self.discount * v * (1 - dones)
 
         qa_values = self.critic(observations)
-        q_values = qa_values.gather(1, actions.view(-1, 1)).view(-1, 1)
+        q_values = qa_values.gather(1, actions.long().view(-1, 1)).view(-1)
+        assert q_values.shape == target_values.shape, f'{rewards.shape=} {dones.shape=} {v.shape=} | {q_values.shape=} != {target_values.shape=}'
         loss = self.critic_loss(q_values, target_values.detach())
 
         self.critic_optimizer.zero_grad()
@@ -75,7 +78,7 @@ class IQLAgent(AWACAgent):
         self.critic_optimizer.step()
 
         metrics = {
-            "q_loss": self.critic_loss(q_values, target_values).item(),
+            "q_loss": loss.item(),
             "q_values": q_values.mean().item(),
             "target_values": target_values.mean().item(),
             "q_grad_norm": grad_norm.item(),
@@ -91,6 +94,7 @@ class IQLAgent(AWACAgent):
         Compute the expectile loss for IQL 
         - expectile=0.5 退化为普通 MSE。
         - expectile→1 时只对“Q>V”部分惩罚，实现 IQL 的“乐观”更新。
+            - (Q-V) > 0 部分权重越高
         """
         # TODO(student): Compute the expectile loss
         adv = target_qs.detach() - vs
@@ -111,7 +115,7 @@ class IQLAgent(AWACAgent):
         # TODO(student): Compute target values for V(s)
         vs = self.value_critic(observations)
         target_qa = self.critic(observations)
-        target_values = target_qa.gather(1, actions.view(-1, 1)).view(-1, 1)
+        target_values = target_qa.gather(1, actions.long().view(-1, 1)).view(-1, 1)
 
         # TODO(student): Update V(s) using the loss from the IQL paper
         loss = self.iql_expectile_loss(self.expectile, vs, target_values)
@@ -159,8 +163,8 @@ class IQLAgent(AWACAgent):
         step: int,
     ):
         metrics = self.update_critic(observations, actions, rewards, next_observations, dones)
-        metrics["actor_loss"] = self.update_actor(observations, actions)
-
+        actor_m = self.update_actor(observations, actions)
+        metrics.update(actor_m)
         if step % self.target_update_period == 0:
             self.update_target_critic()
             self.update_target_value_critic()
