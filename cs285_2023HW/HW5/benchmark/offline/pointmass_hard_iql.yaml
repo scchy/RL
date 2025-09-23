@@ -4,9 +4,14 @@ exp_name: "pointmass_hard_iql"
 training_steps: 200000
 dataset_name: "./data/run_summary/hw5_explore_PointmassHard-v0_rnd1.0_17-09-2025_23-16-30/pointmass_hard_rnd.pkl"
 
-expectile: 0.9
+expectile: 0.98
+
 temperature: 5.0
 adv_norm: True
 
+learning_rate: 3.0e-4 
 hidden_size: 64
 num_layers: 2
+target_update_period: 1000
+
+# expectile 回归在 τ→1 时是一把“单边闸刀”，大学习率会把随机噪声放大成系统性偏离；降到 1e-5 后，噪声幅度低于闸口，参数才能沿着真实梯度滑向收敛。

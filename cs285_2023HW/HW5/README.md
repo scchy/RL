@@ -90,6 +90,11 @@ $$
 
 ### Conservative Q-Learning (CQL) Algorithm
 
+> 实战经验： cql_alpha 参数设置非常关键
+>   - **极度稀疏、状态-动作空间极小**的“玩具”任务里， cql_alpha 从 0.1 再砍到 0.05 后反而更好，完全符合 CQL 的“小世界”规律：
+> alpha 越小策略越激进，越大越保守
+
+
 CQL的目标是防止高估策略。
 
 conservative, lower-bound Q-function: 
@@ -101,6 +106,8 @@ $$J=\left[ \frac{1}{N} \sum_{i=1}^N (Q(s_i, a_i) - (r + \gamma Q(s_i^\prime, a_i
 
 
 ###  Advantage Weighted Actor Critic (AWAC) Algorithm 
+
+> 实战经验：temperature调整和adv_norm非常关键， critic-lr需要设置大一些（1e-3）
 
 增强actor训练
 
@@ -120,6 +127,8 @@ $$\mathbb{E}_D[ (Q(s, a) - (r(s, a) + \gamma \mathbb{E}_{a^\prime \sim \pi}[ Q_{
 
 
 ### Implicit Q-Learning (IQL) Algorithm
+
+> 实战经验： expectile 回归在 τ→1 时是一把“单边闸刀”，critic-net&value-net 大学习率（1e-3）会把随机噪声放大成系统性偏离；降到 3.0e-4 后，噪声幅度低于闸口，参数才能沿着真实梯度滑向收敛。
 
 IQL 通过使用implicit Bellman backup 而不是显式地考虑在特定策略下的backup，将学习评论家（critic）的问题与策略学习解耦。
 它通过**学习 Q 的期望分位数（expectile）**来实现——这是一种类似于分位数的统计量，是分布所达到最大值的“软”版本。

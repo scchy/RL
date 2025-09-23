@@ -107,10 +107,11 @@ def run_training_loop(config: dict, logger: Logger, args: argparse.Namespace):
             filename = os.path.join(args.dataset_dir, "eval_visualization", "eval_.png")
             fig.savefig(filename)
 
-
         metrics['eval_r'] = eval_r
         tq_bar.set_postfix(
-            {k: np.round(v, 3) for k, v in metrics.items()}
+            {k: np.round(v, 3) for k, v in metrics.items() if k not in [
+                'v_loss', 'vs_adv', 'v_grad_norm', 'q_grad_norm' 
+            ]}
         )
 
 
