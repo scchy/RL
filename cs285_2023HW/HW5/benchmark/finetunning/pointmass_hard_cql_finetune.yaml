@@ -1,0 +1,14 @@
+base_config: "cql"
+env_name: "PointmassHard-v0"
+exp_name: "FT_pointmass_hard_cql"
+use_double_q: true
+total_steps: 300000
+offline_steps: 120000
+dataset_name: "./data/run_summary/hw5_explore_PointmassHard-v0_rnd1.0_17-09-2025_23-16-30/pointmass_hard_rnd.pkl"
+save_dataset_name: pointmass_hard_rnd_FT.pkl
+
+cql_alpha: 0.05
+
+hidden_size: 64
+num_layers: 2
+

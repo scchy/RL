@@ -56,6 +56,7 @@ def run_training_loop(config: dict, logger: Logger, args: argparse.Namespace):
         batch = {
             k: from_numpy(v) if isinstance(v, np.ndarray) else v for k, v in batch.items()
         }
+        agent.train()
         metrics = agent.update(
             batch["observations"],
             batch["actions"],
@@ -69,6 +70,7 @@ def run_training_loop(config: dict, logger: Logger, args: argparse.Namespace):
                 logger.log_scalar(v, k, step)
 
         if step % args.eval_interval == 0:
+            agent.eval()
             # Evaluate
             trajectories = sample_n_trajectories(
                 env,
