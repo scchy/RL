@@ -27,6 +27,8 @@
     * [1992: **Adapting bias by gradient descent: An incremental version of delta-bar-delta**](zh-cn/papers/1992_Adapting_bias_by_gradient_descent_An_incremental_version_of_delta-bar-delta.md)
     * [1992: **Gain adaptation beats least squares**](zh-cn/papers/1992_Gain_adaptation_beats_least_squares.md)
     * [1999: **Policy gradient methods for reinforcement learning with function approximation**](zh-cn/papers/1999_Policy_gradient_methods_for_rl_with_function_approximation.md)
+    * [2000: **Eligibility traces for off-policy policy evaluation**](zh-cn/papers/2000_Eligibility_traces_for_off-policy_policy_evaluation.md)
+    * [2016: **DT: Decision Transformer: Reinforcement Learning via Sequence Modeling**](zh-cn/papers/2016-DT.md)
     * [2017: **ICM: Curiosity-driven Exploration by Self-supervised Prediction**](zh-cn/papers/2017_ICM.md)
 * [16. RLHF VS deepseek-r1](zh-cn/16-RLHF_VS_deepseek-r1.md)
 * [17. OfflineRL-CQL](zh-cn/17-batchRL_CQL.md)
