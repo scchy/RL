@@ -39,7 +39,7 @@ GITHUB Link:
   - $e_t = \gamma \lambda \rho_t e_{t-1}$
 
 - TD error <font color=darkred>【无$\rho$】</font>:
-  - $\delta _t = r_{t+1} + \gamma Q_t(s_{t+1}, a_{t+1}) - Q_t(s_t, a_t) == r_{t+1} + \gamma V_t(s_{t+1}) - V_t(s_t) $
+  - $\delta _t = r_{t+1} + \gamma Q_t(s_{t+1}, a_{t+1}) - Q_t(s_t, a_t) == r_{t+1} + \gamma V_t(s_{t+1}) - V_t(s_t)$
 
 
 - 更新action-value function <font color=darkred>【有$\rho$】</font>：
@@ -104,7 +104,31 @@ GITHUB Link:
 
 ### 4. Tree-Backup Algorithms
 
-核心思想：不需要 权重 $\mu$ 的概率！用 目标策略 $\pi$ 的概率 直接对回报做 加权树回溯，天生 off-policy。
+核心思想：不需要 权重 $\mu$ 的概率！用目标策略 $\pi$ 的概率 直接对回报做 加权树回溯，天生 off-policy。
+
+它对行为策略的唯一要求是“不挨饿”：
+- 即不会达到某个时刻之后某个状态-动作对再也未被访问。
+- 行为策略可以是非平稳的、非马尔可夫的，并且完全未知；它既不出现在估计量的定义中，也不出现在算法里。
+
+
+在轨迹的每一步，根据目标策略都存在多种可能的动作选择。
+- 一步目标（one-step target）将这些动作的价值估计按它们在目标策略下的选取概率进行加权组合。
+- 每一步，行为策略都会从这些动作中选择一个执行；
+- 一个时间步之后，基于所获得的奖励以及对下一状态的价值估计，将生成该动作价值的新的估计值。
+
+随后，Tree-Backup 算法利用以下信息构造一个新的目标值：
+- 对于未被采取的动作，使用其旧的价值估计；
+- 对于被采取的动作，使用其新的价值估计（基于即时奖励与下一状态估值）。
+
+这一过程可沿轨迹重复进行。若连续迭代 n 步，即得到 n 步 Tree-Backup 估计量：
+
+$Q_n^{TB} = \frac{1}{M} \sum_{m=1}^M \gamma ^ n Q(s_{t_{m+n}}, a_{t_{m+n}}) \prod_{i=t_m+1}^{t_m+n} \pi_i
+\\ + \sum_{k=t_m+1}^{t_m+n} \gamma ^{k-t_m +1}\prod_{i=t_m +a}^{t_m+n} \pi_i \left(  r_k + \gamma \sum_{a \neq a_k}\pi(s_k, a)Q(s_k, a) \right)$
+
+![alt text](../../pic/papar_sutton_2000_fig4.png)
+
+一条穿过树的轨迹可通过以下方式获得：在每个分支点，状态按环境的转移概率进行采样，动作则按行为策略进行采样。
+
 
 #### 4.1 Tree-Backup λ (TB-λ)
 - 迹定义
@@ -114,7 +138,7 @@ GITHUB Link:
 - TD error: 单步重要性采样：（负责纠正奖励/价值）
   - $\delta _t = r_{t+1} + \gamma\sum_a \pi(s_{t+1}, a) Q_t(s_{t+1}, a_{t+1}) - Q_t(s_t, a_t)$
 
-- 更新action-value function：
+- 更新action-value function： $\delta_t e_t == \sum_{k=t_m+1}^{t_m+n} \gamma ^{k-t_m +1}\prod_{i=t_m +a}^{t_m+n} \pi_i \left(  r_k + \gamma \sum_{a \neq a_k}\pi(s_k, a)Q(s_k, a) \right)$
   - $Q_{t+1} = Q_t + \alpha \delta_t e_t$
 
 
